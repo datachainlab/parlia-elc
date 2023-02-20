@@ -24,7 +24,7 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly-2022-10-22
           components: rustfmt, clippy
       - uses: actions-rs/cargo@v1
         name: format check
