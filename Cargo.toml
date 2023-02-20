@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "enclave-light-client",
+    "light-client",
+    "proto",
+]
+exclude = [
+    "proto-compiler",
+]

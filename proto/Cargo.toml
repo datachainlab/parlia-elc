@@ -1,0 +1,29 @@
+[package]
+name = "parlia-ibc-proto"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "parlia_ibc_proto"
+path = "src/lib.rs"
+doctest = false
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+prost       = { version = "0.10", default-features = false }
+bytes       = { version = "1.1", default-features = false }
+tonic       = { version = "0.7", optional = true, default-features = false }
+serde       = { version = "1.0", default-features = false }
+schemars    = { version = "0.8", optional = true }
+base64      = { version = "0.13", default-features = false, features = ["alloc"] }
+ibc         = { git = "https://github.com/informalsystems/ibc-rs", rev = "e8c98d440949abf971ac45a68ed9dd9e6e9f48ed", default-features = false, optional = true }
+ibc-proto   = { git = "https://github.com/informalsystems/ibc-rs", rev = "e8c98d440949abf971ac45a68ed9dd9e6e9f48ed", default-features = false }
+
+
+[features]
+default     = ["std", "client"]
+std         = []
+client      = ["std", "tonic", "tonic/codegen", "tonic/transport", "tonic/prost"]
+json-schema = ["std", "schemars"]
