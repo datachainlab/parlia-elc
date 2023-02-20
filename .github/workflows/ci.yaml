@@ -40,4 +40,4 @@ jobs:
         name: unit-test
         with:
           command: test
-          args: --release --all-features
+          args: --release --all-features --manifest-path light-client/Cargo.toml
