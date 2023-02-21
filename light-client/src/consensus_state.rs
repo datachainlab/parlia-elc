@@ -33,7 +33,7 @@ impl ConsensusState {
         self.state_root
             .as_bytes()
             .try_into()
-            .map_err(|_| Error::UnexpectedStateRoot)
+            .map_err(|_| Error::UnexpectedStateRoot(self.state_root.clone().into_vec()))
     }
 
     pub fn assert_within_trust_period(

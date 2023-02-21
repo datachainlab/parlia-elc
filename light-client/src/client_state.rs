@@ -7,7 +7,7 @@ use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::error::Error as ICS02Error;
 use ibc::core::ics02_client::trust_threshold::TrustThreshold;
 
-use crate::misc::{new_ibc_height_with_chain_id, ChainId, NanoTime};
+use crate::misc::{new_ibc_height_with_chain_id, Address, ChainId, NanoTime};
 use ibc_proto::google::protobuf::Any;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 use prost::Message as _;
@@ -17,7 +17,7 @@ pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Clie
 #[derive(Clone, Debug)]
 pub struct ClientState {
     pub chain_id: ChainId,
-    pub ibc_store_address: Vec<u8>,
+    pub ibc_store_address: Address,
     pub latest_height: ibc::Height,
     pub trust_level: TrustThreshold,
     pub trusting_period: NanoTime,
@@ -38,7 +38,10 @@ impl TryFrom<RawClientState> for ClientState {
         let latest_height =
             new_ibc_height_with_chain_id(&chain_id, raw_latest_height.revision_height)?;
 
-        let ibc_store_address = value.ibc_store_address;
+        let raw_ibc_store_address = value.ibc_store_address.clone();
+        let ibc_store_address = raw_ibc_store_address
+            .try_into()
+            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_store_address))?;
 
         let trust_level = {
             let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
@@ -74,7 +77,7 @@ impl From<ClientState> for RawClientState {
     fn from(value: ClientState) -> Self {
         Self {
             chain_id: value.chain_id.id(),
-            ibc_store_address: value.ibc_store_address,
+            ibc_store_address: value.ibc_store_address.to_vec(),
             latest_height: Some(parlia_ibc_proto::ibc::core::client::v1::Height {
                 revision_number: value.latest_height.revision_number(),
                 revision_height: value.latest_height.revision_height(),

@@ -21,3 +21,7 @@ k256 = { version = "0.12.0-pre.0", default-features = false, features = ["alloc"
 elliptic-curve = { version = "0.12.3", default-features = false, features = ["hazmat", "sec1"] }
 
 hex-literal = "0.3.1"
+
+[features]
+default = []
+testdata = []

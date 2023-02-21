@@ -210,7 +210,7 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
         let root: Hash = rlp
             .try_next_as_list()?
             .try_into()
-            .map_err(|_e| Error::UnexpectedStateRoot)?;
+            .map_err(Error::UnexpectedStateRoot)?;
         let tx_hash = rlp.try_next_as_list()?;
         let receipt_hash = rlp.try_next_as_list()?;
         let bloom = rlp.try_next_as_list()?;

@@ -1,5 +1,6 @@
 #[cfg(feature = "sgx")]
 use crate::sgx_reexport_prelude::*;
+use alloc::vec::Vec;
 
 use ibc::core::ics23_commitment::error::Error as ICS23Error;
 use ibc::core::ics24_host::path::PathError;
@@ -18,6 +19,8 @@ pub enum Error {
     UnexpectedHeight(Height),
     #[error("PathError: {0}")]
     Path(PathError),
+    #[error("UnexpectedCommitmentValue: {0:X?}")]
+    UnexpectedCommitmentValue(Vec<u8>),
 }
 
 impl LightClientInstanceError for Error {}

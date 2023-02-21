@@ -28,11 +28,19 @@ pub enum Error {
     MissingLatestHeight,
     MissingTrustLevel,
     UnexpectedTrustingPeriod(u64, u64),
+    UnexpectedStoreAddress(Vec<u8>),
 
     // ConsensusState error
-    AccountNotFound(Vec<Vec<u8>>),
-    UnexpectedStateRoot,
+    AccountNotFound(Address),
+    UnexpectedStateNonExistingValue(Vec<u8>),
+    UnexpectedStateExistingValue(Vec<u8>, Vec<u8>),
+    UnexpectedStateValueMismatch(Vec<u8>),
+    UnexpectedStateIncompleteProof(Vec<u8>),
+    UnexpectedStateHashMismatch(Vec<u8>),
+    UnexpectedStateDecodeError(Vec<u8>),
+    UnexpectedStateHashDecodeError(Vec<u8>),
     UnexpectedTimestamp(NanoTime),
+    UnexpectedStateRoot(Vec<u8>),
 
     // Header error
     MissingTrustedHeight,

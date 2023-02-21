@@ -1,6 +1,7 @@
 use crate::errors::Error;
 
 use alloc::vec::Vec;
+
 use rlp::{Decodable, Rlp};
 
 pub type Validator = Vec<u8>;
@@ -8,9 +9,11 @@ pub type Validators = Vec<Validator>;
 pub type Address = [u8; 20];
 pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
+pub type StorageKey = [u8; 32];
 pub type NanoTime = u64;
+pub type HexString<'a> = &'a str;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ChainId {
     id: u64,
     version: u64,
@@ -21,7 +24,7 @@ impl ChainId {
         self.id
     }
     pub fn new(id: u64) -> Self {
-        ChainId { id, version: 0 }
+        ChainId { id, version: 1 }
     }
 
     pub fn version(&self) -> u64 {
@@ -33,6 +36,7 @@ pub trait ValidatorReader {
     fn read(&self, height: ibc::Height) -> Result<Validators, Error>;
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Account {
     // nonce,
     // balance
@@ -92,21 +96,18 @@ pub(crate) fn required_block_count_to_finalize(validators: &Validators) -> usize
     }
 }
 
-pub(crate) fn new_ibc_height_with_chain_id(
+pub fn new_ibc_height_with_chain_id(
     chain_id: &ChainId,
     height: BlockNumber,
 ) -> Result<ibc::Height, Error> {
     new_ibc_height(chain_id.version(), height)
 }
 
-pub(crate) fn new_ibc_height(
-    revision_number: u64,
-    height: BlockNumber,
-) -> Result<ibc::Height, Error> {
+pub fn new_ibc_height(revision_number: u64, height: BlockNumber) -> Result<ibc::Height, Error> {
     //TODO Ethereum based block number uses big.Int. It can be bigger than u64.
     ibc::Height::new(revision_number, height).map_err(Error::ICS02Error)
 }
 
-pub(crate) fn new_ibc_timestamp(nano: u64) -> Result<ibc::timestamp::Timestamp, Error> {
+pub fn new_ibc_timestamp(nano: u64) -> Result<ibc::timestamp::Timestamp, Error> {
     ibc::timestamp::Timestamp::from_nanoseconds(nano).map_err(Error::ICSTimestamp)
 }

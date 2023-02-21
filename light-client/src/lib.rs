@@ -14,3 +14,4 @@ pub mod consensus_state;
 pub mod errors;
 pub mod header;
 pub mod misc;
+pub mod path;
