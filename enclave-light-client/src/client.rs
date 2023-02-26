@@ -39,7 +39,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
     registry
         .put_light_client(
             String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient::default()),
+            Box::new(ParliaLightClient(ParliaClient::default())),
         )
         .unwrap()
 }
