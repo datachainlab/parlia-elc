@@ -1,13 +1,10 @@
 use crate::errors::Error;
 use crate::header::eth_header::ETHHeader;
-use crate::header::{Header, Verifiable};
-use crate::misc::{ChainId, Hash, ValidatorReader, Validators};
-use alloc::vec::Vec;
+use crate::header::Header;
+use crate::misc::ChainId;
+
 use hex_literal::hex;
-use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::header::AnyHeader;
-use ibc::core::ics02_client::header::Header as IBCHeader;
-use ibc::timestamp::Timestamp;
+
 use parlia_ibc_proto::ibc::core::client::v1::Height;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
@@ -789,51 +786,4 @@ pub fn to_rlp(proof: alloc::vec::Vec<alloc::vec::Vec<u8>>) -> BytesMut {
         rlp.append(&v);
     }
     rlp.out()
-}
-
-#[derive(Clone, Debug)]
-pub struct MockHeader(pub Header);
-
-impl Verifiable for MockHeader {
-    fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        let account_proof = vec![
-            hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec(),
-        ];
-        let rlp = to_rlp(account_proof);
-        rlp::Rlp::new(&rlp).as_list().map_err(Error::RLPDecodeError)
-    }
-
-    fn trusted_height(&self) -> ibc::Height {
-        self.0.trusted_height()
-    }
-
-    fn state_root(&self) -> &Hash {
-        &hex!("c7095cc31e155302a3ff06970f0df0efa1abf5fe6e4be6cc450cc5f9421c2c9f")
-    }
-
-    fn validator_set(&self) -> &Validators {
-        self.0.validator_set()
-    }
-
-    fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
-        self.0.verify(ctx, chain_id)
-    }
-}
-
-impl IBCHeader for MockHeader {
-    fn client_type(&self) -> ClientType {
-        self.0.client_type()
-    }
-
-    fn height(&self) -> ibc::Height {
-        self.0.height()
-    }
-
-    fn timestamp(&self) -> Timestamp {
-        self.0.timestamp()
-    }
-
-    fn wrap_any(self) -> AnyHeader {
-        self.0.wrap_any()
-    }
 }

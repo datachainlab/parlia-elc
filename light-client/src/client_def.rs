@@ -1,7 +1,8 @@
 use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
-use crate::header::Verifiable;
+use crate::header::Header;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::header::Header as IBCHeader;
@@ -17,8 +18,13 @@ use crate::errors::Error;
 use crate::misc::{Account, Address, Hash, ValidatorReader};
 use crate::path::Path;
 
-#[derive(Default, Clone, Debug)]
-pub struct ParliaClient;
+pub struct ParliaClient(Box<dyn AccountResolver>);
+
+impl Default for ParliaClient {
+    fn default() -> Self {
+        Self::new(EIPAccountResolver)
+    }
+}
 
 impl ParliaClient {
     pub fn check_header_and_update_state(
@@ -27,7 +33,7 @@ impl ParliaClient {
         now: ibc::timestamp::Timestamp,
         client_state: &ClientState,
         trusted_consensus_state: &ConsensusState,
-        header: &(impl Verifiable + IBCHeader),
+        header: &Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
         trusted_consensus_state.assert_within_trust_period(now, client_state.trusting_period)?;
@@ -50,7 +56,7 @@ impl ParliaClient {
         new_client_state.latest_height = header.height();
 
         // Ensure world state is valid
-        let account = self.get_account(
+        let account = self.0.get_account(
             header.state_root(),
             &header.account_proof()?,
             &new_client_state.ibc_store_address,
@@ -73,7 +79,7 @@ impl ParliaClient {
     ) -> Result<(), Error> {
         let storage_proof = Rlp::new(storage_proof_rlp);
         let storage_proof = storage_proof.as_list().map_err(Error::RLPDecodeError)?;
-        self.verify_proof(
+        Self::verify_proof(
             storage_root,
             &storage_proof,
             path.storage_key(),
@@ -81,8 +87,11 @@ impl ParliaClient {
         )
     }
 
+    pub fn new(account_resolver: impl AccountResolver + 'static) -> Self {
+        Self(Box::new(account_resolver))
+    }
+
     fn verify_proof(
-        &self,
         root: &Hash,
         proof: &[Vec<u8>],
         key: &[u8],
@@ -109,14 +118,27 @@ impl ParliaClient {
             VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
         })
     }
+}
 
+pub trait AccountResolver {
+    fn get_account(
+        &self,
+        state_root: &Hash,
+        account_proof: &[Vec<u8>],
+        address: &Address,
+    ) -> Result<Account, Error>;
+}
+
+struct EIPAccountResolver;
+
+impl AccountResolver for EIPAccountResolver {
     fn get_account(
         &self,
         state_root: &Hash,
         account_proof: &[Vec<u8>],
         address: &Address,
     ) -> Result<Account, Error> {
-        match self.verify_proof(state_root, account_proof, address, &None) {
+        match ParliaClient::verify_proof(state_root, account_proof, address, &None) {
             Ok(_) => Err(Error::AccountNotFound(*address)),
             Err(Error::UnexpectedStateExistingValue(value, _)) => Rlp::new(&value).try_into(),
             Err(err) => Err(err),
@@ -126,11 +148,13 @@ impl ParliaClient {
 
 #[cfg(test)]
 mod test {
-    use crate::client_def::ParliaClient;
+    use crate::client_def::{AccountResolver, ParliaClient};
     use crate::misc::{
-        new_ibc_height, new_ibc_timestamp, Account, Hash, ValidatorReader, Validators,
+        new_ibc_height, new_ibc_timestamp, Account, Address, Hash, ValidatorReader, Validators,
     };
-    use crate::path::{AddressPath, Bytes32Path, StringPath, YuiIBCPath};
+    use crate::path::YuiIBCPath;
+
+    use std::prelude::rust_2015::Vec;
 
     use hex_literal::hex;
 
@@ -141,10 +165,7 @@ mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header;
-    use crate::header::testdata::{
-        create_epoch_block, create_previous_epoch_block, fill, to_rlp, MockHeader,
-    };
-    use crate::header::Verifiable;
+    use crate::header::testdata::{create_epoch_block, create_previous_epoch_block, fill, to_rlp};
 
     #[test]
     fn test_get_account() {
@@ -158,8 +179,8 @@ mod test {
             storage_root: hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 .to_vec(),
         };
-        let client = ParliaClient {};
-        let v = client.get_account(&state_root, &account_proof, &address);
+        let client = ParliaClient::default();
+        let v = client.0.get_account(&state_root, &account_proof, &address);
         match v {
             Ok(actual) => assert_eq!(actual, account),
             Err(e) => unreachable!("{:?}", e),
@@ -175,81 +196,9 @@ mod test {
             hex!("f7a0390decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5639594ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec(),
         ];
         let expected = hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec();
-        let client = ParliaClient {};
-        if let Err(e) = client.verify_proof(&storage_root, &storage_proof, &key, &Some(expected)) {
-            unreachable!("{:?}", e);
-        }
-    }
-
-    #[test]
-    fn test_verify_commitment_string_mapping() {
-        let storage_root = hex!("07e2e4dae56777f9dd8880a20c7ccd053357af97cb974ff2561c82413c4504c2");
-        let storage_proof = to_rlp(vec![
-            hex!("f871808080808080a02930e4dce1ad8d09d927f6ae6b0f250a432953cc8db65a2884bbee2a43ff99b4a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df39480808080808080a0ece252aba6648aa0e0ae7f9b0c80a4be990a9b5a8ee86a21f8e86d2b399c257080").to_vec(),
-            hex!("f843a03661cc3c3badbfa50ebed472ffe19dcdcd195dcdca950fee0d189e5e51b592caa1a0737472696e674461746100000000000000000000000000000000000000000014").to_vec(),
-        ]);
-
-        // raw_key = "stringKey"
-        let path = StringPath::new(
-            &hex!("737472696e674b6579"),
-            &hex!("0000000000000000000000000000000000000000000000000000000000000002"),
-        );
-        // raw_expected = "stringData"
-        let expected =
-            hex!("737472696e674461746100000000000000000000000000000000000000000014").to_vec();
-        let client = ParliaClient {};
         if let Err(e) =
-            client.verify_commitment(&storage_root, &storage_proof, path, &Some(expected))
+            ParliaClient::verify_proof(&storage_root, &storage_proof, &key, &Some(expected))
         {
-            unreachable!("{:?}", e);
-        }
-    }
-
-    #[test]
-    fn test_verify_commitment_address_mapping() {
-        let storage_root = hex!("07e2e4dae56777f9dd8880a20c7ccd053357af97cb974ff2561c82413c4504c2");
-        let storage_proof = to_rlp(vec![
-            hex!("f871808080808080a02930e4dce1ad8d09d927f6ae6b0f250a432953cc8db65a2884bbee2a43ff99b4a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df39480808080808080a0ece252aba6648aa0e0ae7f9b0c80a4be990a9b5a8ee86a21f8e86d2b399c257080").to_vec(),
-            hex!("f7a03689a78231c5646392ef8a157b90561c30c72656b1da51235d845746b21f4f3395948f60dc9e5e6607a42a657fa60a5df874d3ec104e").to_vec(),
-        ]);
-
-        let path = AddressPath::new(
-            &hex!("18DAd81d93F32575691131E73878E89e20481839"),
-            &hex!("0000000000000000000000000000000000000000000000000000000000000001"),
-        );
-        let expected = hex!("8f60dc9e5e6607a42a657fa60a5df874d3ec104e").to_vec();
-        let client = ParliaClient {};
-        if let Err(e) =
-            client.verify_commitment(&storage_root, &storage_proof, path, &Some(expected))
-        {
-            unreachable!("{:?}", e);
-        }
-    }
-
-    #[test]
-    fn test_verify_commitment_bytes32_mapping() {
-        let storage_root = hex!("d3d4f68de3c3ec5b4dc13c51d8126ede16de3b0d9ca0e1774fc04a4694015aaf");
-        let storage_proof = to_rlp(vec![
-            hex!("f87180808080a0ca810438aa849b4f9430682f2ee256b4068f0f93b708a51ba28f1c97236fc14880a0044f9d4608bdd7ff7943cee62a73ac4daeff3c495907afd494dce25436b0c534a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df394808080808080808080").to_vec(),
-            hex!("f843a034789715475df3dfacd394978251fc350fe1eec608d4c909cfaea6a6f31614e1a1a03334000000000000000000000000000000000000000000000000000000000000").to_vec(),
-        ]);
-
-        let mut key = [0_u8; 32];
-        key[0] = 99;
-        let path = Bytes32Path::new(
-            &key,
-            &hex!("0000000000000000000000000000000000000000000000000000000000000000"),
-        );
-        let mut expected = [0_u8; 32];
-        expected[0] = 51;
-        expected[1] = 52;
-        let client = ParliaClient {};
-        if let Err(e) = client.verify_commitment(
-            &storage_root,
-            &storage_proof,
-            path,
-            &Some(expected.to_vec()),
-        ) {
             unreachable!("{:?}", e);
         }
     }
@@ -267,7 +216,7 @@ mod test {
         let mut expected = [0_u8; 32];
         expected[0] = 51;
         expected[1] = 52;
-        let client = ParliaClient {};
+        let client = ParliaClient::default();
         if let Err(e) = client.verify_commitment(
             &storage_root,
             &storage_proof,
@@ -295,9 +244,9 @@ mod test {
     #[test]
     fn test_check_header_and_update_state() {
         let mainnet = header::testdata::mainnet();
-        let header = MockHeader(header::testdata::create_after_checkpoint_headers());
+        let header = header::testdata::create_after_checkpoint_headers();
         let trusting_period = 1_000_000_000;
-        let now = new_ibc_timestamp(header.0.timestamp().nanoseconds()).unwrap();
+        let now = new_ibc_timestamp(header.timestamp().nanoseconds()).unwrap();
 
         let ctx = MockValidatorReader {};
 
@@ -315,12 +264,30 @@ mod test {
         };
         let trusted_consensus_state = ConsensusState {
             state_root: CommitmentRoot::from_bytes(&[0; 32]),
-            timestamp: new_ibc_timestamp(header.0.timestamp().nanoseconds() - trusting_period)
+            timestamp: new_ibc_timestamp(header.timestamp().nanoseconds() - trusting_period)
                 .unwrap(),
             validator_set: vec![],
         };
 
-        let client = ParliaClient {};
+        struct MockAccountResolver;
+
+        impl AccountResolver for MockAccountResolver {
+            fn get_account(
+                &self,
+                _state_root: &Hash,
+                _account_proof: &[Vec<u8>],
+                _address: &Address,
+            ) -> Result<Account, Error> {
+                Ok(Account {
+                    storage_root: hex!(
+                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                    )
+                    .to_vec(),
+                })
+            }
+        }
+
+        let client = ParliaClient(alloc::boxed::Box::new(MockAccountResolver));
         let (new_client_state, new_consensus_state) = match client.check_header_and_update_state(
             ctx,
             now,

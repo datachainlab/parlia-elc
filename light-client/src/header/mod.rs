@@ -20,18 +20,6 @@ const EPOCH_BLOCK_PERIOD: u64 = 200;
 mod eth_header;
 mod eth_headers;
 
-pub trait Verifiable {
-    fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error>;
-
-    fn trusted_height(&self) -> ibc::Height;
-
-    fn state_root(&self) -> &Hash;
-
-    fn validator_set(&self) -> &Validators;
-
-    fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error>;
-}
-
 #[derive(Clone, Debug)]
 pub struct Header {
     inner: RawHeader,
@@ -39,25 +27,25 @@ pub struct Header {
     trusted_height: ibc::Height,
 }
 
-impl Verifiable for Header {
-    fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
+impl Header {
+    pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
         let rlp = Rlp::new(&self.inner.account_proof);
         rlp.as_list().map_err(Error::RLPDecodeError)
     }
 
-    fn trusted_height(&self) -> ibc::Height {
+    pub fn trusted_height(&self) -> ibc::Height {
         self.trusted_height
     }
 
-    fn state_root(&self) -> &Hash {
+    pub fn state_root(&self) -> &Hash {
         &self.headers.target.header.root
     }
 
-    fn validator_set(&self) -> &Validators {
+    pub fn validator_set(&self) -> &Validators {
         &self.headers.target.header.new_validators
     }
 
-    fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
+    pub fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
         let target = &self.headers.target.header;
         if target.is_epoch {
             if target.number >= EPOCH_BLOCK_PERIOD {
@@ -186,7 +174,7 @@ pub mod testdata;
 mod test {
     use crate::errors::Error;
     use crate::header::testdata::*;
-    use crate::header::{Header, Verifiable};
+    use crate::header::Header;
     use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;

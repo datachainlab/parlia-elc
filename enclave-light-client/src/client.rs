@@ -27,7 +27,7 @@ use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
 use parlia_ibc_lc::client_type::CLIENT_TYPE;
 use parlia_ibc_lc::consensus_state::ConsensusState;
-use parlia_ibc_lc::header::{Header, Verifiable};
+use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
 use parlia_ibc_lc::path::YuiIBCPath;
 use validation_context::ValidationParams;
@@ -39,7 +39,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
     registry
         .put_light_client(
             String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient(ParliaClient)),
+            Box::new(ParliaLightClient::default()),
         )
         .unwrap()
 }
@@ -95,7 +95,51 @@ impl LightClient for ParliaLightClient {
     ) -> Result<UpdateClientResult, LightClientError> {
         //Ensure header can be verified.
         let header: Header = try_from_any(any_header)?;
-        self.update_client(ctx, &client_id, &header)
+        let now = ctx.host_timestamp();
+        let trusted_height = header.trusted_height();
+        let any_client_state = read_client_state(ctx, &client_id)?;
+        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.into())?;
+        let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
+
+        //Ensure client is not frozen
+        let client_state: ClientState = try_from_any(any_client_state)?;
+        if client_state.is_frozen() {
+            return Err(LightClientError::ics02(ICS02Error::client_frozen(
+                client_id,
+            )));
+        }
+
+        // Create new state and ensure header is valid
+        let consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
+        let ctx = DefaultValidatorReader {
+            ctx,
+            client_id: &client_id,
+        };
+        let (new_client_state, new_consensus_state) = self
+            .0
+            .check_header_and_update_state(ctx, now, &client_state, &consensus_state, &header)
+            .map_err(Error::ParliaIBCLC)?;
+
+        let new_height = new_client_state.latest_height.into();
+        let new_any_client_state = try_into_any(new_client_state)?;
+        let new_any_consensus_state = try_into_any(new_consensus_state)?;
+        let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
+
+        Ok(UpdateClientResult {
+            new_any_client_state,
+            new_any_consensus_state,
+            height: header.height().into(),
+            commitment: UpdateClientCommitment {
+                prev_state_id: Some(prev_state_id),
+                new_state_id,
+                new_state: None,
+                prev_height: Some(header.trusted_height().into()),
+                new_height,
+                timestamp: header.timestamp().into(),
+                validation_params: ValidationParams::Empty,
+            },
+            prove: true,
+        })
     }
 
     fn verify_membership(
@@ -144,56 +188,6 @@ impl LightClient for ParliaLightClient {
 }
 
 impl ParliaLightClient {
-    fn update_client(
-        &self,
-        ctx: &dyn ClientReader,
-        client_id: &ClientId,
-        header: &(impl Verifiable + IBCHeader),
-    ) -> Result<UpdateClientResult, LightClientError> {
-        let now = ctx.host_timestamp();
-        let trusted_height = header.trusted_height();
-        let any_client_state = read_client_state(ctx, client_id)?;
-        let any_consensus_state = read_consensus_state(ctx, client_id, trusted_height.into())?;
-        let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
-
-        //Ensure client is not frozen
-        let client_state: ClientState = try_from_any(any_client_state)?;
-        if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ICS02Error::client_frozen(
-                client_id.clone(),
-            )));
-        }
-
-        // Create new state and ensure header is valid
-        let consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
-        let ctx = DefaultValidatorReader { ctx, client_id };
-        let (new_client_state, new_consensus_state) = self
-            .0
-            .check_header_and_update_state(ctx, now, &client_state, &consensus_state, header)
-            .map_err(Error::ParliaIBCLC)?;
-
-        let new_height = new_client_state.latest_height.into();
-        let new_any_client_state = try_into_any(new_client_state)?;
-        let new_any_consensus_state = try_into_any(new_consensus_state)?;
-        let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
-
-        Ok(UpdateClientResult {
-            new_any_client_state,
-            new_any_consensus_state,
-            height: header.height().into(),
-            commitment: UpdateClientCommitment {
-                prev_state_id: Some(prev_state_id),
-                new_state_id,
-                new_state: None,
-                prev_height: Some(header.trusted_height().into()),
-                new_height,
-                timestamp: header.timestamp().into(),
-                validation_params: ValidationParams::Empty,
-            },
-            prove: true,
-        })
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn verify_commitment(
         &self,
@@ -300,6 +294,7 @@ impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
 mod test {
     use alloc::string::{String, ToString};
     use alloc::vec;
+    use alloc::vec::Vec;
     use core::str::FromStr;
     use hex_literal::hex;
     use ibc::core::ics02_client::context::ClientReader as IBCClientReader;
@@ -311,16 +306,17 @@ mod test {
     use ibc::timestamp::Timestamp;
     use lcp_types::{Any, Height};
     use light_client::{ClientReader, LightClient};
-    use parlia_ibc_lc::client_def::ParliaClient;
+    use parlia_ibc_lc::client_def::{AccountResolver, ParliaClient};
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;
+    use parlia_ibc_lc::errors::Error;
     use parlia_ibc_lc::header;
     use parlia_ibc_lc::header::testdata::{
-        create_epoch_block, create_previous_epoch_block, fill, to_rlp, MockHeader,
+        create_epoch_block, create_previous_epoch_block, fill, to_rlp,
     };
-    use parlia_ibc_lc::header::Verifiable;
     use parlia_ibc_lc::misc::{
-        new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, ChainId,
+        new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, Account, Address, ChainId,
+        Hash,
     };
 
     use crate::client::{try_from_any, try_into_any, ParliaLightClient};
@@ -417,7 +413,7 @@ mod test {
 
     #[test]
     fn test_create_client() {
-        let client = ParliaLightClient(ParliaClient);
+        let client = ParliaLightClient::default();
         let ctx = MockClientReader {};
 
         let mainnet = ChainId::new(56);
@@ -459,9 +455,32 @@ mod test {
     #[test]
     fn test_update_client() {
         let ctx = MockClientReader;
-        let header = MockHeader(header::testdata::create_after_checkpoint_headers());
-        let client = ParliaLightClient(ParliaClient);
-        match client.update_client(&ctx, &ClientId::default(), &header) {
+
+        struct MockAccountResolver;
+        impl AccountResolver for MockAccountResolver {
+            fn get_account(
+                &self,
+                _state_root: &Hash,
+                _account_proof: &[Vec<u8>],
+                _address: &Address,
+            ) -> Result<Account, Error> {
+                Ok(Account {
+                    storage_root: hex!(
+                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+                    )
+                    .to_vec(),
+                })
+            }
+        }
+
+        let client = ParliaLightClient(ParliaClient::new(MockAccountResolver));
+
+        let header = header::testdata::create_after_checkpoint_headers();
+        match client.update_client(
+            &ctx,
+            ClientId::default(),
+            try_into_any(header.clone()).unwrap(),
+        ) {
             Ok(data) => {
                 let new_client_state: ClientState =
                     try_from_any(data.new_any_client_state).unwrap();
@@ -492,7 +511,7 @@ mod test {
     #[test]
     fn test_verify_commitment() {
         let ctx = MockClientReader;
-        let client = ParliaLightClient(ParliaClient);
+        let client = ParliaLightClient::default();
         let prefix = vec![0];
         let path = "commitments/ports/port-1/channels/channel-1/sequences/1";
         let proof_height = new_ibc_height(1, 2).unwrap();
