@@ -1,21 +1,16 @@
-use crate::errors::Error;
 use alloc::boxed::Box;
-
+use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::error::Error as ICS02Error;
-
 use ibc::core::ics02_client::client_state::ClientState as _;
-
-use alloc::str::FromStr;
+use ibc::core::ics02_client::error::Error as ICS02Error;
 use ibc::core::ics02_client::header::Header as IBCHeader;
-
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::core::ics24_host::identifier::ClientId;
 use ibc::core::ics24_host::Path;
-
 use ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Height};
 use light_client::{
@@ -23,6 +18,8 @@ use light_client::{
     StateVerificationResult, UpdateClientResult,
 };
 use light_client_registry::LightClientRegistry;
+use validation_context::ValidationParams;
+
 use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
 use parlia_ibc_lc::client_type::CLIENT_TYPE;
@@ -30,7 +27,8 @@ use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
 use parlia_ibc_lc::path::YuiIBCPath;
-use validation_context::ValidationParams;
+
+use crate::errors::Error;
 
 #[derive(Default)]
 pub struct ParliaLightClient(ParliaClient);
@@ -39,7 +37,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
     registry
         .put_light_client(
             String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient::default()),
+            Box::new(ParliaLightClient(ParliaClient::default())),
         )
         .unwrap()
 }
@@ -296,6 +294,7 @@ mod test {
     use alloc::vec;
     use alloc::vec::Vec;
     use core::str::FromStr;
+
     use hex_literal::hex;
     use ibc::core::ics02_client::context::ClientReader as IBCClientReader;
     use ibc::core::ics02_client::error::Error as ICS02Error;
@@ -306,6 +305,7 @@ mod test {
     use ibc::timestamp::Timestamp;
     use lcp_types::{Any, Height};
     use light_client::{ClientReader, LightClient};
+
     use parlia_ibc_lc::client_def::{AccountResolver, ParliaClient};
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;

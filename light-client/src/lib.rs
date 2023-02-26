@@ -2,7 +2,6 @@
 
 #[cfg_attr(not(test), macro_use)]
 extern crate alloc;
-
 #[cfg(test)]
 #[macro_use]
 extern crate std;

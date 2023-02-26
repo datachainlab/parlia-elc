@@ -1,8 +1,8 @@
-use crate::errors::Error;
-
 use alloc::vec::Vec;
 
 use rlp::{Decodable, Rlp};
+
+use crate::errors::Error;
 
 pub type Validator = Vec<u8>;
 pub type Validators = Vec<Validator>;

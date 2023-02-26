@@ -1,14 +1,17 @@
 use alloc::vec::Vec;
-use elliptic_curve::sec1::ToEncodedPoint;
-use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 
-use super::EPOCH_BLOCK_PERIOD;
-use crate::errors::Error;
-use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
+use elliptic_curve::sec1::ToEncodedPoint;
 use hex_literal::hex;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use patricia_merkle_trie::keccak::keccak_256;
 use rlp::{Rlp, RlpStream};
+
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+
+use crate::errors::Error;
+use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
+
+use super::EPOCH_BLOCK_PERIOD;
 
 const DIFFICULTY_INTURN: u64 = 2;
 const DIFFICULTY_NOTURN: u64 = 1;
@@ -323,14 +326,14 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::errors::Error;
-    use crate::header::eth_header::{EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
-
-    use crate::header::eth_header::ETHHeader;
-    use crate::header::testdata::*;
     use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+
+    use crate::errors::Error;
+    use crate::header::eth_header::ETHHeader;
+    use crate::header::eth_header::{EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
+    use crate::header::testdata::*;
 
     #[test]
     fn test_success_try_from_eth_header() {

@@ -1,7 +1,8 @@
-use crate::misc::{Address, Hash, StorageKey};
 use hex_literal::hex;
 use patricia_merkle_trie::keccak::keccak_256;
 use prost::bytes::{BufMut, BytesMut};
+
+use crate::misc::{Address, Hash, StorageKey};
 
 pub trait Path {
     fn storage_key(&self) -> &StorageKey;

@@ -2,14 +2,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::error::Error as ICS02Error;
-
 use ibc::timestamp::ParseTimestampError;
 use ibc::Height;
-
-use crate::misc::{Address, BlockNumber, NanoTime};
 use k256::ecdsa::signature;
 use prost::{DecodeError as ProtoDecodeError, EncodeError as ProtoEncodeError};
 use rlp::DecoderError;
+
+use crate::misc::{Address, BlockNumber, NanoTime};
 
 #[derive(Debug)]
 pub enum Error {

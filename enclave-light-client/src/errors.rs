@@ -1,5 +1,3 @@
-#[cfg(feature = "sgx")]
-use crate::sgx_reexport_prelude::*;
 use alloc::vec::Vec;
 
 use ibc::core::ics23_commitment::error::Error as ICS23Error;
@@ -8,6 +6,9 @@ use lcp_types::Height;
 use light_client::LightClientInstanceError;
 
 use parlia_ibc_lc::errors::Error as ParliaIBCLCError;
+
+#[cfg(feature = "sgx")]
+use crate::sgx_reexport_prelude::*;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
