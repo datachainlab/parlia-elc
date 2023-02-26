@@ -22,7 +22,7 @@ pub struct ParliaClient(Box<dyn AccountResolver>);
 
 impl Default for ParliaClient {
     fn default() -> Self {
-        Self::new(EIPAccountResolver)
+        Self::new(DefaultAccountResolver)
     }
 }
 
@@ -129,9 +129,9 @@ pub trait AccountResolver {
     ) -> Result<Account, Error>;
 }
 
-struct EIPAccountResolver;
+struct DefaultAccountResolver;
 
-impl AccountResolver for EIPAccountResolver {
+impl AccountResolver for DefaultAccountResolver {
     fn get_account(
         &self,
         state_root: &Hash,
