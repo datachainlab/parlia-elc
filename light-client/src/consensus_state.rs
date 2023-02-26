@@ -1,16 +1,16 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
+
 use ibc::core::ics02_client::client_consensus::{self, AnyConsensusState};
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::error::Error as ICS02Error;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
-
-use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
 use ibc_proto::google::protobuf::Any;
+use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use prost::Message as _;
+use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
 
 use super::errors::Error;
 
@@ -128,10 +128,11 @@ impl TryFrom<ConsensusState> for Any {
 
 #[cfg(test)]
 mod test {
+    use ibc::core::ics23_commitment::commitment::CommitmentRoot;
+
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::misc::new_ibc_timestamp;
-    use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 
     #[test]
     fn test_assert_within_trust_period() {

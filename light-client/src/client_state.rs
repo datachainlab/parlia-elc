@@ -1,16 +1,18 @@
-use crate::errors::Error;
 use alloc::borrow::ToOwned as _;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+
 use ibc::core::ics02_client::client_state::{self, AnyClientState};
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::error::Error as ICS02Error;
 use ibc::core::ics02_client::trust_threshold::TrustThreshold;
-
-use crate::misc::{new_ibc_height_with_chain_id, Address, ChainId, NanoTime};
 use ibc_proto::google::protobuf::Any;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 use prost::Message as _;
+
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
+
+use crate::errors::Error;
+use crate::misc::{new_ibc_height_with_chain_id, Address, ChainId, NanoTime};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
