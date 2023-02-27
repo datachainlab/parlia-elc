@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
+use alloc::collections::BTreeSet;
 
 use super::eth_header::{ETHHeader, Target};
 use super::EPOCH_BLOCK_PERIOD;
 use crate::errors::Error;
 use crate::misc::{
-    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, unique, ChainId,
+    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, Address, ChainId,
     Validators,
 };
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
@@ -24,10 +25,6 @@ impl ETHHeaders {
     ) -> Result<(), Error> {
         let headers = &self.all;
 
-        // Ensure validator set is unique
-        let mut new_validators = unique(new_validators)?;
-        let mut previous_validators = unique(previous_validators)?;
-
         // Ensure all the headers are successfully chained.
         for (i, header) in headers.iter().enumerate() {
             if i < headers.len() - 1 {
@@ -36,29 +33,53 @@ impl ETHHeaders {
             }
         }
 
+        self.verify_seals(chain_id, new_validators, previous_validators)
+    }
+
+    fn verify_seals(
+        &self,
+        chain_id: &ChainId,
+        new_validators: &Validators,
+        previous_validators: &Validators,
+    ) -> Result<(), Error> {
+        let headers = &self.all;
         let target = self.target.as_ref();
-        let threshold = required_block_count_to_finalize(&previous_validators);
+        let threshold = required_block_count_to_finalize(previous_validators);
         if target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
             // Validators created at previous epoch is used for consensus target header
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
+
+            let mut signers_before_checkpoint: BTreeSet<Address> = BTreeSet::default();
+            let mut signers_after_checkpoint: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
                 if header.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
-                    header.verify_seal(&mut previous_validators, chain_id)?;
+                    // Each validator can sign only one header
+                    let signer = header.verify_seal(previous_validators, chain_id)?;
+                    if !signers_before_checkpoint.insert(signer) {
+                        return Err(Error::UnexpectedDoubleSign(header.number, signer));
+                    }
                 } else {
                     // Current epoch validators is used after the checkpoint block.
-                    header.verify_seal(&mut new_validators, chain_id)?;
+                    let signer = header.verify_seal(new_validators, chain_id)?;
+                    if !signers_after_checkpoint.insert(signer) {
+                        return Err(Error::UnexpectedDoubleSign(header.number, signer));
+                    }
                 }
             }
         } else {
             // Validators created at current epoch is used for consensus target header
-            let threshold = required_block_count_to_finalize(&new_validators);
+            let threshold = required_block_count_to_finalize(new_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
+            let mut signers: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
-                header.verify_seal(&mut new_validators, chain_id)?;
+                let signer = header.verify_seal(new_validators, chain_id)?;
+                if !signers.insert(signer) {
+                    return Err(Error::UnexpectedDoubleSign(header.number, signer));
+                }
             }
         }
 
@@ -234,6 +255,24 @@ mod test {
                     number,
                     header.headers.all[header.headers.all.len() - 2].number
                 )
+            }
+            e => unreachable!("{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_error_verify_seals() {
+        let mut header = create_after_checkpoint_headers();
+        let new_validator_set = fill(create_epoch_block()).new_validators;
+        header.headers.all[1] = header.headers.all[0].clone();
+
+        let mainnet = &mainnet();
+        let result = header
+            .headers
+            .verify_seals(mainnet, &new_validator_set, &vec![]);
+        match result.unwrap_err() {
+            Error::UnexpectedDoubleSign(block, _) => {
+                assert_eq!(block, header.headers.all[1].number, "block error");
             }
             e => unreachable!("{:?}", e),
         }

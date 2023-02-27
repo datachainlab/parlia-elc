@@ -149,9 +149,9 @@ impl ETHHeader {
     /// https://github.com/bnb-chain/bsc/blob/master/consensus/parlia/parlia.go#L546
     pub fn verify_seal(
         &self,
-        validator_set: &mut Validators,
+        validator_set: &Validators,
         chain_id: &ChainId,
-    ) -> Result<(), Error> {
+    ) -> Result<Address, Error> {
         // Resolve the authorization key and check against validators
         let signer = self.ecrecover(chain_id)?;
         if self.coinbase.as_slice() != signer {
@@ -159,11 +159,9 @@ impl ETHHeader {
         }
 
         let mut valid_signer = false;
-        for (i, validator) in validator_set.iter().enumerate() {
+        for validator in validator_set.iter() {
             if validator.as_slice() == signer {
                 valid_signer = true;
-                // Each validator can seal just one header.
-                validator_set.remove(i);
                 break;
             }
         }
@@ -173,7 +171,7 @@ impl ETHHeader {
 
         // Don't check that the difficulty corresponds to the turn-ness of the signer
 
-        Ok(())
+        Ok(signer)
     }
 }
 
@@ -515,9 +513,9 @@ mod test {
 
     #[test]
     fn test_success_verify_seal() {
-        let mut epoch = fill(create_epoch_block());
+        let epoch = fill(create_epoch_block());
         let non_epoch = fill(create_non_epoch_block());
-        let result = non_epoch.verify_seal(&mut epoch.new_validators, &mainnet());
+        let result = non_epoch.verify_seal(&epoch.new_validators, &mainnet());
         if let Err(e) = result {
             unreachable!("{:?}", e);
         }
@@ -525,18 +523,18 @@ mod test {
 
     #[test]
     fn test_error_verify_seal() {
-        let mut epoch = fill(create_epoch_block());
+        let epoch = fill(create_epoch_block());
         let mut non_epoch = fill(create_non_epoch_block());
         let mainnet = &mainnet();
         non_epoch.coinbase = vec![1];
-        let result = non_epoch.verify_seal(&mut epoch.new_validators, mainnet);
+        let result = non_epoch.verify_seal(&epoch.new_validators, mainnet);
         match result.unwrap_err() {
             Error::UnexpectedCoinbase(number) => assert_eq!(non_epoch.number, number),
             e => unreachable!("{:?}", e),
         };
 
         let non_epoch = fill(create_non_epoch_block());
-        let result = non_epoch.verify_seal(&mut vec![], mainnet);
+        let result = non_epoch.verify_seal(&vec![], mainnet);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, signer) => {
                 assert_eq!(signer, non_epoch.coinbase.as_slice());
