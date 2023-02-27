@@ -6,7 +6,7 @@ use ibc::core::ics02_client::error::Error as ICS02Error;
 use ibc::timestamp::ParseTimestampError;
 use ibc::Height;
 
-use crate::misc::{Address, BlockNumber, NanoTime};
+use crate::misc::{Address, BlockNumber, NanoTime, Validator};
 use k256::ecdsa::signature;
 use prost::{DecodeError as ProtoDecodeError, EncodeError as ProtoEncodeError};
 use rlp::DecoderError;
@@ -53,6 +53,7 @@ pub enum Error {
     UnexpectedEncodedPoint(BlockNumber),
     UnexpectedAddress(BlockNumber),
     UnexpectedCoinbase(BlockNumber),
+    UnexpectedDuplicatedValidatorSet(usize, usize),
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),

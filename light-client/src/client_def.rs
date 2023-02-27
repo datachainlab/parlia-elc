@@ -82,7 +82,11 @@ impl ParliaClient {
     }
 }
 
-fn resolve_account(state_root: &Hash, account_proof: &[u8], address: &[u8]) -> Result<Account, Error> {
+fn resolve_account(
+    state_root: &Hash,
+    account_proof: &[u8],
+    address: &[u8],
+) -> Result<Account, Error> {
     let account_proof = Rlp::new(account_proof)
         .as_list()
         .map_err(Error::RLPDecodeError)?;

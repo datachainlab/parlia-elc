@@ -4,7 +4,8 @@ use super::eth_header::{ETHHeader, Target};
 use super::EPOCH_BLOCK_PERIOD;
 use crate::errors::Error;
 use crate::misc::{
-    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, ChainId, Validators,
+    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, unique, ChainId,
+    Validators,
 };
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
@@ -23,6 +24,10 @@ impl ETHHeaders {
     ) -> Result<(), Error> {
         let headers = &self.all;
 
+        // Ensure validator set is unique
+        let mut new_validators = unique(new_validators)?;
+        let mut previous_validators = unique(previous_validators)?;
+
         // Ensure all the headers are successfully chained.
         for (i, header) in headers.iter().enumerate() {
             if i < headers.len() - 1 {
@@ -32,7 +37,7 @@ impl ETHHeaders {
         }
 
         let target = self.target.as_ref();
-        let threshold = required_block_count_to_finalize(previous_validators);
+        let threshold = required_block_count_to_finalize(&previous_validators);
         if target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
             // Validators created at previous epoch is used for consensus target header
             if headers.len() != threshold {
@@ -40,20 +45,20 @@ impl ETHHeaders {
             }
             for header in headers {
                 if header.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
-                    header.verify_seal(previous_validators, chain_id)?;
+                    header.verify_seal(&mut previous_validators, chain_id)?;
                 } else {
                     // Current epoch validators is used after the checkpoint block.
-                    header.verify_seal(new_validators, chain_id)?;
+                    header.verify_seal(&mut new_validators, chain_id)?;
                 }
             }
         } else {
             // Validators created at current epoch is used for consensus target header
-            let threshold = required_block_count_to_finalize(new_validators);
+            let threshold = required_block_count_to_finalize(&new_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
             for header in headers {
-                header.verify_seal(new_validators, chain_id)?;
+                header.verify_seal(&mut new_validators, chain_id)?;
             }
         }
 

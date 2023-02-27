@@ -110,3 +110,16 @@ pub(crate) fn new_ibc_height(
 pub(crate) fn new_ibc_timestamp(nano: u64) -> Result<ibc::timestamp::Timestamp, Error> {
     ibc::timestamp::Timestamp::from_nanoseconds(nano).map_err(Error::ICSTimestamp)
 }
+
+pub(crate) fn unique(src: &Validators) -> Result<Validators, Error> {
+    let mut dst = src.clone();
+    dst.dedup();
+    if dst.len() != src.len() {
+        Err(Error::UnexpectedDuplicatedValidatorSet(
+            src.len(),
+            dst.len(),
+        ))
+    } else {
+        Ok(dst)
+    }
+}
