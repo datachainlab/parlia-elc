@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
 use alloc::collections::BTreeSet;
+use alloc::vec::Vec;
 
 use super::eth_header::{ETHHeader, Target};
 use super::EPOCH_BLOCK_PERIOD;
