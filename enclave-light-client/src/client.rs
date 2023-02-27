@@ -1,7 +1,7 @@
 use crate::errors::Error;
 use alloc::boxed::Box;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
@@ -26,7 +26,6 @@ use light_client::{
 use light_client_registry::LightClientRegistry;
 use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
-use parlia_ibc_lc::client_type::CLIENT_TYPE;
 use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
@@ -46,7 +45,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        String::from(CLIENT_TYPE)
+        ClientState::client_type().to_string()
     }
 
     fn latest_height(

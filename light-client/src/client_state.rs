@@ -23,7 +23,6 @@ use ibc::core::ics24_host::path::{
 };
 use ibc::core::{ContextError, ValidationContext};
 
-use crate::client_type::CLIENT_TYPE;
 use crate::misc::{new_ibc_height_with_chain_id, ChainId, NanoTime};
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
@@ -41,6 +40,13 @@ pub struct ClientState {
     pub trust_level: TrustThreshold,
     pub trusting_period: NanoTime,
     pub frozen: bool,
+}
+
+impl ClientState {
+    pub fn client_type() -> ClientType {
+        //TODO fix name
+        ClientType::new("99-parlia".to_owned())
+    }
 }
 
 impl TryFrom<RawClientState> for ClientState {
@@ -113,8 +119,7 @@ impl IBCClientState for ClientState {
     }
 
     fn client_type(&self) -> ClientType {
-        //TODO fix name
-        ClientType("99-parlia".to_owned())
+        Self::client_type()
     }
 
     fn latest_height(&self) -> ibc::Height {
