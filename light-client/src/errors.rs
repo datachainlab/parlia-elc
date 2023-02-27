@@ -62,7 +62,7 @@ pub enum Error {
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
         todo!()
     }
 }

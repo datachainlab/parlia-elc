@@ -48,8 +48,11 @@ impl ConsensusState {
         if (now_nano - timestamp) > trusting_period {
             let expires_at = new_ibc_timestamp(timestamp + trusting_period)?;
             Err(Error::ICS02Error(
-                ICS02Error::header_not_within_trust_period(expires_at, now),
-            ))
+                ICS02Error::HeaderNotWithinTrustPeriod {
+                    latest_time: expires_at,
+                    update_time: now,
+                }),
+            )
         } else {
             Ok(())
         }
@@ -59,7 +62,7 @@ impl ConsensusState {
 impl TryFrom<RawConsensusState> for ConsensusState {
     type Error = ClientError;
 
-    fn try_from(value: RawConsensusState) -> Result<Self, Error> {
+    fn try_from(value: RawConsensusState) -> Result<Self, Self::Error> {
         let state_root = CommitmentRoot::from_bytes(value.state_root.as_slice());
         let timestamp = new_ibc_timestamp(value.timestamp).unwrap();
         let validator_set = value.validator_set;
@@ -91,7 +94,7 @@ impl IBCConsensusState for ConsensusState {
     }
 
     fn timestamp(&self) -> Timestamp {
-        self.timestamp.into()
+        self.timestamp
     }
 }
 

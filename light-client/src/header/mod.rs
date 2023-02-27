@@ -20,7 +20,7 @@ const EPOCH_BLOCK_PERIOD: u64 = 200;
 mod eth_header;
 mod eth_headers;
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
@@ -94,21 +94,21 @@ impl Protobuf<RawHeader> for Header{}
 impl Protobuf<Any> for Header {}
 
 impl TryFrom<RawHeader> for Header {
-    type Error = Error;
+    type Error = ClientError;
 
-    fn try_from(value: RawHeader) -> Result<Header, Error> {
+    fn try_from(value: RawHeader) -> Result<Header, Self::Error> {
         let trusted_height = value
             .trusted_height
             .as_ref()
-            .ok_or(Error::MissingTrustedHeight)?;
+            .ok_or(Error::MissingTrustedHeight).unwrap();
         let trusted_height = ibc::Height::new(
             trusted_height.revision_number,
             trusted_height.revision_height,
         )
-        .map_err(Error::ICS02Error)?;
+        .map_err(Error::ICS02Error).unwrap();
 
         // All the header revision must be same as the revision of trusted_height.
-        let headers = ETHHeaders::new(trusted_height, value.headers.as_slice())?;
+        let headers = ETHHeaders::new(trusted_height, value.headers.as_slice()).unwrap();
 
         Ok(Self {
             inner: value,
@@ -145,9 +145,8 @@ impl TryFrom<Any> for Header {
                 header_type: any.type_url
             });
         }
-        RawHeader::decode(any.value.as_slice())
-            .map_err(ClientError::Decode)?
-            .try_into()
+        let raw = RawHeader::decode(any.value.as_slice()).map_err(ClientError::Decode)?;
+        raw.try_into()
     }
 }
 

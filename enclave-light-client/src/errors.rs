@@ -1,7 +1,7 @@
 #[cfg(feature = "sgx")]
 use crate::sgx_reexport_prelude::*;
 
-use ibc::core::ics23_commitment::error::Error as ICS23Error;
+use ibc::core::ics23_commitment::error::CommitmentError as ICS23Error;
 use ibc::core::ics24_host::path::PathError;
 use lcp_types::Height;
 use light_client::LightClientInstanceError;
