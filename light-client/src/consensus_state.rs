@@ -26,7 +26,6 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
-
     pub fn state_root(&self) -> Result<Hash, Error> {
         self.state_root
             .as_bytes()
@@ -47,12 +46,10 @@ impl ConsensusState {
         }
         if (now_nano - timestamp) > trusting_period {
             let expires_at = new_ibc_timestamp(timestamp + trusting_period)?;
-            Err(Error::ICS02Error(
-                ICS02Error::HeaderNotWithinTrustPeriod {
-                    latest_time: expires_at,
-                    update_time: now,
-                }),
-            )
+            Err(Error::ICS02Error(ICS02Error::HeaderNotWithinTrustPeriod {
+                latest_time: expires_at,
+                update_time: now,
+            }))
         } else {
             Ok(())
         }
@@ -64,7 +61,7 @@ impl TryFrom<RawConsensusState> for ConsensusState {
 
     fn try_from(value: RawConsensusState) -> Result<Self, Self::Error> {
         let state_root = CommitmentRoot::from_bytes(value.state_root.as_slice());
-        let timestamp = new_ibc_timestamp(value.timestamp).unwrap();
+        let timestamp = new_ibc_timestamp(value.timestamp)?;
         let validator_set = value.validator_set;
         Ok(Self {
             state_root,
@@ -88,7 +85,6 @@ impl Protobuf<RawConsensusState> for ConsensusState {}
 impl Protobuf<Any> for ConsensusState {}
 
 impl IBCConsensusState for ConsensusState {
-
     fn root(&self) -> &CommitmentRoot {
         &self.state_root
     }
@@ -103,8 +99,8 @@ impl TryFrom<Any> for ConsensusState {
 
     fn try_from(any: Any) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CONSENSUS_STATE_TYPE_URL {
-            return Err(ClientError::UnknownConsensusStateType{
-                consensus_state_type: any.type_url
+            return Err(ClientError::UnknownConsensusStateType {
+                consensus_state_type: any.type_url,
             });
         }
         RawConsensusState::decode(any.value.as_slice())
@@ -117,7 +113,9 @@ impl From<ConsensusState> for Any {
     fn from(value: ConsensusState) -> Self {
         let value: RawConsensusState = value.into();
         let mut v = Vec::new();
-        value.encode(&mut v).expect("encoding to `Any` from `ParliaConsensusState`");
+        value
+            .encode(&mut v)
+            .expect("encoding to `Any` from `ParliaConsensusState`");
         Self {
             type_url: PARLIA_CONSENSUS_STATE_TYPE_URL.to_owned(),
             value: v,
@@ -165,4 +163,3 @@ mod test {
         }
     }
 }
-

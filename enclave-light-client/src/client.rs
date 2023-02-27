@@ -115,8 +115,8 @@ impl LightClient for ParliaLightClient {
             self.verify_header(ctx, &client_id, &client_state, &consensus_state, &header)?;
 
         let new_height = new_client_state.latest_height.into();
-        let new_any_client_state = try_into_any(new_client_state);
-        let new_any_consensus_state = try_into_any(new_consensus_state);
+        let new_any_client_state = into_any(new_client_state);
+        let new_any_consensus_state = into_any(new_consensus_state);
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
@@ -252,16 +252,12 @@ fn read_consensus_state(
         .map_err(LightClientError::ics02)
 }
 
-fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(
-    any: Any,
-) -> Result<T, LightClientError> {
+fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, LightClientError> {
     let any: IBCAny = any.into();
     any.try_into().map_err(LightClientError::ics02)
 }
 
-fn try_into_any<T: Into<IBCAny>>(
-    src: T,
-) -> Any {
+fn into_any<T: Into<IBCAny>>(src: T) -> Any {
     let any: IBCAny = src.into();
     any.into()
 }

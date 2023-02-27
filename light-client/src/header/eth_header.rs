@@ -38,7 +38,7 @@ impl AsRef<ETHHeader> for Target {
     }
 }
 
-#[derive(Clone, Debug, PartialEq,  serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
     pub uncle_hash: Vec<u8>,

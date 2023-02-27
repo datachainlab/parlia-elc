@@ -1,24 +1,29 @@
 use crate::errors::Error;
 use alloc::borrow::ToOwned as _;
+use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
 use core::time::Duration;
 use ibc::core::ics02_client::client_state::{ClientState as IBCClientState, UpdatedState};
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
 use ibc::core::ics02_client::error::{ClientError as ICS02Error, ClientError};
 use ibc::core::ics02_client::trust_threshold::TrustThreshold;
-use ibc::core::ics24_host::identifier::ClientId;
-use ibc::core::{ContextError, ValidationContext};
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd;
 use ibc::core::ics04_channel::commitment::{AcknowledgementCommitment, PacketCommitment};
 use ibc::core::ics04_channel::packet::Sequence;
-use ibc::core::ics23_commitment::commitment::{CommitmentPrefix, CommitmentProofBytes, CommitmentRoot};
-use ibc::core::ics24_host::path::{AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqRecvPath};
-use ibc::Height;
+use ibc::core::ics23_commitment::commitment::{
+    CommitmentPrefix, CommitmentProofBytes, CommitmentRoot,
+};
+use ibc::core::ics24_host::identifier::ClientId;
+use ibc::core::ics24_host::path::{
+    AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath, CommitmentPath,
+    ConnectionPath, ReceiptPath, SeqRecvPath,
+};
+use ibc::core::{ContextError, ValidationContext};
 
+use crate::client_type::CLIENT_TYPE;
 use crate::misc::{new_ibc_height_with_chain_id, ChainId, NanoTime};
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
@@ -45,17 +50,17 @@ impl TryFrom<RawClientState> for ClientState {
         let raw_latest_height = value
             .latest_height
             .as_ref()
-            .ok_or(Error::MissingLatestHeight).unwrap();
+            .ok_or(Error::MissingLatestHeight)?;
 
         let chain_id = ChainId::new(value.chain_id);
 
         let latest_height =
-            new_ibc_height_with_chain_id(&chain_id, raw_latest_height.revision_height).unwrap();
+            new_ibc_height_with_chain_id(&chain_id, raw_latest_height.revision_height)?;
 
         let ibc_store_address = value.ibc_store_address;
 
         let trust_level = {
-            let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel).unwrap();
+            let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
             let trust_level = TrustThreshold::new(trust_level.numerator, trust_level.denominator)?;
             // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
             let numerator = trust_level.numerator();
@@ -64,7 +69,7 @@ impl TryFrom<RawClientState> for ClientState {
                 return Err(ClientError::InvalidTrustThreshold {
                     numerator,
                     denominator,
-                })
+                });
             }
             trust_level
         };
@@ -103,13 +108,13 @@ impl From<ClientState> for RawClientState {
 }
 
 impl IBCClientState for ClientState {
-
     fn chain_id(&self) -> ibc::core::ics24_host::identifier::ChainId {
         ibc::core::ics24_host::identifier::ChainId::from(self.chain_id.id().to_string())
     }
 
     fn client_type(&self) -> ClientType {
-        todo!("Type of client associated with this state")
+        //TODO fix name
+        ClientType("99-parlia".to_owned())
     }
 
     fn latest_height(&self) -> ibc::Height {
@@ -125,7 +130,7 @@ impl IBCClientState for ClientState {
     }
 
     fn expired(&self, _elapsed: Duration) -> bool {
-        todo!()
+        todo!("move from assert_within_trusted_period")
     }
 
     fn zero_custom_fields(&mut self) {
@@ -136,56 +141,144 @@ impl IBCClientState for ClientState {
         todo!()
     }
 
-    fn check_header_and_update_state(&self, _ctx: &dyn ValidationContext, _client_id: ClientId, _header: Any) -> Result<UpdatedState, ICS02Error> {
+    fn check_header_and_update_state(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _client_id: ClientId,
+        _header: Any,
+    ) -> Result<UpdatedState, ICS02Error> {
+        todo!("move from client_def.rs")
+    }
+
+    fn check_misbehaviour_and_update_state(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _client_id: ClientId,
+        _misbehaviour: Any,
+    ) -> Result<Box<dyn IBCClientState>, ContextError> {
         todo!()
     }
 
-    fn check_misbehaviour_and_update_state(&self, _ctx: &dyn ValidationContext, _client_id: ClientId, _misbehaviour: Any) -> Result<Box<dyn IBCClientState>, ContextError> {
+    fn verify_upgrade_client(
+        &self,
+        _upgraded_client_state: Any,
+        _upgraded_consensus_state: Any,
+        _proof_upgrade_client: MerkleProof,
+        _proof_upgrade_consensus_state: MerkleProof,
+        _root: &CommitmentRoot,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_upgrade_client(&self, _upgraded_client_state: Any, _upgraded_consensus_state: Any, _proof_upgrade_client: MerkleProof, _proof_upgrade_consensus_state: MerkleProof, _root: &CommitmentRoot) -> Result<(), ICS02Error> {
+    fn update_state_with_upgrade_client(
+        &self,
+        _upgraded_client_state: Any,
+        _upgraded_consensus_state: Any,
+    ) -> Result<UpdatedState, ICS02Error> {
         todo!()
     }
 
-    fn update_state_with_upgrade_client(&self, _upgraded_client_state: Any, _upgraded_consensus_state: Any) -> Result<UpdatedState, ICS02Error> {
+    fn verify_client_consensus_state(
+        &self,
+        _proof_height: ibc::Height,
+        _counterparty_prefix: &CommitmentPrefix,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _client_cons_state_path: &ClientConsensusStatePath,
+        _expected_consensus_state: &dyn IBCConsensusState,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_client_consensus_state(&self, _proof_height: Height, _counterparty_prefix: &CommitmentPrefix, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _client_cons_state_path: &ClientConsensusStatePath, _expected_consensus_state: &dyn IBCConsensusState) -> Result<(), ICS02Error> {
+    fn verify_connection_state(
+        &self,
+        _proof_height: ibc::Height,
+        _counterparty_prefix: &CommitmentPrefix,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _counterparty_conn_path: &ConnectionPath,
+        _expected_counterparty_connection_end: &ConnectionEnd,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_connection_state(&self, _proof_height: Height, _counterparty_prefix: &CommitmentPrefix, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _counterparty_conn_path: &ConnectionPath, _expected_counterparty_connection_end: &ConnectionEnd) -> Result<(), ICS02Error> {
+    fn verify_channel_state(
+        &self,
+        _proof_height: ibc::Height,
+        _counterparty_prefix: &CommitmentPrefix,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _counterparty_chan_end_path: &ChannelEndPath,
+        _expected_counterparty_channel_end: &ChannelEnd,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_channel_state(&self, _proof_height: Height, _counterparty_prefix: &CommitmentPrefix, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _counterparty_chan_end_path: &ChannelEndPath, _expected_counterparty_channel_end: &ChannelEnd) -> Result<(), ICS02Error> {
+    fn verify_client_full_state(
+        &self,
+        _proof_height: ibc::Height,
+        _counterparty_prefix: &CommitmentPrefix,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _client_state_path: &ClientStatePath,
+        _expected_client_state: Any,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_client_full_state(&self, _proof_height: Height, _counterparty_prefix: &CommitmentPrefix, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _client_state_path: &ClientStatePath, _expected_client_state: Any) -> Result<(), ICS02Error> {
+    fn verify_packet_data(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _height: ibc::Height,
+        _connection_end: &ConnectionEnd,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _commitment_path: &CommitmentPath,
+        _commitment: PacketCommitment,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_packet_data(&self, _ctx: &dyn ValidationContext, _height: Height, _connection_end: &ConnectionEnd, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _commitment_path: &CommitmentPath, _commitment: PacketCommitment) -> Result<(), ICS02Error> {
+    fn verify_packet_acknowledgement(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _height: ibc::Height,
+        _connection_end: &ConnectionEnd,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _ack_path: &AckPath,
+        _ack: AcknowledgementCommitment,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_packet_acknowledgement(&self, _ctx: &dyn ValidationContext, _height: Height, _connection_end: &ConnectionEnd, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _ack_path: &AckPath, _ack: AcknowledgementCommitment) -> Result<(), ICS02Error> {
+    fn verify_next_sequence_recv(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _height: ibc::Height,
+        _connection_end: &ConnectionEnd,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _seq_recv_path: &SeqRecvPath,
+        _sequence: Sequence,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 
-    fn verify_next_sequence_recv(&self, _ctx: &dyn ValidationContext, _height: Height, _connection_end: &ConnectionEnd, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _seq_recv_path: &SeqRecvPath, _sequence: Sequence) -> Result<(), ICS02Error> {
-        todo!()
-    }
-
-    fn verify_packet_receipt_absence(&self, _ctx: &dyn ValidationContext, _height: Height, _connection_end: &ConnectionEnd, _proof: &CommitmentProofBytes, _root: &CommitmentRoot, _receipt_path: &ReceiptPath) -> Result<(), ICS02Error> {
+    fn verify_packet_receipt_absence(
+        &self,
+        _ctx: &dyn ValidationContext,
+        _height: ibc::Height,
+        _connection_end: &ConnectionEnd,
+        _proof: &CommitmentProofBytes,
+        _root: &CommitmentRoot,
+        _receipt_path: &ReceiptPath,
+    ) -> Result<(), ICS02Error> {
         todo!()
     }
 }
 
-impl Protobuf<RawClientState> for ClientState{}
+impl Protobuf<RawClientState> for ClientState {}
 impl Protobuf<Any> for ClientState {}
 
 impl TryFrom<Any> for ClientState {
@@ -193,8 +286,8 @@ impl TryFrom<Any> for ClientState {
 
     fn try_from(any: Any) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CLIENT_STATE_TYPE_URL {
-            return Err(ClientError::UnknownClientStateType{
-                client_state_type: any.type_url
+            return Err(ClientError::UnknownClientStateType {
+                client_state_type: any.type_url,
             });
         }
         RawClientState::decode(any.value.as_slice())
@@ -207,7 +300,9 @@ impl From<ClientState> for Any {
     fn from(value: ClientState) -> Self {
         let value: RawClientState = value.into();
         let mut v = Vec::new();
-        value.encode(&mut v).expect("encoding to `Any` from `ParliaClientState`");
+        value
+            .encode(&mut v)
+            .expect("encoding to `Any` from `ParliaClientState`");
         Self {
             type_url: PARLIA_CLIENT_STATE_TYPE_URL.to_owned(),
             value: v,

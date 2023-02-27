@@ -1,27 +1,20 @@
-use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{Display, Formatter};
 
-use ibc::core::ics02_client::error::ClientError as ICS02Error;
+use ibc::core::ics02_client::error::ClientError;
 
 use ibc::timestamp::ParseTimestampError;
 use ibc::Height;
 
 use crate::misc::{Address, BlockNumber, NanoTime};
 use k256::ecdsa::signature;
-use prost::{DecodeError as ProtoDecodeError, EncodeError as ProtoEncodeError};
 use rlp::DecoderError;
 
 #[derive(Debug)]
 pub enum Error {
-    ICS02Error(ICS02Error),
+    ICS02Error(ClientError),
     ICSTimestamp(ParseTimestampError),
 
-    UnexpectedTypeUrl(String),
-
     // data conversion error
-    ProtoDecodeError(ProtoDecodeError),
-    ProtoEncodeError(ProtoEncodeError),
     RLPDecodeError(DecoderError),
     UnexpectedAnyConsensusState(Height),
 
@@ -61,8 +54,13 @@ pub enum Error {
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
 }
 
-impl Display for Error {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
-        todo!()
+impl From<Error> for ClientError {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::ICS02Error(ce) => ce,
+            e => ClientError::Other {
+                description: format!("{:?}", e),
+            },
+        }
     }
 }
