@@ -53,7 +53,7 @@ impl ParliaClient {
         new_client_state.latest_height = header.height();
 
         // Ensure world state is valid
-        let account = self.0.get_account(
+        let account = self.0.resolve(
             header.state_root(),
             &header.account_proof()?,
             &new_client_state.ibc_store_address,
@@ -118,7 +118,7 @@ impl ParliaClient {
 }
 
 pub trait AccountResolver {
-    fn get_account(
+    fn resolve(
         &self,
         state_root: &Hash,
         account_proof: &[Vec<u8>],
@@ -129,7 +129,7 @@ pub trait AccountResolver {
 struct DefaultAccountResolver;
 
 impl AccountResolver for DefaultAccountResolver {
-    fn get_account(
+    fn resolve(
         &self,
         state_root: &Hash,
         account_proof: &[Vec<u8>],
@@ -163,7 +163,7 @@ mod test {
     use crate::path::YuiIBCPath;
 
     #[test]
-    fn test_get_account() {
+    fn test_resolve_account() {
         let address = hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef");
         let state_root: Hash =
             hex!("c7095cc31e155302a3ff06970f0df0efa1abf5fe6e4be6cc450cc5f9421c2c9f");
@@ -175,7 +175,7 @@ mod test {
                 .to_vec(),
         };
         let client = ParliaClient::default();
-        let v = client.0.get_account(&state_root, &account_proof, &address);
+        let v = client.0.resolve(&state_root, &account_proof, &address);
         match v {
             Ok(actual) => assert_eq!(actual, account),
             Err(e) => unreachable!("{:?}", e),
@@ -267,7 +267,7 @@ mod test {
         struct MockAccountResolver;
 
         impl AccountResolver for MockAccountResolver {
-            fn get_account(
+            fn resolve(
                 &self,
                 _state_root: &Hash,
                 _account_proof: &[Vec<u8>],

@@ -458,7 +458,7 @@ mod test {
 
         struct MockAccountResolver;
         impl AccountResolver for MockAccountResolver {
-            fn get_account(
+            fn resolve(
                 &self,
                 _state_root: &Hash,
                 _account_proof: &[Vec<u8>],
