@@ -10,7 +10,7 @@ use crate::misc::{
 };
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
     pub target: Target,
     pub all: Vec<ETHHeader>,

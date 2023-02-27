@@ -10,7 +10,7 @@ pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
 pub type NanoTime = u64;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
     id: u64,
     version: u64,

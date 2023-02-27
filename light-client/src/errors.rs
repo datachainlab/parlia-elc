@@ -1,7 +1,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::fmt::{Display, Formatter};
 
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::error::ClientError as ICS02Error;
 
 use ibc::timestamp::ParseTimestampError;
 use ibc::Height;
@@ -58,4 +59,10 @@ pub enum Error {
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        todo!()
+    }
 }

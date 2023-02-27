@@ -5,7 +5,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::error::ClientError as ICS02Error;
 
 use ibc::core::ics02_client::client_state::ClientState as _;
 

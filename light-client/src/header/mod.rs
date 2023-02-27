@@ -1,8 +1,9 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
-use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::header::{self, AnyHeader};
+use ibc::core::ics02_client::error::ClientError;
+use ibc::core::ics02_client::header::{Header as IBCHeader};
 use ibc_proto::google::protobuf::Any;
+use ibc_proto::protobuf::Protobuf;
 
 use self::eth_headers::ETHHeaders;
 use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
@@ -19,7 +20,7 @@ const EPOCH_BLOCK_PERIOD: u64 = 200;
 mod eth_header;
 mod eth_headers;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
@@ -89,6 +90,9 @@ impl Header {
     }
 }
 
+impl Protobuf<RawHeader> for Header{}
+impl Protobuf<Any> for Header {}
+
 impl TryFrom<RawHeader> for Header {
     type Error = Error;
 
@@ -120,10 +124,7 @@ impl From<Header> for RawHeader {
     }
 }
 
-impl header::Header for Header {
-    fn client_type(&self) -> ClientType {
-        todo!()
-    }
+impl IBCHeader for Header {
 
     fn height(&self) -> ibc::Height {
         self.headers.target.ibc_height.to_owned()
@@ -133,37 +134,35 @@ impl header::Header for Header {
         self.headers.target.ibc_timestamp.to_owned()
     }
 
-    fn wrap_any(self) -> AnyHeader {
-        todo!();
-    }
 }
 
 impl TryFrom<Any> for Header {
-    type Error = Error;
+    type Error = ClientError;
 
     fn try_from(any: Any) -> Result<Header, Self::Error> {
         if any.type_url != PARLIA_HEADER_TYPE_URL {
-            return Err(Error::UnexpectedTypeUrl(any.type_url));
+            return Err(ClientError::UnknownHeaderType {
+                header_type: any.type_url
+            });
         }
         RawHeader::decode(any.value.as_slice())
-            .map_err(Error::ProtoDecodeError)?
+            .map_err(ClientError::Decode)?
             .try_into()
     }
 }
 
-impl TryFrom<Header> for Any {
-    type Error = Error;
-
-    fn try_from(value: Header) -> Result<Self, Error> {
+impl From<Header> for Any {
+    fn from(value: Header) -> Self {
         let value: RawHeader = value.into();
         let mut v = Vec::new();
-        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
-        Ok(Self {
+        value.encode(&mut v).expect("encoding to `Any` from `ParliaHeader`");
+        Self {
             type_url: PARLIA_HEADER_TYPE_URL.to_owned(),
             value: v,
-        })
+        }
     }
 }
+
 
 #[cfg(test)]
 mod testdata;
