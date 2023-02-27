@@ -1,16 +1,19 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
+
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::header::{self, AnyHeader};
 use ibc_proto::google::protobuf::Any;
-
-use self::eth_headers::ETHHeaders;
-use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 use prost::Message as _;
 use rlp::Rlp;
 
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+
+use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
+
 use super::errors::Error;
+
+use self::eth_headers::ETHHeaders;
 
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
@@ -172,13 +175,15 @@ pub mod testdata;
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
+    use parlia_ibc_proto::ibc::core::client::v1::Height;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+
     use crate::errors::Error;
     use crate::header::testdata::*;
     use crate::header::Header;
     use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
-    use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
-    use std::collections::HashMap;
 
     #[test]
     fn test_success_try_from_header() {

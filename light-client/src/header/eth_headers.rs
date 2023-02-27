@@ -1,12 +1,14 @@
 use alloc::vec::Vec;
 
-use super::eth_header::{ETHHeader, Target};
-use super::EPOCH_BLOCK_PERIOD;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+
 use crate::errors::Error;
 use crate::misc::{
     new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, ChainId, Validators,
 };
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+
+use super::eth_header::{ETHHeader, Target};
+use super::EPOCH_BLOCK_PERIOD;
 
 #[derive(Clone, Debug)]
 pub struct ETHHeaders {
