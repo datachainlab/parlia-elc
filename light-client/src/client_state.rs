@@ -97,7 +97,7 @@ impl client_state::ClientState for ClientState {
     }
 
     fn client_type(&self) -> ClientType {
-        todo!()
+        todo!("Type of client associated with this state")
     }
 
     fn latest_height(&self) -> ibc::Height {
@@ -118,11 +118,11 @@ impl client_state::ClientState for ClientState {
         _upgrade_options: Self::UpgradeOptions,
         _chain_id: ibc::core::ics24_host::identifier::ChainId,
     ) -> Self {
-        todo!();
+        todo!("Helper function to verify the upgrade client procedure. Resets all fields except the blockchain-specific ones, and updates the given fields");
     }
 
     fn wrap_any(self) -> AnyClientState {
-        todo!();
+        todo!("Wrap into an AnyClientState");
     }
 }
 

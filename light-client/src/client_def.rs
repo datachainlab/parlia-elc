@@ -48,7 +48,7 @@ impl ParliaClient {
         new_client_state.latest_height = header.height();
 
         // Ensure world state is valid
-        let account = get_account(
+        let account = resolve_account(
             header.state_root(),
             header.account_proof(),
             &new_client_state.ibc_store_address,
@@ -82,7 +82,7 @@ impl ParliaClient {
     }
 }
 
-fn get_account(state_root: &Hash, account_proof: &[u8], address: &[u8]) -> Result<Account, Error> {
+fn resolve_account(state_root: &Hash, account_proof: &[u8], address: &[u8]) -> Result<Account, Error> {
     let account_proof = Rlp::new(account_proof)
         .as_list()
         .map_err(Error::RLPDecodeError)?;
