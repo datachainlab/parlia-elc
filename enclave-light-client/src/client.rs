@@ -261,11 +261,6 @@ fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, 
     any.try_into().map_err(LightClientError::ics02)
 }
 
-fn into_any<T: Into<IBCAny>>(src: T) -> Any {
-    let any: IBCAny = src.into();
-    any.into()
-}
-
 fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path), Error> {
     let prefix = prefix.try_into().map_err(Error::ICS23)?;
     //TODO apply prefix if needed
@@ -507,5 +502,10 @@ mod test {
             }
             Err(e) => unreachable!("error {:?}", e),
         };
+    }
+
+    fn into_any<T: Into<IBCAny>>(src: T) -> Any {
+        let any: IBCAny = src.into();
+        any.into()
     }
 }

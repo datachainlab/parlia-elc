@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ContextError;
 use ibc::timestamp::ParseTimestampError;
-use ibc::Height;
 use k256::ecdsa::signature;
 use rlp::DecoderError;
 
@@ -17,14 +16,11 @@ pub enum Error {
 
     // data conversion error
     RLPDecodeError(DecoderError),
-    UnexpectedAnyConsensusState(Height),
 
     // ClientState error
     MissingLatestHeight,
     MissingTrustLevel,
-    UnexpectedTrustingPeriod(u64, u64),
     UnexpectedStoreAddress(Vec<u8>),
-    DowncastClientStateError,
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -37,7 +33,6 @@ pub enum Error {
     UnexpectedStateHashDecodeError(Vec<u8>),
     UnexpectedTimestamp(NanoTime),
     UnexpectedStateRoot(Vec<u8>),
-    DowncastConsensusStateError,
 
     // Header error
     MissingTrustedHeight,
