@@ -41,6 +41,7 @@ impl Header {
         self.trusted_height
     }
 
+    //TODO cfg when the sufficient test data is found.
     #[cfg(all(not(test), not(feature = "testdata")))]
     pub fn state_root(&self) -> &Hash {
         &self.headers.target.header.root
@@ -172,7 +173,6 @@ pub mod testdata;
 
 #[cfg(test)]
 mod test {
-
     use std::collections::HashMap;
 
     use ibc::core::ics02_client::error::ClientError;

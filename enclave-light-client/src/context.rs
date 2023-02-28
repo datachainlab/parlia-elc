@@ -1,8 +1,10 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::time::Duration;
+
 use ibc::core::ics02_client::client_state::ClientState as IBCClientState;
 use ibc::core::ics02_client::error::ClientError;
+use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics03_connection::error::ConnectionError;
 use ibc::core::ics04_channel::channel::ChannelEnd;
 use ibc::core::ics04_channel::commitment::{AcknowledgementCommitment, PacketCommitment};
@@ -19,13 +21,12 @@ use ibc::core::{
     context::Router, ics02_client::consensus_state::ConsensusState as IBCConsensusState,
     ValidationContext,
 };
-use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc_proto::google::protobuf::Any as IBCAny;
-use lcp_types::{Any, Height};
+use lcp_types::Height;
 use light_client::ClientReader;
+
 use parlia_ibc_lc::client_state::ClientState;
 use parlia_ibc_lc::consensus_state::ConsensusState;
-use parlia_ibc_lc::errors::Error;
 
 pub struct Context<'a> {
     parent: &'a dyn ClientReader,
@@ -61,9 +62,10 @@ impl<'a> ValidationContext for Context<'a> {
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Box<dyn IBCConsensusState<Error = ClientError>>, ContextError> {
         let height = Height::new(client_cons_state_path.epoch, client_cons_state_path.height);
-        let consensus_state : IBCAny = self
+        let consensus_state: IBCAny = self
             .parent
-            .consensus_state(&client_cons_state_path.client_id, height)?.into();
+            .consensus_state(&client_cons_state_path.client_id, height)?
+            .into();
         let consensus_state = ConsensusState::try_from(consensus_state)?;
         Ok(Box::new(consensus_state))
     }

@@ -1,19 +1,19 @@
 use alloc::boxed::Box;
-use alloc::format;
+
 use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::client_state::{ClientState as _, downcast_client_state, UpdatedState};
-use ibc::core::ics02_client::consensus_state::{ConsensusState as _, downcast_consensus_state};
+use ibc::core::ics02_client::client_state::{ClientState as _, UpdatedState};
+use ibc::core::ics02_client::consensus_state::ConsensusState as _;
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics02_client::header::Header as IBCHeader;
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::core::ics24_host::identifier::ClientId;
 use ibc::core::ics24_host::Path;
-use ibc::dynamic_typing::AsAny;
+
 use ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Height};
 use light_client::{
@@ -26,10 +26,10 @@ use validation_context::ValidationParams;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
 use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
-use parlia_ibc_lc::misc::{ValidatorReader, Validators};
-use parlia_ibc_lc::path::YuiIBCPath;
-use crate::context::Context;
 
+use parlia_ibc_lc::path::YuiIBCPath;
+
+use crate::context::Context;
 use crate::errors::Error;
 
 #[derive(Default)]
@@ -99,7 +99,7 @@ impl LightClient for ParliaLightClient {
         let timestamp = header.timestamp();
         let trusted_height = header.trusted_height();
         let any_client_state = read_client_state(ctx, &client_id)?;
-        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.clone().into())?;
+        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.into())?;
         let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
 
         //Ensure client is not frozen
@@ -123,10 +123,12 @@ impl LightClient for ParliaLightClient {
             })?;
 
         let new_height = new_client_state.latest_height().into();
-        let new_any_client_state = ClientState::try_from(new_client_state.as_ref()).map_err(LightClientError::ics02)?;
-        let new_any_client_state : Any = IBCAny::from(new_any_client_state).into();
-        let new_any_consensus_state = ConsensusState::try_from(new_consensus_state.as_ref()).map_err(LightClientError::ics02)?;
-        let new_any_consensus_state : Any = IBCAny::from(new_any_consensus_state).into();
+        let new_any_client_state =
+            ClientState::try_from(new_client_state.as_ref()).map_err(LightClientError::ics02)?;
+        let new_any_client_state: Any = IBCAny::from(new_any_client_state).into();
+        let new_any_consensus_state = ConsensusState::try_from(new_consensus_state.as_ref())
+            .map_err(LightClientError::ics02)?;
+        let new_any_consensus_state: Any = IBCAny::from(new_any_consensus_state).into();
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
@@ -219,12 +221,12 @@ impl ParliaLightClient {
         let consensus_state: ConsensusState = try_from_any(any_consensus_state.clone())?;
         let storage_root = consensus_state.state_root().map_err(Error::ParliaIBCLC)?;
         ClientState::verify_commitment(
-                &storage_root,
-                &storage_proof_rlp,
-                YuiIBCPath::from(path.to_string().as_bytes()),
-                &value,
-            )
-            .map_err(Error::ParliaIBCLC)?;
+            &storage_root,
+            &storage_proof_rlp,
+            YuiIBCPath::from(path.to_string().as_bytes()),
+            &value,
+        )
+        .map_err(Error::ParliaIBCLC)?;
 
         let state_id = state_id(&any_client_state, &any_consensus_state)?;
 
@@ -275,7 +277,6 @@ fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path),
 mod test {
     use alloc::string::{String, ToString};
     use alloc::vec;
-
     use core::str::FromStr;
 
     use hex_literal::hex;
@@ -290,7 +291,6 @@ mod test {
 
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;
-
     use parlia_ibc_lc::header;
     use parlia_ibc_lc::header::testdata::{
         create_epoch_block, create_previous_epoch_block, fill, to_rlp,

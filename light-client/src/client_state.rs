@@ -4,7 +4,9 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use ibc::core::ics02_client::client_state::{ClientState as IBCClientState, downcast_client_state, UpdatedState};
+use ibc::core::ics02_client::client_state::{
+    downcast_client_state, ClientState as IBCClientState, UpdatedState,
+};
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
 use ibc::core::ics02_client::error::ClientError;
@@ -27,19 +29,21 @@ use ibc::Height;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::protobuf::Protobuf;
-use patricia_merkle_trie::{EIP1186Layout, keccak};
 use patricia_merkle_trie::keccak::keccak_256;
+use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;
-
 use rlp::Rlp;
 use trie_eip1186::VerifyError;
 
-use crate::consensus_state::ConsensusState;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
-use crate::errors::{Error, into_client_error};
+use crate::consensus_state::ConsensusState;
+use crate::errors::{into_client_error, Error};
 use crate::header::Header;
-use crate::misc::{new_ibc_height_with_chain_id, Address, ChainId, NanoTime, ValidatorReader, Validators, Hash, Account, new_ibc_height};
+use crate::misc::{
+    new_ibc_height, new_ibc_height_with_chain_id, Account, Address, ChainId, Hash, NanoTime,
+    ValidatorReader, Validators,
+};
 use crate::path::Path;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -191,7 +195,8 @@ impl IBCClientState for ClientState {
         let trusted_client_cons_state_path =
             ClientConsensusStatePath::new(&client_id, &header.trusted_height());
         let trusted_consensus_state: ConsensusState = ctx
-            .consensus_state(&trusted_client_cons_state_path).map_err(into_client_error)?
+            .consensus_state(&trusted_client_cons_state_path)
+            .map_err(into_client_error)?
             .as_ref()
             .try_into()?;
 
@@ -370,11 +375,12 @@ impl IBCClientState for ClientState {
 impl Protobuf<RawClientState> for ClientState {}
 impl Protobuf<Any> for ClientState {}
 
-impl TryFrom<&dyn IBCClientState<Error = ClientError>> for ClientState{
+impl TryFrom<&dyn IBCClientState<Error = ClientError>> for ClientState {
     type Error = ClientError;
 
     fn try_from(value: &dyn IBCClientState<Error = ClientError>) -> Result<Self, Self::Error> {
-        downcast_client_state::<Self>(value).ok_or_else(|| ClientError::ClientArgsTypeMismatch {
+        downcast_client_state::<Self>(value)
+            .ok_or_else(|| ClientError::ClientArgsTypeMismatch {
                 client_type: ClientState::client_type(),
             })
             .map(Clone::clone)
@@ -455,38 +461,27 @@ fn verify_proof(
         &keccak_256(key),
         expected_value.as_deref(),
     )
-        .map_err(|err| match err {
-            VerifyError::ExistingValue(value) => {
-                Error::UnexpectedStateExistingValue(value, key.to_vec())
-            }
-            VerifyError::NonExistingValue(_) => {
-                Error::UnexpectedStateNonExistingValue(key.to_vec())
-            }
-            VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
-            VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
-            VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
-            VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
-            VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
-        })
+    .map_err(|err| match err {
+        VerifyError::ExistingValue(value) => {
+            Error::UnexpectedStateExistingValue(value, key.to_vec())
+        }
+        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(key.to_vec()),
+        VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
+        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
+        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
+        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
+        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
+    })
 }
-
 
 #[cfg(test)]
 mod test {
-
     use hex_literal::hex;
-    use ibc::core::ics02_client::header::Header as IBCHeader;
-    use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 
-    use crate::client_state::{ClientState, resolve_account, verify_proof};
-    use crate::consensus_state::ConsensusState;
-    use crate::errors::Error;
-    use crate::header;
-    use crate::header::testdata::{create_epoch_block, create_previous_epoch_block, fill, to_rlp};
+    use crate::client_state::{resolve_account, verify_proof, ClientState};
 
-    use crate::misc::{
-        new_ibc_height, new_ibc_timestamp, Account, Hash, ValidatorReader, Validators,
-    };
+    use crate::header::testdata::to_rlp;
+    use crate::misc::{Account, Hash};
     use crate::path::YuiIBCPath;
 
     #[test]
@@ -517,9 +512,7 @@ mod test {
             hex!("f7a0390decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5639594ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec(),
         ];
         let expected = hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec();
-        if let Err(e) =
-            verify_proof(&storage_root, &storage_proof, &key, &Some(expected))
-        {
+        if let Err(e) = verify_proof(&storage_root, &storage_proof, &key, &Some(expected)) {
             unreachable!("{:?}", e);
         }
     }
