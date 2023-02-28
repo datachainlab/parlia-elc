@@ -19,7 +19,7 @@ use ibc::core::ics04_channel::packet::Sequence;
 use ibc::core::ics23_commitment::commitment::{
     CommitmentPrefix, CommitmentProofBytes, CommitmentRoot,
 };
-use ibc::core::ics24_host::identifier::ClientId;
+use ibc::core::ics24_host::identifier::{ChainId as IBCChainId, ClientId};
 use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath, CommitmentPath,
     ConnectionPath, ReceiptPath, SeqRecvPath,
@@ -81,83 +81,16 @@ impl ClientState {
     }
 }
 
-impl TryFrom<RawClientState> for ClientState {
-    type Error = ClientError;
-
-    fn try_from(value: RawClientState) -> Result<Self, Self::Error> {
-        let raw_latest_height = value
-            .latest_height
-            .as_ref()
-            .ok_or(Error::MissingLatestHeight)?;
-
-        let chain_id = ChainId::new(value.chain_id);
-
-        let latest_height =
-            new_ibc_height_with_chain_id(&chain_id, raw_latest_height.revision_height)?;
-
-        let raw_ibc_store_address = value.ibc_store_address.clone();
-        let ibc_store_address = raw_ibc_store_address
-            .try_into()
-            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_store_address))?;
-
-        let trust_level = {
-            let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
-            let trust_level = TrustThreshold::new(trust_level.numerator, trust_level.denominator)?;
-            // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
-            let numerator = trust_level.numerator();
-            let denominator = trust_level.denominator();
-            if numerator * 3 < denominator || numerator > denominator || denominator == 0 {
-                return Err(ClientError::InvalidTrustThreshold {
-                    numerator,
-                    denominator,
-                });
-            }
-            trust_level
-        };
-
-        let trusting_period = value.trusting_period;
-        let frozen = value.frozen;
-
-        Ok(Self {
-            chain_id,
-            ibc_store_address,
-            latest_height,
-            trust_level,
-            trusting_period,
-            frozen,
-        })
-    }
-}
-
-impl From<ClientState> for RawClientState {
-    fn from(value: ClientState) -> Self {
-        Self {
-            chain_id: value.chain_id.id(),
-            ibc_store_address: value.ibc_store_address.to_vec(),
-            latest_height: Some(parlia_ibc_proto::ibc::core::client::v1::Height {
-                revision_number: value.latest_height.revision_number(),
-                revision_height: value.latest_height.revision_height(),
-            }),
-            trust_level: Some(Fraction {
-                numerator: value.trust_level.numerator(),
-                denominator: value.trust_level.denominator(),
-            }),
-            trusting_period: value.trusting_period.to_owned(),
-            frozen: value.frozen.to_owned(),
-        }
-    }
-}
-
 impl IBCClientState for ClientState {
-    fn chain_id(&self) -> ibc::core::ics24_host::identifier::ChainId {
-        ibc::core::ics24_host::identifier::ChainId::from(self.chain_id.id().to_string())
+    fn chain_id(&self) -> IBCChainId {
+        self.chain_id.id().to_string().into()
     }
 
     fn client_type(&self) -> ClientType {
         Self::client_type()
     }
 
-    fn latest_height(&self) -> ibc::Height {
+    fn latest_height(&self) -> Height {
         self.latest_height.to_owned()
     }
 
@@ -165,7 +98,7 @@ impl IBCClientState for ClientState {
         self.frozen
     }
 
-    fn frozen_height(&self) -> Option<ibc::Height> {
+    fn frozen_height(&self) -> Option<Height> {
         None
     }
 
@@ -217,11 +150,7 @@ impl IBCClientState for ClientState {
         }
 
         // Ensure header is valid
-        let ctx = DefaultValidatorReader {
-            ctx,
-            client_id: &client_id,
-        };
-        header.verify(ctx, &self.chain_id)?;
+        header.verify(DefaultValidatorReader::new(ctx, &client_id), &self.chain_id)?;
 
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
@@ -375,6 +304,73 @@ impl IBCClientState for ClientState {
 impl Protobuf<RawClientState> for ClientState {}
 impl Protobuf<Any> for ClientState {}
 
+impl TryFrom<RawClientState> for ClientState {
+    type Error = ClientError;
+
+    fn try_from(value: RawClientState) -> Result<Self, Self::Error> {
+        let raw_latest_height = value
+            .latest_height
+            .as_ref()
+            .ok_or(Error::MissingLatestHeight)?;
+
+        let chain_id = ChainId::new(value.chain_id);
+
+        let latest_height =
+            new_ibc_height_with_chain_id(&chain_id, raw_latest_height.revision_height)?;
+
+        let raw_ibc_store_address = value.ibc_store_address.clone();
+        let ibc_store_address = raw_ibc_store_address
+            .try_into()
+            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_store_address))?;
+
+        let trust_level = {
+            let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
+            let trust_level = TrustThreshold::new(trust_level.numerator, trust_level.denominator)?;
+            // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
+            let numerator = trust_level.numerator();
+            let denominator = trust_level.denominator();
+            if numerator * 3 < denominator || numerator > denominator || denominator == 0 {
+                return Err(ClientError::InvalidTrustThreshold {
+                    numerator,
+                    denominator,
+                });
+            }
+            trust_level
+        };
+
+        let trusting_period = value.trusting_period;
+        let frozen = value.frozen;
+
+        Ok(Self {
+            chain_id,
+            ibc_store_address,
+            latest_height,
+            trust_level,
+            trusting_period,
+            frozen,
+        })
+    }
+}
+
+impl From<ClientState> for RawClientState {
+    fn from(value: ClientState) -> Self {
+        Self {
+            chain_id: value.chain_id.id(),
+            ibc_store_address: value.ibc_store_address.to_vec(),
+            latest_height: Some(parlia_ibc_proto::ibc::core::client::v1::Height {
+                revision_number: value.latest_height.revision_number(),
+                revision_height: value.latest_height.revision_height(),
+            }),
+            trust_level: Some(Fraction {
+                numerator: value.trust_level.numerator(),
+                denominator: value.trust_level.denominator(),
+            }),
+            trusting_period: value.trusting_period.to_owned(),
+            frozen: value.frozen.to_owned(),
+        }
+    }
+}
+
 impl TryFrom<&dyn IBCClientState<Error = ClientError>> for ClientState {
     type Error = ClientError;
 
@@ -419,6 +415,12 @@ impl From<ClientState> for Any {
 struct DefaultValidatorReader<'a> {
     ctx: &'a dyn ValidationContext,
     client_id: &'a ClientId,
+}
+
+impl<'a> DefaultValidatorReader<'a> {
+    fn new(ctx: &'a dyn ValidationContext, client_id: &'a ClientId) -> Self {
+        Self { ctx, client_id }
+    }
 }
 
 impl<'a> ValidatorReader for DefaultValidatorReader<'a> {

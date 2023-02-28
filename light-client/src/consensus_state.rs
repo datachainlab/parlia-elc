@@ -24,7 +24,7 @@ pub const PARLIA_CONSENSUS_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.C
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConsensusState {
     pub state_root: CommitmentRoot,
-    pub timestamp: ibc::timestamp::Timestamp,
+    pub timestamp: Timestamp,
     // Only epoch headers contain validator set
     pub validator_set: Validators,
 }
@@ -39,7 +39,7 @@ impl ConsensusState {
 
     pub fn assert_within_trust_period(
         &self,
-        now: ibc::timestamp::Timestamp,
+        now: Timestamp,
         trusting_period: NanoTime,
     ) -> Result<(), Error> {
         // We can't use std::time in the TEE environment.
@@ -59,6 +59,9 @@ impl ConsensusState {
         }
     }
 }
+
+impl Protobuf<RawConsensusState> for ConsensusState {}
+impl Protobuf<Any> for ConsensusState {}
 
 impl TryFrom<&dyn IBCConsensusState<Error = ClientError>> for ConsensusState {
     type Error = ClientError;
@@ -96,9 +99,6 @@ impl From<ConsensusState> for RawConsensusState {
         }
     }
 }
-
-impl Protobuf<RawConsensusState> for ConsensusState {}
-impl Protobuf<Any> for ConsensusState {}
 
 impl IBCConsensusState for ConsensusState {
     fn root(&self) -> &CommitmentRoot {
