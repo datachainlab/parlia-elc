@@ -1,10 +1,9 @@
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::header::Header as IBCHeader;
-use patricia_merkle_trie::EIP1186Layout;
 use patricia_merkle_trie::keccak;
 use patricia_merkle_trie::keccak::keccak_256;
+use patricia_merkle_trie::EIP1186Layout;
 use rlp::Rlp;
 use trie_eip1186::{verify_proof, VerifyError};
 
@@ -123,7 +122,6 @@ impl ParliaClient {
 
 #[cfg(test)]
 mod test {
-    use std::prelude::rust_2015::Vec;
 
     use hex_literal::hex;
     use ibc::core::ics02_client::header::Header as IBCHeader;
@@ -134,10 +132,10 @@ mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header;
-    use crate::header::Header;
     use crate::header::testdata::{create_epoch_block, create_previous_epoch_block, fill, to_rlp};
+
     use crate::misc::{
-        Account, Address, Hash, new_ibc_height, new_ibc_timestamp, ValidatorReader, Validators,
+        new_ibc_height, new_ibc_timestamp, Account, Hash, ValidatorReader, Validators,
     };
     use crate::path::YuiIBCPath;
 
@@ -232,7 +230,7 @@ mod test {
                 header.height().revision_number(),
                 header.height().revision_height() - 1,
             )
-                .unwrap(),
+            .unwrap(),
             trust_level: Default::default(),
             trusting_period,
             frozen: false,

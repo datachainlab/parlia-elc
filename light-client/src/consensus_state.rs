@@ -1,7 +1,6 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
@@ -12,7 +11,7 @@ use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{Hash, NanoTime, new_ibc_timestamp, Validators};
+use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
 
 use super::errors::Error;
 

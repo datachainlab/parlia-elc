@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::error::ClientError;
-use ibc::Height;
 use ibc::timestamp::ParseTimestampError;
+use ibc::Height;
 use k256::ecdsa::signature;
 use rlp::DecoderError;
 

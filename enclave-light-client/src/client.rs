@@ -290,7 +290,7 @@ impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
 mod test {
     use alloc::string::{String, ToString};
     use alloc::vec;
-    use alloc::vec::Vec;
+
     use core::str::FromStr;
 
     use hex_literal::hex;
@@ -303,20 +303,18 @@ mod test {
     use lcp_types::{Any, Height};
     use light_client::{ClientReader, LightClient};
 
-    use parlia_ibc_lc::client_def::ParliaClient;
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;
-    use parlia_ibc_lc::errors::Error;
+
     use parlia_ibc_lc::header;
     use parlia_ibc_lc::header::testdata::{
         create_epoch_block, create_previous_epoch_block, fill, to_rlp,
     };
     use parlia_ibc_lc::misc::{
-        Account, Address, ChainId, Hash, new_ibc_height, new_ibc_height_with_chain_id,
-        new_ibc_timestamp,
+        new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, ChainId,
     };
 
-    use crate::client::{ParliaLightClient, try_from_any, into_any};
+    use crate::client::{into_any, try_from_any, ParliaLightClient};
 
     struct MockClientReader;
 
@@ -447,11 +445,7 @@ mod test {
         let client = ParliaLightClient::default();
 
         let header = header::testdata::create_after_checkpoint_headers();
-        match client.update_client(
-            &ctx,
-            ClientId::default(),
-            into_any(header.clone()),
-        ) {
+        match client.update_client(&ctx, ClientId::default(), into_any(header.clone())) {
             Ok(data) => {
                 let new_client_state: ClientState =
                     try_from_any(data.new_any_client_state).unwrap();

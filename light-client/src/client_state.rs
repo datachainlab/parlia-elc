@@ -4,7 +4,6 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use ibc::core::{ContextError, ValidationContext};
 use ibc::core::ics02_client::client_state::{ClientState as IBCClientState, UpdatedState};
 use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
@@ -22,6 +21,7 @@ use ibc::core::ics24_host::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, ClientStatePath, CommitmentPath,
     ConnectionPath, ReceiptPath, SeqRecvPath,
 };
+use ibc::core::{ContextError, ValidationContext};
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::protobuf::Protobuf;
@@ -30,7 +30,7 @@ use prost::Message as _;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
 use crate::errors::Error;
-use crate::misc::{Address, ChainId, NanoTime, new_ibc_height_with_chain_id};
+use crate::misc::{new_ibc_height_with_chain_id, Address, ChainId, NanoTime};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 

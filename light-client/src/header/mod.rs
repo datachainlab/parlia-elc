@@ -1,7 +1,6 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use ibc::core::ics02_client::client_type::ClientType;
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics02_client::header::Header as IBCHeader;
 use ibc_proto::google::protobuf::Any;
@@ -11,7 +10,7 @@ use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{ChainId, Hash, new_ibc_height_with_chain_id, ValidatorReader, Validators};
+use crate::misc::{new_ibc_height_with_chain_id, ChainId, ValidatorReader, Validators};
 
 use super::errors::Error;
 
@@ -42,7 +41,7 @@ impl Header {
         self.trusted_height
     }
 
-    #[cfg(all(not(test), not(feature="testdata")))]
+    #[cfg(all(not(test), not(feature = "testdata")))]
     pub fn state_root(&self) -> &Hash {
         &self.headers.target.header.root
     }
@@ -173,8 +172,8 @@ pub mod testdata;
 
 #[cfg(test)]
 mod test {
+
     use std::collections::HashMap;
-    use hex_literal::hex;
 
     use ibc::core::ics02_client::error::ClientError;
 
@@ -183,9 +182,9 @@ mod test {
 
     use crate::alloc::string::ToString;
     use crate::errors::Error;
-    use crate::header::Header;
     use crate::header::testdata::*;
-    use crate::misc::{Hash, new_ibc_height_with_chain_id, ValidatorReader, Validators};
+    use crate::header::Header;
+    use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
 
     #[test]
     fn test_success_try_from_header() {
@@ -403,5 +402,4 @@ mod test {
             e => unreachable!("{:?}", e),
         }
     }
-
 }

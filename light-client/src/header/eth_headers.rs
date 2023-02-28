@@ -5,12 +5,12 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
 use crate::misc::{
-    Address, ChainId, new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize,
+    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, Address, ChainId,
     Validators,
 };
 
-use super::EPOCH_BLOCK_PERIOD;
 use super::eth_header::{ETHHeader, Target};
+use super::EPOCH_BLOCK_PERIOD;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
