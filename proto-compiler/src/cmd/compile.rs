@@ -248,8 +248,8 @@ impl CompileCmd {
         );
 
         // Remove old compiled files
-        remove_dir_all(&to_dir).unwrap_or_default();
-        create_dir_all(&to_dir).unwrap();
+        remove_dir_all(to_dir).unwrap_or_default();
+        create_dir_all(to_dir).unwrap();
 
         // Copy new compiled files (prost does not use folder structures)
         // Copy the SDK files first
