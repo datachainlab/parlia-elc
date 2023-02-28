@@ -42,6 +42,7 @@ impl Header {
         self.trusted_height
     }
 
+    #[cfg(all(not(test), not(feature="testdata")))]
     pub fn state_root(&self) -> &Hash {
         &self.headers.target.header.root
     }
@@ -173,6 +174,7 @@ pub mod testdata;
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
+    use hex_literal::hex;
 
     use ibc::core::ics02_client::error::ClientError;
 
@@ -183,7 +185,7 @@ mod test {
     use crate::errors::Error;
     use crate::header::Header;
     use crate::header::testdata::*;
-    use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
+    use crate::misc::{Hash, new_ibc_height_with_chain_id, ValidatorReader, Validators};
 
     #[test]
     fn test_success_try_from_header() {
@@ -401,4 +403,5 @@ mod test {
             e => unreachable!("{:?}", e),
         }
     }
+
 }

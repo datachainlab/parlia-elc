@@ -39,7 +39,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
     registry
         .put_light_client(
             String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient(ParliaClient::default())),
+            Box::new(ParliaLightClient(ParliaClient)),
         )
         .unwrap()
 }
@@ -156,7 +156,7 @@ impl LightClient for ParliaLightClient {
 
         // Do not keccak already keccaked values such as commitment packets
         let value = match path {
-            Path::Commitments(_) => value,
+            Path::Commitment(_) => value,
             _ => value.keccak256().to_vec(),
         };
         let mut result = self.verify_commitment(
@@ -294,7 +294,6 @@ mod test {
     use core::str::FromStr;
 
     use hex_literal::hex;
-    use ibc::core::ics02_client::context::ClientReader as IBCClientReader;
     use ibc::core::ics02_client::error::ClientError;
     use ibc::core::ics02_client::header::Header;
     use ibc::core::ics23_commitment::commitment::CommitmentRoot;
@@ -304,7 +303,7 @@ mod test {
     use lcp_types::{Any, Height};
     use light_client::{ClientReader, LightClient};
 
-    use parlia_ibc_lc::client_def::{AccountResolver, ParliaClient};
+    use parlia_ibc_lc::client_def::ParliaClient;
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;
     use parlia_ibc_lc::errors::Error;
@@ -317,16 +316,16 @@ mod test {
         new_ibc_timestamp,
     };
 
-    use crate::client::{ParliaLightClient, try_from_any, try_into_any};
+    use crate::client::{ParliaLightClient, try_from_any, into_any};
 
     struct MockClientReader;
 
     impl ClientReader for MockClientReader {
-        fn client_type(&self, _client_id: &ClientId) -> Result<String, ICS02Error> {
+        fn client_type(&self, _client_id: &ClientId) -> Result<String, ClientError> {
             todo!()
         }
 
-        fn client_state(&self, client_id: &ClientId) -> Result<Any, ICS02Error> {
+        fn client_state(&self, client_id: &ClientId) -> Result<Any, ClientError> {
             let mainnet = ChainId::new(56);
             let cs = if client_id.as_str() == "99-bscchain-0" {
                 ClientState {
@@ -347,46 +346,42 @@ mod test {
                     frozen: false,
                 }
             };
-            Ok(try_into_any(cs).unwrap())
+            Ok(into_any(cs))
         }
 
         fn consensus_state(
             &self,
             _client_id: &ClientId,
             height: Height,
-        ) -> Result<Any, ICS02Error> {
+        ) -> Result<Any, ClientError> {
             let current_epoch = fill(create_epoch_block());
             let previous_epoch = fill(create_previous_epoch_block());
             if height.revision_height() == 1 {
-                Ok(try_into_any(ConsensusState {
+                Ok(into_any(ConsensusState {
                     state_root: CommitmentRoot::from_bytes(&[]),
                     timestamp: self.host_timestamp(),
                     validator_set: vec![],
-                })
-                .unwrap())
+                }))
             } else if height.revision_height() == 2 {
-                Ok(try_into_any(ConsensusState {
+                Ok(into_any(ConsensusState {
                     state_root: CommitmentRoot::from_bytes(&hex!(
                         "c7c2351e84411a86c7165856578a0668fddfe77e30d63965184af89dfb192f18"
                     )),
                     timestamp: self.host_timestamp(),
                     validator_set: vec![],
-                })
-                .unwrap())
+                }))
             } else if height.revision_height() == current_epoch.number {
-                Ok(try_into_any(ConsensusState {
+                Ok(into_any(ConsensusState {
                     state_root: CommitmentRoot::from_bytes(&current_epoch.root),
                     timestamp: new_ibc_timestamp(current_epoch.timestamp).unwrap(),
                     validator_set: current_epoch.new_validators,
-                })
-                .unwrap())
+                }))
             } else if height.revision_height() == previous_epoch.number {
-                Ok(try_into_any(ConsensusState {
+                Ok(into_any(ConsensusState {
                     state_root: CommitmentRoot::from_bytes(&previous_epoch.root),
                     timestamp: new_ibc_timestamp(previous_epoch.timestamp).unwrap(),
                     validator_set: previous_epoch.new_validators,
-                })
-                .unwrap())
+                }))
             } else {
                 panic!("no consensus state found {:?}", height);
             }
@@ -400,7 +395,7 @@ mod test {
             header::testdata::create_after_checkpoint_headers().timestamp()
         }
 
-        fn client_counter(&self) -> Result<u64, ICS02Error> {
+        fn client_counter(&self) -> Result<u64, ClientError> {
             todo!()
         }
     }
@@ -424,8 +419,8 @@ mod test {
             timestamp: new_ibc_timestamp(1677130449 * 1_000_000_000).unwrap(),
             validator_set: vec![],
         };
-        let any_client_state = try_into_any(client_state.clone()).unwrap();
-        let any_consensus_state = try_into_any(consensus_state.clone()).unwrap();
+        let any_client_state = into_any(client_state.clone());
+        let any_consensus_state = into_any(consensus_state.clone());
         match client.create_client(&ctx, any_client_state.clone(), any_consensus_state) {
             Ok(result) => {
                 assert_eq!(result.height, client_state.latest_height.into());
@@ -449,31 +444,13 @@ mod test {
     #[test]
     fn test_update_client() {
         let ctx = MockClientReader;
-
-        struct MockAccountResolver;
-        impl AccountResolver for MockAccountResolver {
-            fn resolve(
-                &self,
-                _state_root: &Hash,
-                _account_proof: &[Vec<u8>],
-                _address: &Address,
-            ) -> Result<Account, Error> {
-                Ok(Account {
-                    storage_root: hex!(
-                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-                    )
-                    .to_vec(),
-                })
-            }
-        }
-
-        let client = ParliaLightClient(ParliaClient::new(MockAccountResolver));
+        let client = ParliaLightClient::default();
 
         let header = header::testdata::create_after_checkpoint_headers();
         match client.update_client(
             &ctx,
             ClientId::default(),
-            try_into_any(header.clone()).unwrap(),
+            into_any(header.clone()),
         ) {
             Ok(data) => {
                 let new_client_state: ClientState =

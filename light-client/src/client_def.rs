@@ -15,13 +15,8 @@ use crate::header::Header;
 use crate::misc::{Account, Address, Hash, ValidatorReader};
 use crate::path::Path;
 
-pub struct ParliaClient(Box<dyn AccountResolver>);
-
-impl Default for ParliaClient {
-    fn default() -> Self {
-        Self::new(DefaultAccountResolver)
-    }
-}
+#[derive(Default)]
+pub struct ParliaClient;
 
 impl ParliaClient {
     pub fn check_header_and_update_state(
@@ -53,7 +48,7 @@ impl ParliaClient {
         new_client_state.latest_height = header.height();
 
         // Ensure world state is valid
-        let account = self.0.resolve(
+        let account = self.resolve_account(
             header.state_root(),
             &header.account_proof()?,
             &new_client_state.ibc_store_address,
@@ -84,10 +79,6 @@ impl ParliaClient {
         )
     }
 
-    pub fn new(account_resolver: impl AccountResolver + 'static) -> Self {
-        Self(Box::new(account_resolver))
-    }
-
     fn verify_proof(
         root: &Hash,
         proof: &[Vec<u8>],
@@ -115,21 +106,8 @@ impl ParliaClient {
             VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
         })
     }
-}
 
-pub trait AccountResolver {
-    fn resolve(
-        &self,
-        state_root: &Hash,
-        account_proof: &[Vec<u8>],
-        address: &Address,
-    ) -> Result<Account, Error>;
-}
-
-struct DefaultAccountResolver;
-
-impl AccountResolver for DefaultAccountResolver {
-    fn resolve(
+    fn resolve_account(
         &self,
         state_root: &Hash,
         account_proof: &[Vec<u8>],
@@ -151,11 +129,12 @@ mod test {
     use ibc::core::ics02_client::header::Header as IBCHeader;
     use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 
-    use crate::client_def::{AccountResolver, ParliaClient};
+    use crate::client_def::ParliaClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header;
+    use crate::header::Header;
     use crate::header::testdata::{create_epoch_block, create_previous_epoch_block, fill, to_rlp};
     use crate::misc::{
         Account, Address, Hash, new_ibc_height, new_ibc_timestamp, ValidatorReader, Validators,
@@ -174,8 +153,8 @@ mod test {
             storage_root: hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 .to_vec(),
         };
-        let client = ParliaClient::default();
-        let v = client.0.resolve(&state_root, &account_proof, &address);
+        let client = ParliaClient;
+        let v = client.resolve_account(&state_root, &account_proof, &address);
         match v {
             Ok(actual) => assert_eq!(actual, account),
             Err(e) => unreachable!("{:?}", e),
@@ -211,7 +190,7 @@ mod test {
         let mut expected = [0_u8; 32];
         expected[0] = 51;
         expected[1] = 52;
-        let client = ParliaClient::default();
+        let client = ParliaClient;
         if let Err(e) = client.verify_commitment(
             &storage_root,
             &storage_proof,
@@ -265,25 +244,7 @@ mod test {
             validator_set: vec![],
         };
 
-        struct MockAccountResolver;
-
-        impl AccountResolver for MockAccountResolver {
-            fn resolve(
-                &self,
-                _state_root: &Hash,
-                _account_proof: &[Vec<u8>],
-                _address: &Address,
-            ) -> Result<Account, Error> {
-                Ok(Account {
-                    storage_root: hex!(
-                        "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
-                    )
-                        .to_vec(),
-                })
-            }
-        }
-
-        let client = ParliaClient(alloc::boxed::Box::new(MockAccountResolver));
+        let client = ParliaClient;
         let (new_client_state, new_consensus_state) = match client.check_header_and_update_state(
             ctx,
             now,
