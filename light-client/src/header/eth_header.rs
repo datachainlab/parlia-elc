@@ -25,7 +25,7 @@ const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
 const EMPTY_MIX_HASH: Hash =
     hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Target {
     pub ibc_height: ibc::Height,
     pub ibc_timestamp: ibc::timestamp::Timestamp,
@@ -38,7 +38,7 @@ impl AsRef<ETHHeader> for Target {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
     pub uncle_hash: Vec<u8>,

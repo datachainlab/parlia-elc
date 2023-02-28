@@ -1,15 +1,16 @@
 use crate::errors::Error;
 use alloc::boxed::Box;
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::error::{ClientError as ICS02Error, ClientError};
 
 use ibc::core::ics02_client::client_state::ClientState as _;
 
 use alloc::str::FromStr;
+use ibc::core::ics02_client::consensus_state::ConsensusState as _;
 use ibc::core::ics02_client::header::Header as _;
 
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
@@ -25,7 +26,6 @@ use light_client::{
 use light_client_registry::LightClientRegistry;
 use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
-use parlia_ibc_lc::client_type::CLIENT_TYPE;
 use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
@@ -45,7 +45,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        String::from(CLIENT_TYPE)
+        ClientState::client_type().to_string()
     }
 
     fn latest_height(
@@ -103,9 +103,9 @@ impl LightClient for ParliaLightClient {
         //Ensure client is not frozen
         let client_state: ClientState = try_from_any(any_client_state)?;
         if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ICS02Error::client_frozen(
+            return Err(LightClientError::ics02(ICS02Error::ClientFrozen {
                 client_id,
-            )));
+            }));
         }
 
         // Create new state and ensure header is valid
@@ -114,8 +114,8 @@ impl LightClient for ParliaLightClient {
             self.verify_header(ctx, &client_id, &client_state, &consensus_state, &header)?;
 
         let new_height = new_client_state.latest_height.into();
-        let new_any_client_state = try_into_any(new_client_state)?;
-        let new_any_consensus_state = try_into_any(new_consensus_state)?;
+        let new_any_client_state = into_any(new_client_state);
+        let new_any_consensus_state = into_any(new_consensus_state);
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
@@ -199,9 +199,9 @@ impl ParliaLightClient {
         let any_client_state = read_client_state(ctx, &client_id)?;
         let client_state: ClientState = try_from_any(any_client_state.clone())?;
         if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ICS02Error::client_frozen(
+            return Err(LightClientError::ics02(ICS02Error::ClientFrozen {
                 client_id,
-            )));
+            }));
         }
         if Height::from(client_state.latest_height()) == proof_height {
             return Err(Error::UnexpectedHeight(proof_height).into());
@@ -251,18 +251,14 @@ fn read_consensus_state(
         .map_err(LightClientError::ics02)
 }
 
-fn try_from_any<T: TryFrom<IBCAny, Error = parlia_ibc_lc::errors::Error>>(
-    any: Any,
-) -> Result<T, Error> {
+fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, LightClientError> {
     let any: IBCAny = any.into();
-    any.try_into().map_err(Error::ParliaIBCLC)
+    any.try_into().map_err(LightClientError::ics02)
 }
 
-fn try_into_any<T: TryInto<IBCAny, Error = parlia_ibc_lc::errors::Error>>(
-    src: T,
-) -> Result<Any, Error> {
-    let any: IBCAny = src.try_into().map_err(Error::ParliaIBCLC)?;
-    Ok(any.into())
+fn into_any<T: Into<IBCAny>>(src: T) -> Any {
+    let any: IBCAny = src.into();
+    any.into()
 }
 
 fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path), Error> {

@@ -1,26 +1,20 @@
-use alloc::string::String;
 use alloc::vec::Vec;
 
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::error::ClientError;
 
 use ibc::timestamp::ParseTimestampError;
 use ibc::Height;
 
 use crate::misc::{Address, BlockNumber, NanoTime};
 use k256::ecdsa::signature;
-use prost::{DecodeError as ProtoDecodeError, EncodeError as ProtoEncodeError};
 use rlp::DecoderError;
 
 #[derive(Debug)]
 pub enum Error {
-    ICS02Error(ICS02Error),
+    ICS02Error(ClientError),
     ICSTimestamp(ParseTimestampError),
 
-    UnexpectedTypeUrl(String),
-
     // data conversion error
-    ProtoDecodeError(ProtoDecodeError),
-    ProtoEncodeError(ProtoEncodeError),
     RLPDecodeError(DecoderError),
     UnexpectedAnyConsensusState(Height),
 
@@ -58,4 +52,15 @@ pub enum Error {
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+}
+
+impl From<Error> for ClientError {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::ICS02Error(ce) => ce,
+            e => ClientError::Other {
+                description: format!("{:?}", e),
+            },
+        }
+    }
 }

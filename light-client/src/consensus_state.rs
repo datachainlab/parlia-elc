@@ -1,12 +1,13 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
-use ibc::core::ics02_client::client_consensus::{self, AnyConsensusState};
-use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
+use ibc::core::ics02_client::error::{ClientError as ICS02Error, ClientError};
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
+use ibc::timestamp::Timestamp;
 
 use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
 use ibc_proto::google::protobuf::Any;
+use ibc_proto::protobuf::Protobuf;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
@@ -16,7 +17,7 @@ use super::errors::Error;
 
 pub const PARLIA_CONSENSUS_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ConsensusState";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConsensusState {
     pub state_root: CommitmentRoot,
     pub timestamp: ibc::timestamp::Timestamp,
@@ -25,10 +26,6 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
-    pub fn timestamp(&self) -> ibc::timestamp::Timestamp {
-        self.timestamp
-    }
-
     pub fn state_root(&self) -> Result<Hash, Error> {
         self.state_root
             .as_bytes()
@@ -49,9 +46,10 @@ impl ConsensusState {
         }
         if (now_nano - timestamp) > trusting_period {
             let expires_at = new_ibc_timestamp(timestamp + trusting_period)?;
-            Err(Error::ICS02Error(
-                ICS02Error::header_not_within_trust_period(expires_at, now),
-            ))
+            Err(Error::ICS02Error(ICS02Error::HeaderNotWithinTrustPeriod {
+                latest_time: expires_at,
+                update_time: now,
+            }))
         } else {
             Ok(())
         }
@@ -59,9 +57,9 @@ impl ConsensusState {
 }
 
 impl TryFrom<RawConsensusState> for ConsensusState {
-    type Error = Error;
+    type Error = ClientError;
 
-    fn try_from(value: RawConsensusState) -> Result<Self, Error> {
+    fn try_from(value: RawConsensusState) -> Result<Self, Self::Error> {
         let state_root = CommitmentRoot::from_bytes(value.state_root.as_slice());
         let timestamp = new_ibc_timestamp(value.timestamp)?;
         let validator_set = value.validator_set;
@@ -83,46 +81,45 @@ impl From<ConsensusState> for RawConsensusState {
     }
 }
 
-impl client_consensus::ConsensusState for ConsensusState {
-    type Error = Error;
+impl Protobuf<RawConsensusState> for ConsensusState {}
+impl Protobuf<Any> for ConsensusState {}
 
-    fn client_type(&self) -> ClientType {
-        todo!();
-    }
-
+impl IBCConsensusState for ConsensusState {
     fn root(&self) -> &CommitmentRoot {
         &self.state_root
     }
 
-    fn wrap_any(self) -> AnyConsensusState {
-        todo!();
+    fn timestamp(&self) -> Timestamp {
+        self.timestamp
     }
 }
 
 impl TryFrom<Any> for ConsensusState {
-    type Error = Error;
+    type Error = ClientError;
 
     fn try_from(any: Any) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CONSENSUS_STATE_TYPE_URL {
-            return Err(Error::UnexpectedTypeUrl(any.type_url));
+            return Err(ClientError::UnknownConsensusStateType {
+                consensus_state_type: any.type_url,
+            });
         }
         RawConsensusState::decode(any.value.as_slice())
-            .map_err(Error::ProtoDecodeError)?
+            .map_err(ClientError::Decode)?
             .try_into()
     }
 }
 
-impl TryFrom<ConsensusState> for Any {
-    type Error = Error;
-
-    fn try_from(value: ConsensusState) -> Result<Self, Error> {
+impl From<ConsensusState> for Any {
+    fn from(value: ConsensusState) -> Self {
         let value: RawConsensusState = value.into();
         let mut v = Vec::new();
-        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
-        Ok(Self {
+        value
+            .encode(&mut v)
+            .expect("encoding to `Any` from `ParliaConsensusState`");
+        Self {
             type_url: PARLIA_CONSENSUS_STATE_TYPE_URL.to_owned(),
             value: v,
-        })
+        }
     }
 }
 

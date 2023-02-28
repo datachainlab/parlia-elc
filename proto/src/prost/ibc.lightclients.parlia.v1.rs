@@ -1,3 +1,4 @@
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Fraction {
     #[prost(uint64, tag="1")]
@@ -5,6 +6,7 @@ pub struct Fraction {
     #[prost(uint64, tag="2")]
     pub denominator: u64,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientState {
     #[prost(uint64, tag="1")]
@@ -20,11 +22,13 @@ pub struct ClientState {
     #[prost(bool, tag="6")]
     pub frozen: bool,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EthHeader {
     #[prost(bytes="vec", tag="1")]
     pub header: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Header {
     #[prost(string, tag="1")]
@@ -36,6 +40,7 @@ pub struct Header {
     #[prost(bytes="vec", tag="5")]
     pub account_proof: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusState {
     #[prost(bytes="vec", tag="1")]
