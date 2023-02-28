@@ -10,7 +10,7 @@ use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_ibc_height_with_chain_id, ChainId, ValidatorReader, Validators};
+use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
 
 use super::errors::Error;
 
