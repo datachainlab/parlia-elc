@@ -6,7 +6,6 @@ extern crate alloc;
 #[macro_use]
 extern crate std;
 
-pub mod client_def;
 pub mod client_state;
 pub mod consensus_state;
 pub mod errors;

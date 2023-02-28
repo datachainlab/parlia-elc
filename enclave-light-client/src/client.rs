@@ -23,7 +23,6 @@ use light_client::{
 use light_client_registry::LightClientRegistry;
 use validation_context::ValidationParams;
 
-use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
 use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
@@ -219,8 +218,7 @@ impl ParliaLightClient {
 
         let consensus_state: ConsensusState = try_from_any(any_consensus_state.clone())?;
         let storage_root = consensus_state.state_root().map_err(Error::ParliaIBCLC)?;
-        client_state
-            .verify_commitment(
+        ClientState::verify_commitment(
                 &storage_root,
                 &storage_proof_rlp,
                 YuiIBCPath::from(path.to_string().as_bytes()),

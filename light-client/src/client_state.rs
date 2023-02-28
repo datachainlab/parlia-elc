@@ -36,7 +36,6 @@ use trie_eip1186::VerifyError;
 
 use crate::consensus_state::ConsensusState;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
-use crate::client_def::ParliaClient;
 
 use crate::errors::{Error, into_client_error};
 use crate::header::Header;
@@ -49,7 +48,7 @@ pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Clie
 pub struct ClientState {
     pub chain_id: ChainId,
     pub ibc_store_address: Address,
-    pub latest_height: ibc::Height,
+    pub latest_height: Height,
     pub trust_level: TrustThreshold,
     pub trusting_period: NanoTime,
     pub frozen: bool,
@@ -62,7 +61,6 @@ impl ClientState {
     }
 
     pub fn verify_commitment(
-        &self,
         storage_root: &Hash,
         storage_proof_rlp: &[u8],
         path: impl Path,
@@ -480,8 +478,7 @@ mod test {
     use ibc::core::ics02_client::header::Header as IBCHeader;
     use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 
-    use crate::client_def::ParliaClient;
-    use crate::client_state::ClientState;
+    use crate::client_state::{ClientState, resolve_account, verify_proof};
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header;
@@ -504,8 +501,7 @@ mod test {
             storage_root: hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 .to_vec(),
         };
-        let client = ParliaClient;
-        let v = client.resolve_account(&state_root, &account_proof, &address);
+        let v = resolve_account(&state_root, &account_proof, &address);
         match v {
             Ok(actual) => assert_eq!(actual, account),
             Err(e) => unreachable!("{:?}", e),
@@ -522,14 +518,14 @@ mod test {
         ];
         let expected = hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec();
         if let Err(e) =
-            ParliaClient::verify_proof(&storage_root, &storage_proof, &key, &Some(expected))
+            verify_proof(&storage_root, &storage_proof, &key, &Some(expected))
         {
             unreachable!("{:?}", e);
         }
     }
 
     #[test]
-    fn test_verify_commitment_yui_ibc_mapping() {
+    fn test_verify_commitment() {
         let storage_root = hex!("2a76cf6e2521e6a413a912d96a4220479c68283130d6cef6966f4ff1cf437a32");
         let storage_proof = to_rlp(vec![
             hex!("f8918080a0f0d0b833ffb94d6962b74e4b1d5bc5a7cceca74616832065750c00ddd9d1b329808080a0044f9d4608bdd7ff7943cee62a73ac4daeff3c495907afd494dce25436b0c534a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df39480808080a0b19b826b59a7db662e9af57a595710163588c476f642b97df805705790dee4e680808080").to_vec(),
@@ -541,8 +537,7 @@ mod test {
         let mut expected = [0_u8; 32];
         expected[0] = 51;
         expected[1] = 52;
-        let client = ParliaClient;
-        if let Err(e) = client.verify_commitment(
+        if let Err(e) = ClientState::verify_commitment(
             &storage_root,
             &storage_proof,
             path,
@@ -550,79 +545,5 @@ mod test {
         ) {
             unreachable!("{:?}", e);
         }
-    }
-
-    struct MockValidatorReader {}
-
-    impl ValidatorReader for MockValidatorReader {
-        fn read(&self, height: ibc::Height) -> Result<Validators, Error> {
-            let current_epoch = fill(create_epoch_block());
-            let previous_epoch = fill(create_previous_epoch_block());
-            if height.revision_height() == current_epoch.number {
-                return Ok(current_epoch.new_validators);
-            } else if height.revision_height() == previous_epoch.number {
-                return Ok(previous_epoch.new_validators);
-            }
-            panic!("no validator {:?}", height);
-        }
-    }
-
-    #[test]
-    fn test_check_header_and_update_state() {
-        let mainnet = header::testdata::mainnet();
-        let header = header::testdata::create_after_checkpoint_headers();
-        let trusting_period = 1_000_000_000;
-        let now = new_ibc_timestamp(header.timestamp().nanoseconds()).unwrap();
-
-        let ctx = MockValidatorReader {};
-
-        let client_state = ClientState {
-            chain_id: mainnet.clone(),
-            ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-            latest_height: new_ibc_height(
-                header.height().revision_number(),
-                header.height().revision_height() - 1,
-            )
-                .unwrap(),
-            trust_level: Default::default(),
-            trusting_period,
-            frozen: false,
-        };
-        let trusted_consensus_state = ConsensusState {
-            state_root: CommitmentRoot::from_bytes(&[0; 32]),
-            timestamp: new_ibc_timestamp(header.timestamp().nanoseconds() - trusting_period)
-                .unwrap(),
-            validator_set: vec![],
-        };
-
-        let client = ParliaClient;
-        let (new_client_state, new_consensus_state) = match client.check_header_and_update_state(
-            ctx,
-            now,
-            &client_state,
-            &trusted_consensus_state,
-            &header,
-        ) {
-            Ok(data) => data,
-            Err(e) => unreachable!("error {:?}", e),
-        };
-        assert_eq!(new_client_state.latest_height, header.height());
-        assert_eq!(new_client_state.chain_id, mainnet);
-        assert_eq!(
-            new_client_state.ibc_store_address,
-            client_state.ibc_store_address
-        );
-        assert_eq!(
-            new_client_state.trusting_period,
-            client_state.trusting_period
-        );
-        assert_eq!(new_client_state.frozen, client_state.frozen);
-
-        assert_eq!(new_consensus_state.timestamp, header.timestamp());
-        assert_eq!(
-            new_consensus_state.state_root.as_bytes(),
-            hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-        ); // test storage root
-        assert!(new_consensus_state.validator_set.is_empty()); // not epoch block
     }
 }
