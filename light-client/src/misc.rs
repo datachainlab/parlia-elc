@@ -1,6 +1,9 @@
 use alloc::vec::Vec;
+use alloc::boxed::Box;
+use ibc::core::ics02_client::error::ClientError;
 
 use rlp::{Decodable, Rlp};
+use crate::client_state::ClientState;
 
 use crate::errors::Error;
 
@@ -103,7 +106,10 @@ pub fn new_ibc_height_with_chain_id(
     new_ibc_height(chain_id.version(), height)
 }
 
-pub fn new_ibc_height(revision_number: u64, height: BlockNumber) -> Result<ibc::Height, Error> {
+pub fn new_ibc_height(
+    revision_number: u64,
+    height: BlockNumber,
+) -> Result<ibc::Height, Error> {
     //TODO Ethereum based block number uses big.Int. It can be bigger than u64.
     ibc::Height::new(revision_number, height).map_err(Error::ICS02Error)
 }

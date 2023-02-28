@@ -1,17 +1,19 @@
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::client_state::ClientState as _;
-use ibc::core::ics02_client::consensus_state::ConsensusState as _;
+use ibc::core::ics02_client::client_state::{ClientState as _, downcast_client_state, UpdatedState};
+use ibc::core::ics02_client::consensus_state::{ConsensusState as _, downcast_consensus_state};
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics02_client::header::Header as IBCHeader;
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::core::ics24_host::identifier::ClientId;
 use ibc::core::ics24_host::Path;
+use ibc::dynamic_typing::AsAny;
 use ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Height};
 use light_client::{
@@ -27,17 +29,18 @@ use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
 use parlia_ibc_lc::path::YuiIBCPath;
+use crate::context::Context;
 
 use crate::errors::Error;
 
 #[derive(Default)]
-pub struct ParliaLightClient(ParliaClient);
+pub struct ParliaLightClient;
 
 pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
     registry
         .put_light_client(
             String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient(ParliaClient)),
+            Box::new(ParliaLightClient),
         )
         .unwrap()
 }
@@ -93,10 +96,11 @@ impl LightClient for ParliaLightClient {
     ) -> Result<UpdateClientResult, LightClientError> {
         //Ensure header can be verified.
         let header: Header = try_from_any(any_header)?;
-        let now = ctx.host_timestamp();
+        let height = header.height();
+        let timestamp = header.timestamp();
         let trusted_height = header.trusted_height();
         let any_client_state = read_client_state(ctx, &client_id)?;
-        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.into())?;
+        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.clone().into())?;
         let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
 
         //Ensure client is not frozen
@@ -108,32 +112,35 @@ impl LightClient for ParliaLightClient {
         }
 
         // Create new state and ensure header is valid
-        let consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
-        let ctx = DefaultValidatorReader {
-            ctx,
-            client_id: &client_id,
-        };
-        let (new_client_state, new_consensus_state) = self
-            .0
-            .check_header_and_update_state(ctx, now, &client_state, &consensus_state, &header)
-            .map_err(Error::ParliaIBCLC)?;
+        let UpdatedState {
+            client_state: new_client_state,
+            consensus_state: new_consensus_state,
+        } = client_state
+            .check_header_and_update_state(&Context::new(ctx), client_id, header.into())
+            .map_err(|e| {
+                LightClientError::ics02(ClientError::HeaderVerificationFailure {
+                    reason: e.to_string(),
+                })
+            })?;
 
-        let new_height = new_client_state.latest_height.into();
-        let new_any_client_state = into_any(new_client_state);
-        let new_any_consensus_state = into_any(new_consensus_state);
+        let new_height = new_client_state.latest_height().into();
+        let new_any_client_state = ClientState::try_from(new_client_state.as_ref()).map_err(LightClientError::ics02)?;
+        let new_any_client_state : Any = IBCAny::from(new_any_client_state).into();
+        let new_any_consensus_state = ConsensusState::try_from(new_consensus_state.as_ref()).map_err(LightClientError::ics02)?;
+        let new_any_consensus_state : Any = IBCAny::from(new_any_consensus_state).into();
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
             new_any_client_state,
             new_any_consensus_state,
-            height: header.height().into(),
+            height: height.into(),
             commitment: UpdateClientCommitment {
                 prev_state_id: Some(prev_state_id),
                 new_state_id,
                 new_state: None,
-                prev_height: Some(header.trusted_height().into()),
+                prev_height: Some(trusted_height.into()),
                 new_height,
-                timestamp: header.timestamp().into(),
+                timestamp: timestamp.into(),
                 validation_params: ValidationParams::Empty,
             },
             prove: true,
@@ -212,7 +219,7 @@ impl ParliaLightClient {
 
         let consensus_state: ConsensusState = try_from_any(any_consensus_state.clone())?;
         let storage_root = consensus_state.state_root().map_err(Error::ParliaIBCLC)?;
-        self.0
+        client_state
             .verify_commitment(
                 &storage_root,
                 &storage_proof_rlp,
@@ -264,24 +271,6 @@ fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path),
     //TODO apply prefix if needed
     let path = Path::from_str(path).map_err(Error::Path)?;
     Ok((prefix, path))
-}
-
-struct DefaultValidatorReader<'a> {
-    ctx: &'a dyn ClientReader,
-    client_id: &'a ClientId,
-}
-
-impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
-    fn read(&self, ibc_height: ibc::Height) -> Result<Validators, parlia_ibc_lc::errors::Error> {
-        let height = Height::new(ibc_height.revision_number(), ibc_height.revision_height());
-        let consensus_state = self
-            .ctx
-            .consensus_state(self.client_id, height)
-            .map_err(parlia_ibc_lc::errors::Error::ICS02Error)?;
-        let consensus_state: ConsensusState = try_from_any(consensus_state)
-            .map_err(|_e| parlia_ibc_lc::errors::Error::UnexpectedAnyConsensusState(ibc_height))?;
-        Ok(consensus_state.validator_set)
-    }
 }
 
 #[cfg(test)]

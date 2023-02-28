@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use ibc::core::ContextError;
 
 use ibc::core::ics02_client::error::ClientError;
 use ibc::timestamp::ParseTimestampError;
@@ -11,6 +12,7 @@ use crate::misc::{Address, BlockNumber, NanoTime};
 #[derive(Debug)]
 pub enum Error {
     ICS02Error(ClientError),
+    ContextError(ContextError),
     ICSTimestamp(ParseTimestampError),
 
     // data conversion error
@@ -22,6 +24,7 @@ pub enum Error {
     MissingTrustLevel,
     UnexpectedTrustingPeriod(u64, u64),
     UnexpectedStoreAddress(Vec<u8>),
+    DowncastClientStateError,
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -34,6 +37,7 @@ pub enum Error {
     UnexpectedStateHashDecodeError(Vec<u8>),
     UnexpectedTimestamp(NanoTime),
     UnexpectedStateRoot(Vec<u8>),
+    DowncastConsensusStateError,
 
     // Header error
     MissingTrustedHeight,
@@ -69,5 +73,14 @@ impl From<Error> for ClientError {
                 description: format!("{:?}", e),
             },
         }
+    }
+}
+
+pub fn into_client_error(e: ContextError) -> ClientError {
+    match e {
+        ContextError::ClientError(e) => e,
+        _ => ClientError::Other {
+            description: format!("{:?}", e),
+        },
     }
 }

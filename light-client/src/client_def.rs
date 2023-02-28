@@ -18,49 +18,7 @@ use crate::path::Path;
 pub struct ParliaClient;
 
 impl ParliaClient {
-    pub fn check_header_and_update_state(
-        &self,
-        ctx: impl ValidatorReader,
-        now: ibc::timestamp::Timestamp,
-        client_state: &ClientState,
-        trusted_consensus_state: &ConsensusState,
-        header: &Header,
-    ) -> Result<(ClientState, ConsensusState), Error> {
-        // Ensure last consensus state is within the trusting period
-        trusted_consensus_state.assert_within_trust_period(now, client_state.trusting_period)?;
-        trusted_consensus_state
-            .assert_within_trust_period(header.timestamp(), client_state.trusting_period)?;
-
-        // Ensure header revision is same as chain revision
-        let header_height = header.height();
-        if header_height.revision_number() != client_state.chain_id.version() {
-            return Err(Error::UnexpectedHeaderRevision(
-                client_state.chain_id.version(),
-                header_height.revision_number(),
-            ));
-        }
-
-        // Ensure header is valid
-        header.verify(ctx, &client_state.chain_id)?;
-
-        let mut new_client_state = client_state.clone();
-        new_client_state.latest_height = header.height();
-
-        // Ensure world state is valid
-        let account = self.resolve_account(
-            header.state_root(),
-            &header.account_proof()?,
-            &new_client_state.ibc_store_address,
-        )?;
-        let new_consensus_state = ConsensusState {
-            state_root: account.storage_root.into(),
-            timestamp: header.timestamp(),
-            validator_set: header.validator_set().clone(),
-        };
-
-        Ok((new_client_state, new_consensus_state))
-    }
-
+    //TODO remove
     pub fn verify_commitment(
         &self,
         storage_root: &Hash,

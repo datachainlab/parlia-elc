@@ -1,7 +1,8 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 
-use ibc::core::ics02_client::consensus_state::ConsensusState as IBCConsensusState;
+use ibc::core::ics02_client::consensus_state::{ConsensusState as IBCConsensusState, downcast_consensus_state};
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics23_commitment::commitment::CommitmentRoot;
 use ibc::timestamp::Timestamp;
@@ -9,6 +10,7 @@ use ibc_proto::google::protobuf::Any;
 use ibc_proto::protobuf::Protobuf;
 use prost::Message as _;
 
+use crate::client_state::ClientState;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
 use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
@@ -26,6 +28,7 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
+
     pub fn state_root(&self) -> Result<Hash, Error> {
         self.state_root
             .as_bytes()
@@ -53,6 +56,17 @@ impl ConsensusState {
         } else {
             Ok(())
         }
+    }
+}
+
+impl TryFrom<&dyn IBCConsensusState<Error = ClientError>> for ConsensusState {
+    type Error = ClientError;
+
+    fn try_from(value: &dyn IBCConsensusState<Error = ClientError>) -> Result<Self, Self::Error> {
+        downcast_consensus_state::<Self>(value).ok_or_else(|| ClientError::ClientArgsTypeMismatch {
+                client_type: ClientState::client_type(),
+            })
+            .map(Clone::clone)
     }
 }
 

@@ -13,4 +13,5 @@ pub(crate) mod sgx_reexport_prelude {
 }
 
 mod client;
+pub mod context;
 mod errors;
