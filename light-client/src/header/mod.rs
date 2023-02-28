@@ -2,14 +2,16 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::client_type::ClientType;
-use ibc::core::ics02_client::header::{self, AnyHeader};
+use ibc::core::ics02_client::error::ClientError;
+use ibc::core::ics02_client::header::Header as IBCHeader;
 use ibc_proto::google::protobuf::Any;
+use ibc_proto::protobuf::Protobuf;
 use prost::Message as _;
 use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
+use crate::misc::{ChainId, Hash, new_ibc_height_with_chain_id, ValidatorReader, Validators};
 
 use super::errors::Error;
 
@@ -23,7 +25,7 @@ const EPOCH_BLOCK_PERIOD: u64 = 200;
 mod eth_header;
 mod eth_headers;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
@@ -94,10 +96,13 @@ impl Header {
     }
 }
 
-impl TryFrom<RawHeader> for Header {
-    type Error = Error;
+impl Protobuf<RawHeader> for Header {}
+impl Protobuf<Any> for Header {}
 
-    fn try_from(value: RawHeader) -> Result<Header, Error> {
+impl TryFrom<RawHeader> for Header {
+    type Error = ClientError;
+
+    fn try_from(value: RawHeader) -> Result<Header, Self::Error> {
         let trusted_height = value
             .trusted_height
             .as_ref()
@@ -105,8 +110,7 @@ impl TryFrom<RawHeader> for Header {
         let trusted_height = ibc::Height::new(
             trusted_height.revision_number,
             trusted_height.revision_height,
-        )
-        .map_err(Error::ICS02Error)?;
+        )?;
 
         // All the header revision must be same as the revision of trusted_height.
         let headers = ETHHeaders::new(trusted_height, value.headers.as_slice())?;
@@ -125,11 +129,7 @@ impl From<Header> for RawHeader {
     }
 }
 
-impl header::Header for Header {
-    fn client_type(&self) -> ClientType {
-        todo!()
-    }
-
+impl IBCHeader for Header {
     fn height(&self) -> ibc::Height {
         self.headers.target.ibc_height.to_owned()
     }
@@ -137,36 +137,33 @@ impl header::Header for Header {
     fn timestamp(&self) -> ibc::timestamp::Timestamp {
         self.headers.target.ibc_timestamp.to_owned()
     }
-
-    fn wrap_any(self) -> AnyHeader {
-        todo!();
-    }
 }
 
 impl TryFrom<Any> for Header {
-    type Error = Error;
+    type Error = ClientError;
 
     fn try_from(any: Any) -> Result<Header, Self::Error> {
         if any.type_url != PARLIA_HEADER_TYPE_URL {
-            return Err(Error::UnexpectedTypeUrl(any.type_url));
+            return Err(ClientError::UnknownHeaderType {
+                header_type: any.type_url,
+            });
         }
-        RawHeader::decode(any.value.as_slice())
-            .map_err(Error::ProtoDecodeError)?
-            .try_into()
+        let raw = RawHeader::decode(any.value.as_slice()).map_err(ClientError::Decode)?;
+        raw.try_into()
     }
 }
 
-impl TryFrom<Header> for Any {
-    type Error = Error;
-
-    fn try_from(value: Header) -> Result<Self, Error> {
+impl From<Header> for Any {
+    fn from(value: Header) -> Self {
         let value: RawHeader = value.into();
         let mut v = Vec::new();
-        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
-        Ok(Self {
+        value
+            .encode(&mut v)
+            .expect("encoding to `Any` from `ParliaHeader`");
+        Self {
             type_url: PARLIA_HEADER_TYPE_URL.to_owned(),
             value: v,
-        })
+        }
     }
 }
 
@@ -177,12 +174,15 @@ pub mod testdata;
 mod test {
     use std::collections::HashMap;
 
+    use ibc::core::ics02_client::error::ClientError;
+
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
+    use crate::alloc::string::ToString;
     use crate::errors::Error;
-    use crate::header::testdata::*;
     use crate::header::Header;
+    use crate::header::testdata::*;
     use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
 
     #[test]
@@ -226,10 +226,11 @@ mod test {
         };
 
         // Check require trusted height
-        match Header::try_from(raw_header.clone()).unwrap_err() {
-            Error::MissingTrustedHeight => {}
-            e => unreachable!("{:?}", e),
-        }
+        let err = Header::try_from(raw_header.clone()).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            ClientError::from(Error::MissingTrustedHeight).to_string()
+        );
 
         // Check greater than trusted height
         let trusted_height = Height {
@@ -237,13 +238,9 @@ mod test {
             revision_height: h1.number,
         };
         raw_header.trusted_height = Some(trusted_height.clone());
-        match Header::try_from(raw_header.clone()).unwrap_err() {
-            Error::UnexpectedTrustedHeight(number, trusted) => {
-                assert_eq!(number, h1.number);
-                assert_eq!(trusted, trusted_height.revision_height)
-            }
-            e => unreachable!("{:?}", e),
-        }
+        let err = Header::try_from(raw_header.clone()).unwrap_err();
+        let expected = Error::UnexpectedTrustedHeight(h1.number, trusted_height.revision_height);
+        assert_eq!(err.to_string(), ClientError::from(expected).to_string());
 
         // Check relation
         let trusted_height = Height {
@@ -251,13 +248,9 @@ mod test {
             revision_height: 1,
         };
         raw_header.trusted_height = Some(trusted_height);
-        match Header::try_from(raw_header).unwrap_err() {
-            Error::UnexpectedHeaderRelation(parent, child) => {
-                assert_eq!(parent, h1.number);
-                assert_eq!(child, h1.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
+        let err = Header::try_from(raw_header).unwrap_err();
+        let expected = Error::UnexpectedHeaderRelation(h1.number, h1.number);
+        assert_eq!(err.to_string(), ClientError::from(expected).to_string());
     }
 
     struct MockValidatorReader {

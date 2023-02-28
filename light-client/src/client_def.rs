@@ -2,9 +2,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use ibc::core::ics02_client::header::Header as IBCHeader;
+use patricia_merkle_trie::EIP1186Layout;
 use patricia_merkle_trie::keccak;
 use patricia_merkle_trie::keccak::keccak_256;
-use patricia_merkle_trie::EIP1186Layout;
 use rlp::Rlp;
 use trie_eip1186::{verify_proof, VerifyError};
 
@@ -158,7 +158,7 @@ mod test {
     use crate::header;
     use crate::header::testdata::{create_epoch_block, create_previous_epoch_block, fill, to_rlp};
     use crate::misc::{
-        new_ibc_height, new_ibc_timestamp, Account, Address, Hash, ValidatorReader, Validators,
+        Account, Address, Hash, new_ibc_height, new_ibc_timestamp, ValidatorReader, Validators,
     };
     use crate::path::YuiIBCPath;
 
@@ -223,6 +223,7 @@ mod test {
     }
 
     struct MockValidatorReader {}
+
     impl ValidatorReader for MockValidatorReader {
         fn read(&self, height: ibc::Height) -> Result<Validators, Error> {
             let current_epoch = fill(create_epoch_block());
@@ -252,7 +253,7 @@ mod test {
                 header.height().revision_number(),
                 header.height().revision_height() - 1,
             )
-            .unwrap(),
+                .unwrap(),
             trust_level: Default::default(),
             trusting_period,
             frozen: false,
@@ -277,7 +278,7 @@ mod test {
                     storage_root: hex!(
                         "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
                     )
-                    .to_vec(),
+                        .to_vec(),
                 })
             }
         }

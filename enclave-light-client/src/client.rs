@@ -6,8 +6,11 @@ use alloc::vec::Vec;
 use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
 use ibc::core::ics02_client::client_state::ClientState as _;
-use ibc::core::ics02_client::error::Error as ICS02Error;
+use ibc::core::ics02_client::client_state::ClientState as _;
+use ibc::core::ics02_client::consensus_state::ConsensusState as _;
+use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics02_client::header::Header as IBCHeader;
+use ibc::core::ics02_client::header::Header as _;
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::core::ics24_host::identifier::ClientId;
 use ibc::core::ics24_host::Path;
@@ -22,7 +25,6 @@ use validation_context::ValidationParams;
 
 use parlia_ibc_lc::client_def::ParliaClient;
 use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
-use parlia_ibc_lc::client_type::CLIENT_TYPE;
 use parlia_ibc_lc::consensus_state::ConsensusState;
 use parlia_ibc_lc::header::Header;
 use parlia_ibc_lc::misc::{ValidatorReader, Validators};
@@ -44,7 +46,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        String::from(CLIENT_TYPE)
+        ClientState::client_type().to_string()
     }
 
     fn latest_height(
@@ -102,9 +104,9 @@ impl LightClient for ParliaLightClient {
         //Ensure client is not frozen
         let client_state: ClientState = try_from_any(any_client_state)?;
         if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ICS02Error::client_frozen(
+            return Err(LightClientError::ics02(ClientError::ClientFrozen {
                 client_id,
-            )));
+            }));
         }
 
         // Create new state and ensure header is valid
@@ -119,8 +121,8 @@ impl LightClient for ParliaLightClient {
             .map_err(Error::ParliaIBCLC)?;
 
         let new_height = new_client_state.latest_height.into();
-        let new_any_client_state = try_into_any(new_client_state)?;
-        let new_any_consensus_state = try_into_any(new_consensus_state)?;
+        let new_any_client_state = into_any(new_client_state);
+        let new_any_consensus_state = into_any(new_consensus_state);
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
@@ -200,9 +202,9 @@ impl ParliaLightClient {
         let any_client_state = read_client_state(ctx, &client_id)?;
         let client_state: ClientState = try_from_any(any_client_state.clone())?;
         if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ICS02Error::client_frozen(
+            return Err(LightClientError::ics02(ClientError::ClientFrozen {
                 client_id,
-            )));
+            }));
         }
         if Height::from(client_state.latest_height()) != proof_height {
             return Err(Error::UnexpectedHeight(proof_height).into());
@@ -249,18 +251,14 @@ fn read_consensus_state(
         .map_err(LightClientError::ics02)
 }
 
-fn try_from_any<T: TryFrom<IBCAny, Error = parlia_ibc_lc::errors::Error>>(
-    any: Any,
-) -> Result<T, Error> {
+fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, LightClientError> {
     let any: IBCAny = any.into();
-    any.try_into().map_err(Error::ParliaIBCLC)
+    any.try_into().map_err(LightClientError::ics02)
 }
 
-fn try_into_any<T: TryInto<IBCAny, Error = parlia_ibc_lc::errors::Error>>(
-    src: T,
-) -> Result<Any, Error> {
-    let any: IBCAny = src.try_into().map_err(Error::ParliaIBCLC)?;
-    Ok(any.into())
+fn into_any<T: Into<IBCAny>>(src: T) -> Any {
+    let any: IBCAny = src.into();
+    any.into()
 }
 
 fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path), Error> {
@@ -297,7 +295,7 @@ mod test {
 
     use hex_literal::hex;
     use ibc::core::ics02_client::context::ClientReader as IBCClientReader;
-    use ibc::core::ics02_client::error::Error as ICS02Error;
+    use ibc::core::ics02_client::error::ClientError;
     use ibc::core::ics02_client::header::Header;
     use ibc::core::ics23_commitment::commitment::CommitmentRoot;
     use ibc::core::ics24_host::identifier::ClientId;
@@ -315,11 +313,11 @@ mod test {
         create_epoch_block, create_previous_epoch_block, fill, to_rlp,
     };
     use parlia_ibc_lc::misc::{
-        new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, Account, Address, ChainId,
-        Hash,
+        Account, Address, ChainId, Hash, new_ibc_height, new_ibc_height_with_chain_id,
+        new_ibc_timestamp,
     };
 
-    use crate::client::{try_from_any, try_into_any, ParliaLightClient};
+    use crate::client::{ParliaLightClient, try_from_any, try_into_any};
 
     struct MockClientReader;
 
@@ -403,10 +401,6 @@ mod test {
         }
 
         fn client_counter(&self) -> Result<u64, ICS02Error> {
-            todo!()
-        }
-
-        fn as_ibc_client_reader(&self) -> &dyn IBCClientReader {
             todo!()
         }
     }

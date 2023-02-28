@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ibc = { git = "https://github.com/informalsystems/ibc-rs", rev = "e8c98d440949abf971ac45a68ed9dd9e6e9f48ed", default-features = false }
-ibc-proto = { git = "https://github.com/informalsystems/ibc-rs", rev = "e8c98d440949abf971ac45a68ed9dd9e6e9f48ed", default-features = false }
+ibc = { version = "0.29.0", default-features = false, features = ["serde"] }
+ibc-proto = { version = "0.26.0", default-features = false, features = ["parity-scale-codec", "borsh"] }
 rlp = { version = "0.5.1", default-features = false }
-prost = { version = "0.10", default-features = false }
+prost = { version = "0.11", default-features = false }
 
 parlia-ibc-proto = { version = "0.1.0", path = "../proto", default-features = false }
 
@@ -21,6 +21,8 @@ k256 = { version = "0.12.0-pre.0", default-features = false, features = ["alloc"
 elliptic-curve = { version = "0.12.3", default-features = false, features = ["hazmat", "sec1"] }
 
 hex-literal = "0.3.1"
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [features]
 default = []

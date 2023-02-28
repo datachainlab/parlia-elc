@@ -13,7 +13,7 @@ pub type StorageKey = [u8; 32];
 pub type NanoTime = u64;
 pub type HexString<'a> = &'a str;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
     id: u64,
     version: u64,

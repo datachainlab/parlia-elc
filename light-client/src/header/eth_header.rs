@@ -28,7 +28,7 @@ const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
 const EMPTY_MIX_HASH: Hash =
     hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Target {
     pub ibc_height: ibc::Height,
     pub ibc_timestamp: ibc::timestamp::Timestamp,
@@ -41,7 +41,7 @@ impl AsRef<ETHHeader> for Target {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
     pub uncle_hash: Vec<u8>,
@@ -150,7 +150,11 @@ impl ETHHeader {
 
     /// This check header with validator_set.
     /// https://github.com/bnb-chain/bsc/blob/master/consensus/parlia/parlia.go#L546
-    pub fn verify_seal(&self, validator_set: &Validators, chain_id: &ChainId) -> Result<(), Error> {
+    pub fn verify_seal(
+        &self,
+        validator_set: &Validators,
+        chain_id: &ChainId,
+    ) -> Result<Address, Error> {
         // Resolve the authorization key and check against validators
         let signer = self.ecrecover(chain_id)?;
         if self.coinbase.as_slice() != signer {
@@ -170,7 +174,7 @@ impl ETHHeader {
 
         // Don't check that the difficulty corresponds to the turn-ness of the signer
 
-        Ok(())
+        Ok(signer)
     }
 }
 
@@ -331,8 +335,8 @@ mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     use crate::errors::Error;
-    use crate::header::eth_header::ETHHeader;
     use crate::header::eth_header::{EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
+    use crate::header::eth_header::ETHHeader;
     use crate::header::testdata::*;
 
     #[test]
