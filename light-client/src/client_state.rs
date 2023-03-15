@@ -2,7 +2,6 @@ use alloc::borrow::ToOwned as _;
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use core::time::Duration;
 use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::protobuf::Protobuf;
@@ -13,6 +12,8 @@ use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;
 use rlp::Rlp;
 use trie_eip1186::VerifyError;
+use parlia_ibc_proto::google;
+use parlia_ibc_proto::google::protobuf::Duration;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
@@ -30,7 +31,7 @@ pub struct ClientState {
     pub ibc_store_address: Address,
     pub latest_height: Height,
     pub trust_level: Fraction,
-    pub trusting_period: NanoTime,
+    pub trusting_period: Duration,
     pub frozen: bool,
 }
 
@@ -61,9 +62,9 @@ impl ClientState {
 
         // Ensure last consensus state is within the trusting period
         let now = ctx.host_timestamp();
-        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period)?;
+        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period.nanos)?; //TODO
         trusted_consensus_state
-            .assert_within_trust_period(header.timestamp()?, self.trusting_period)?;
+            .assert_within_trust_period(header.timestamp()?, &self.trusting_period)?;
 
         // Ensure header revision is same as chain revision
         let header_height = header.height();
@@ -128,7 +129,7 @@ impl TryFrom<RawClientState> for ClientState {
             trust_level
         };
 
-        let trusting_period = value.trusting_period as u128; //TODO
+        let trusting_period = value.trusting_period.ok_or(Error::MissingTrustingPeriod)?;
         let frozen = value.frozen;
 
         Ok(Self {
@@ -152,7 +153,7 @@ impl From<ClientState> for RawClientState {
                 revision_height: value.latest_height.revision_height(),
             }),
             trust_level: Some(value.trust_level),
-            trusting_period: value.trusting_period.to_owned() as u64,
+            trusting_period: Some(value.trusting_period),
             frozen: value.frozen.to_owned(),
         }
     }

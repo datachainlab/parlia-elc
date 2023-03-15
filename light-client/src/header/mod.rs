@@ -36,7 +36,7 @@ impl Header {
     }
 
     pub fn timestamp(&self) -> Result<Time, Error> {
-        new_timestamp(self.headers.target.timestamp as u128 * 1_000_000_000)
+        new_timestamp(self.headers.target.timestamp)
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {

@@ -267,7 +267,7 @@ mod test {
                         numerator: 1,
                         denominator: 3,
                     },
-                    trusting_period: 1_000_000_000,
+                    trusting_period: core::time::Duration::new(1, 0),
                     frozen: false,
                 }
             } else {
@@ -279,7 +279,7 @@ mod test {
                         numerator: 1,
                         denominator: 3,
                     } ,
-                    trusting_period: 1_000_000_000,
+                    trusting_period: core::time::Duration::new(1, 0),
                     frozen: false,
                 }
             };
@@ -310,13 +310,13 @@ mod test {
             } else if height.revision_height() == current_epoch.number {
                 Ok(Any::from(ConsensusState {
                     state_root: current_epoch.root,
-                    timestamp: new_timestamp(current_epoch.timestamp as u128).unwrap(),
+                    timestamp: new_timestamp(current_epoch.timestamp).unwrap(),
                     validator_set: current_epoch.new_validators,
                 }))
             } else if height.revision_height() == previous_epoch.number {
                 Ok(Any::from(ConsensusState {
                     state_root: previous_epoch.root,
-                    timestamp: new_timestamp(previous_epoch.timestamp as u128).unwrap(),
+                    timestamp: new_timestamp(previous_epoch.timestamp).unwrap(),
                     validator_set: previous_epoch.new_validators,
                 }))
             } else {
@@ -340,12 +340,12 @@ mod test {
                 numerator: 1,
                 denominator: 3,
             } ,
-            trusting_period: 0,
+            trusting_period: core::time::Duration::new(0,0),
             frozen: false,
         };
         let consensus_state = ConsensusState {
             state_root: [0 as u8; 32],
-            timestamp: new_timestamp(1677130449 * 1_000_000_000).unwrap(),
+            timestamp: new_timestamp(1677130449).unwrap(),
             validator_set: vec![],
         };
         let any_client_state = Any::from(client_state.clone());

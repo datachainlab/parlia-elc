@@ -101,6 +101,6 @@ pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
     Height::new(revision_number, height)
 }
 
-pub fn new_timestamp(nano: u128) -> Result<Time, Error> {
-    Time::from_unix_timestamp_nanos(nano ).map_err(Error::TimeError)
+pub fn new_timestamp(second: u64) -> Result<Time, Error> {
+    Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
 }

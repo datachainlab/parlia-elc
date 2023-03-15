@@ -43,6 +43,7 @@ pub enum Error {
     HeaderNotWithinTrustingPeriod(Time, Time),
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
+    MissingTrustingPeriod,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     InsufficientHeaderToVerify(usize, usize),
