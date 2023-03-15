@@ -1,16 +1,15 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use ibc::core::ics02_client::error::ClientError;
-use ibc::core::ics02_client::header::Header as IBCHeader;
 use ibc_proto::google::protobuf::Any;
 use ibc_proto::protobuf::Protobuf;
+use lcp_types::{Height, Time};
 use prost::Message as _;
 use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_ibc_height_with_chain_id, ChainId, Hash, ValidatorReader, Validators};
+use crate::misc::{ChainId, Hash, ValidatorReader, Validators, new_timestamp, new_height};
 
 use super::errors::Error;
 
@@ -28,36 +27,43 @@ mod eth_headers;
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
-    trusted_height: ibc::Height,
+    trusted_height: Height,
 }
 
 impl Header {
+    pub fn height(&self) -> Height {
+        new_height(self.trusted_height.revision_number(), self.headers.target.number)
+    }
+
+    pub fn timestamp(&self) -> Result<Time, Error> {
+        new_timestamp(self.headers.target.timestamp as u128 * 1_000_000_000)
+    }
+
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
         let rlp = Rlp::new(&self.inner.account_proof);
         rlp.as_list().map_err(Error::RLPDecodeError)
     }
 
-    pub fn trusted_height(&self) -> ibc::Height {
-        self.trusted_height
+    pub fn trusted_height(&self) -> &Height {
+        &self.trusted_height
     }
 
     //TODO cfg when the sufficient test data is found.
     #[cfg(all(not(test), not(feature = "testdata")))]
     pub fn state_root(&self) -> &Hash {
-        &self.headers.target.header.root
+        &self.headers.target.root
     }
 
     pub fn validator_set(&self) -> &Validators {
-        &self.headers.target.header.new_validators
+        &self.headers.target.new_validators
     }
 
     pub fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
-        let target = &self.headers.target.header;
+        let target = &self.headers.target;
         if target.is_epoch {
             if target.number >= EPOCH_BLOCK_PERIOD {
                 let previous_epoch_block = target.number - EPOCH_BLOCK_PERIOD;
-                let previous_epoch_height =
-                    new_ibc_height_with_chain_id(chain_id, previous_epoch_block)?;
+                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_block);
                 let previous_validator_set = ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {
                     return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
@@ -73,7 +79,7 @@ impl Header {
         } else {
             let epoch_count = target.number / EPOCH_BLOCK_PERIOD;
             let last_epoch_number = epoch_count * EPOCH_BLOCK_PERIOD;
-            let last_epoch_height = new_ibc_height_with_chain_id(chain_id, last_epoch_number)?;
+            let last_epoch_height = new_height(chain_id.version(), last_epoch_number);
             let new_validator_set = &ctx.read(last_epoch_height)?;
             if new_validator_set.is_empty() {
                 return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
@@ -84,8 +90,7 @@ impl Header {
                     .verify(chain_id, new_validator_set, new_validator_set)
             } else {
                 let previous_epoch_number = (epoch_count - 1) * EPOCH_BLOCK_PERIOD;
-                let previous_epoch_height =
-                    new_ibc_height_with_chain_id(chain_id, previous_epoch_number)?;
+                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_number);
                 let previous_validator_set = &ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {
                     return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
@@ -97,21 +102,18 @@ impl Header {
     }
 }
 
-impl Protobuf<RawHeader> for Header {}
-impl Protobuf<Any> for Header {}
-
 impl TryFrom<RawHeader> for Header {
-    type Error = ClientError;
+    type Error = Error;
 
     fn try_from(value: RawHeader) -> Result<Header, Self::Error> {
         let trusted_height = value
             .trusted_height
             .as_ref()
             .ok_or(Error::MissingTrustedHeight)?;
-        let trusted_height = ibc::Height::new(
+        let trusted_height = new_height(
             trusted_height.revision_number,
             trusted_height.revision_height,
-        )?;
+        );
 
         // All the header revision must be same as the revision of trusted_height.
         let headers = ETHHeaders::new(trusted_height, value.headers.as_slice())?;
@@ -130,26 +132,14 @@ impl From<Header> for RawHeader {
     }
 }
 
-impl IBCHeader for Header {
-    fn height(&self) -> ibc::Height {
-        self.headers.target.ibc_height.to_owned()
-    }
-
-    fn timestamp(&self) -> ibc::timestamp::Timestamp {
-        self.headers.target.ibc_timestamp.to_owned()
-    }
-}
-
 impl TryFrom<Any> for Header {
-    type Error = ClientError;
+    type Error = Error;
 
     fn try_from(any: Any) -> Result<Header, Self::Error> {
         if any.type_url != PARLIA_HEADER_TYPE_URL {
-            return Err(ClientError::UnknownHeaderType {
-                header_type: any.type_url,
-            });
+            return Err(Error::UnknownHeaderType(any.type_url));
         }
-        let raw = RawHeader::decode(any.value.as_slice()).map_err(ClientError::Decode)?;
+        let raw = RawHeader::decode(any.value.as_slice()).map_err(Error::ProtoDecodeError)?;
         raw.try_into()
     }
 }
@@ -175,8 +165,6 @@ pub mod testdata;
 mod test {
     use std::collections::HashMap;
 
-    use ibc::core::ics02_client::error::ClientError;
-
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
@@ -184,31 +172,19 @@ mod test {
     use crate::errors::Error;
     use crate::header::testdata::*;
     use crate::header::Header;
-    use crate::misc::{new_ibc_height_with_chain_id, ValidatorReader, Validators};
+    use crate::misc::{new_height, new_timestamp, ValidatorReader, Validators};
 
     #[test]
     fn test_success_try_from_header() {
         let header = create_after_checkpoint_headers();
         assert_eq!(header.headers.all.len(), 11);
         assert_eq!(
-            header.headers.target.header, header.headers.all[0],
+            header.headers.target, header.headers.all[0],
             "invalid target"
         );
-        assert_eq!(
-            header.headers.target.ibc_timestamp.nanoseconds() / 1_000_000_000,
-            header.headers.target.header.timestamp,
-            "invalid timestamp"
-        );
-        assert_eq!(
-            header.headers.target.ibc_height.revision_height(),
-            header.headers.target.header.number,
-            "invalid revision height"
-        );
-        assert_eq!(
-            header.headers.target.ibc_height.revision_number(),
-            header.trusted_height.revision_number(),
-            "invalid revision number"
-        );
+        assert_eq!(header.timestamp().unwrap().as_unix_timestamp_secs(), header.headers.target.timestamp, "invalid timestamp");
+        assert_eq!(header.height().revision_number(), header.trusted_height.revision_number(), "invalid revision number");
+        assert_eq!(header.height().revision_height(), header.headers.target.number, "invalid revision height");
     }
 
     #[test]
@@ -227,11 +203,10 @@ mod test {
         };
 
         // Check require trusted height
-        let err = Header::try_from(raw_header.clone()).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            ClientError::from(Error::MissingTrustedHeight).to_string()
-        );
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+           Error::MissingTrustedHeight  => assert!(true),
+            _ => unreachable!()
+        }
 
         // Check greater than trusted height
         let trusted_height = Height {
@@ -239,9 +214,13 @@ mod test {
             revision_height: h1.number,
         };
         raw_header.trusted_height = Some(trusted_height.clone());
-        let err = Header::try_from(raw_header.clone()).unwrap_err();
-        let expected = Error::UnexpectedTrustedHeight(h1.number, trusted_height.revision_height);
-        assert_eq!(err.to_string(), ClientError::from(expected).to_string());
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+            Error::UnexpectedTrustedHeight(a,b)  => {
+                assert_eq!(a,h1.number);
+                assert_eq!(b,trusted_height.revision_height);
+            },
+            _ => unreachable!()
+        }
 
         // Check relation
         let trusted_height = Height {
@@ -249,21 +228,25 @@ mod test {
             revision_height: 1,
         };
         raw_header.trusted_height = Some(trusted_height);
-        let err = Header::try_from(raw_header).unwrap_err();
-        let expected = Error::UnexpectedHeaderRelation(h1.number, h1.number);
-        assert_eq!(err.to_string(), ClientError::from(expected).to_string());
+        match Header::try_from(raw_header).unwrap_err() {
+            Error::UnexpectedHeaderRelation(a,b)  => {
+                assert_eq!(a,h1.number);
+                assert_eq!(b,h1.number);
+            },
+            _ => unreachable!()
+        }
     }
 
     struct MockValidatorReader {
-        validators: HashMap<ibc::Height, Validators>,
+        validators: HashMap<lcp_types::Height, Validators>,
     }
     impl MockValidatorReader {
         fn previous_only() -> Self {
             let mainnet = &mainnet();
             let previous_epoch = fill(create_previous_epoch_block());
-            let mut validators = HashMap::<ibc::Height, Validators>::new();
+            let mut validators = HashMap::<lcp_types::Height, Validators>::new();
             validators.insert(
-                new_ibc_height_with_chain_id(mainnet, previous_epoch.number).unwrap(),
+                new_height(mainnet.version(), previous_epoch.number),
                 previous_epoch.new_validators,
             );
             Self { validators }
@@ -272,20 +255,20 @@ mod test {
             let mainnet = &mainnet();
             let previous_epoch = fill(create_previous_epoch_block());
             let current_epoch = fill(create_epoch_block());
-            let mut validators = HashMap::<ibc::Height, Validators>::new();
+            let mut validators = HashMap::<lcp_types::Height, Validators>::new();
             validators.insert(
-                new_ibc_height_with_chain_id(mainnet, current_epoch.number).unwrap(),
+                new_height(mainnet.version(), current_epoch.number),
                 current_epoch.new_validators,
             );
             validators.insert(
-                new_ibc_height_with_chain_id(mainnet, previous_epoch.number).unwrap(),
+                new_height(mainnet.version(), previous_epoch.number),
                 previous_epoch.new_validators,
             );
             Self { validators }
         }
     }
     impl ValidatorReader for MockValidatorReader {
-        fn read(&self, height: ibc::Height) -> Result<Validators, Error> {
+        fn read(&self, height: lcp_types::Height) -> Result<Validators, Error> {
             Ok(self.validators.get(&height).unwrap_or(&vec![]).clone())
         }
     }
@@ -309,10 +292,10 @@ mod test {
         let mut reader = MockValidatorReader::default();
         reader
             .validators
-            .remove(&new_ibc_height_with_chain_id(mainnet, epoch.number).unwrap());
+            .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
             Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }
@@ -322,10 +305,10 @@ mod test {
         let mut reader = MockValidatorReader::default();
         reader
             .validators
-            .remove(&new_ibc_height_with_chain_id(mainnet, epoch.number).unwrap());
+            .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
             Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }
@@ -352,10 +335,10 @@ mod test {
         let mut reader = MockValidatorReader::default();
         reader
             .validators
-            .remove(&new_ibc_height_with_chain_id(mainnet, epoch.number).unwrap());
+            .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
             Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }
@@ -381,10 +364,10 @@ mod test {
         let mut reader = MockValidatorReader::default();
         reader
             .validators
-            .remove(&new_ibc_height_with_chain_id(mainnet, epoch.number).unwrap());
+            .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
             Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }
@@ -394,10 +377,10 @@ mod test {
         let mut reader = MockValidatorReader::default();
         reader
             .validators
-            .remove(&new_ibc_height_with_chain_id(mainnet, epoch.number).unwrap());
+            .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
             Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }

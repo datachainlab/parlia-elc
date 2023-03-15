@@ -4,22 +4,12 @@ use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use commitments::{gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
+use commitments::{CommitmentPrefix, gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
 use crypto::Keccak256;
-use ibc::core::ics02_client::client_state::{ClientState as _, UpdatedState};
-use ibc::core::ics02_client::consensus_state::ConsensusState as _;
-use ibc::core::ics02_client::error::ClientError;
-use ibc::core::ics02_client::header::Header as IBCHeader;
-use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
-use ibc::core::ics24_host::identifier::ClientId;
-use ibc::core::ics24_host::Path;
 
 use ibc_proto::google::protobuf::Any as IBCAny;
-use lcp_types::{Any, Height};
-use light_client::{
-    ClientReader, CreateClientResult, Error as LightClientError, LightClient,
-    StateVerificationResult, UpdateClientResult,
-};
+use lcp_types::{Any, ClientId, Height};
+use light_client::{ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient, StateVerificationResult, UpdateClientResult};
 use light_client_registry::LightClientRegistry;
 use validation_context::ValidationParams;
 
@@ -46,12 +36,12 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        ClientState::client_type().to_string()
+        "99-parlia" .to_string()
     }
 
     fn latest_height(
         &self,
-        ctx: &dyn ClientReader,
+        ctx: &dyn HostClientReader,
         client_id: &ClientId,
     ) -> Result<Height, LightClientError> {
         let any_client_state = read_client_state(ctx, client_id)?;
@@ -61,7 +51,7 @@ impl LightClient for ParliaLightClient {
 
     fn create_client(
         &self,
-        _ctx: &dyn ClientReader,
+        _ctx: &dyn HostClientReader,
         any_client_state: Any,
         any_consensus_state: Any,
     ) -> Result<CreateClientResult, LightClientError> {
@@ -89,7 +79,7 @@ impl LightClient for ParliaLightClient {
 
     fn update_client(
         &self,
-        ctx: &dyn ClientReader,
+        ctx: &dyn HostClientReader,
         client_id: ClientId,
         any_header: Any,
     ) -> Result<UpdateClientResult, LightClientError> {
@@ -110,12 +100,14 @@ impl LightClient for ParliaLightClient {
             }));
         }
 
+        let trusted_consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
+
         // Create new state and ensure header is valid
         let UpdatedState {
             client_state: new_client_state,
             consensus_state: new_consensus_state,
         } = client_state
-            .check_header_and_update_state(&Context::new(ctx), client_id, header.into())
+            .check_header_and_update_state(&trusted_consensus_state, client_id, header.into())
             .map_err(|e| {
                 LightClientError::ics02(ClientError::HeaderVerificationFailure {
                     reason: e.to_string(),
@@ -150,46 +142,43 @@ impl LightClient for ParliaLightClient {
 
     fn verify_membership(
         &self,
-        ctx: &dyn ClientReader,
+        ctx: &dyn HostClientReader,
         client_id: ClientId,
-        prefix: Vec<u8>,
+        prefix: CommitmentPrefix,
         path: String,
         value: Vec<u8>,
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<StateVerificationResult, LightClientError> {
-        let (prefix, path) = apply_prefix(prefix, &path)?;
-
-        // Do not keccak already keccaked values such as commitment packets
-        let value = match path {
-            Path::Commitment(_) => value,
-            _ => value.keccak256().to_vec(),
-        };
-        let mut result = self.verify_commitment(
+        let mut state_id = self.verify_commitment(
             ctx,
             client_id,
-            prefix,
-            path,
+            &prefix,
+            &path,
             Some(value.clone()),
-            proof_height,
+            &proof_height,
             proof,
         )?;
-        result.state_commitment.value =
-            Some(value.try_into().map_err(Error::UnexpectedCommitmentValue)?);
-        Ok(result)
+
+        let value = Some(value.try_into().map_err(Error::UnexpectedCommitmentValue)?);
+        Ok(StateVerificationResult {
+            state_commitment: StateCommitment::new(prefix, path, value, proof_height, state_id),
+        })
     }
 
     fn verify_non_membership(
         &self,
-        ctx: &dyn ClientReader,
+        ctx: &dyn HostClientReader,
         client_id: ClientId,
-        prefix: Vec<u8>,
+        prefix: CommitmentPrefix,
         path: String,
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<StateVerificationResult, LightClientError> {
-        let (prefix, path) = apply_prefix(prefix, &path)?;
-        self.verify_commitment(ctx, client_id, prefix, path, None, proof_height, proof)
+        let state_id = self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
+        Ok(StateVerificationResult {
+            state_commitment: StateCommitment::new(prefix, path, None, proof_height, state_id),
+        })
     }
 }
 
@@ -199,12 +188,12 @@ impl ParliaLightClient {
         &self,
         ctx: &dyn ClientReader,
         client_id: ClientId,
-        prefix: CommitmentPrefix,
-        path: Path,
+        prefix: &CommitmentPrefix,
+        path: &str,
         value: Option<Vec<u8>>,
-        proof_height: Height,
+        proof_height: &Height,
         storage_proof_rlp: Vec<u8>,
-    ) -> Result<StateVerificationResult, LightClientError> {
+    ) -> Result<StateID, LightClientError> {
         let any_client_state = read_client_state(ctx, &client_id)?;
         let client_state: ClientState = try_from_any(any_client_state.clone())?;
         if client_state.is_frozen() {
@@ -212,27 +201,25 @@ impl ParliaLightClient {
                 client_id,
             }));
         }
-        if Height::from(client_state.latest_height()) != proof_height {
+        let proof_height = *proof_height;
+        if client_state.latest_height() != proof_height {
             return Err(Error::UnexpectedHeight(proof_height).into());
         }
 
-        let any_consensus_state = read_consensus_state(ctx, &client_id, proof_height)?;
+        let any_consensus_state = read_consensus_state(ctx, &client_id, &proof_height)?;
 
         let consensus_state: ConsensusState = try_from_any(any_consensus_state.clone())?;
-        let storage_root = consensus_state.state_root().map_err(Error::ParliaIBCLC)?;
+        let storage_root = consensus_state.state_root;
         ClientState::verify_commitment(
             &storage_root,
             &storage_proof_rlp,
-            YuiIBCPath::from(path.to_string().as_bytes()),
+            YuiIBCPath::from(path.as_bytes()),
             &value,
         )
         .map_err(Error::ParliaIBCLC)?;
 
-        let state_id = state_id(&any_client_state, &any_consensus_state)?;
+        state_id(&any_client_state, &any_consensus_state)
 
-        Ok(StateVerificationResult {
-            state_commitment: StateCommitment::new(prefix, path, None, proof_height, state_id),
-        })
     }
 }
 
@@ -250,7 +237,7 @@ fn read_client_state(
 fn read_consensus_state(
     ctx: &dyn ClientReader,
     client_id: &ClientId,
-    height: Height,
+    height: &Height,
 ) -> Result<Any, LightClientError> {
     ctx.consensus_state(client_id, height)
         .map_err(LightClientError::ics02)
@@ -261,28 +248,16 @@ fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, 
     any.try_into().map_err(LightClientError::ics02)
 }
 
-fn apply_prefix(prefix: Vec<u8>, path: &str) -> Result<(CommitmentPrefix, Path), Error> {
-    let prefix = prefix.try_into().map_err(Error::ICS23)?;
-    //TODO apply prefix if needed
-    let path = Path::from_str(path).map_err(Error::Path)?;
-    Ok((prefix, path))
-}
-
 #[cfg(test)]
 mod test {
     use alloc::string::{String, ToString};
     use alloc::vec;
+    use alloc::vec::Vec;
     use core::str::FromStr;
 
     use hex_literal::hex;
-    use ibc::core::ics02_client::error::ClientError;
-    use ibc::core::ics02_client::header::Header;
-    use ibc::core::ics23_commitment::commitment::CommitmentRoot;
-    use ibc::core::ics24_host::identifier::ClientId;
-    use ibc::core::ics24_host::Path;
-    use ibc::timestamp::Timestamp;
-    use lcp_types::{Any, Height};
-    use light_client::{ClientReader, LightClient};
+    use lcp_types::{Any, ClientId, Height, Time};
+    use light_client::{ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient};
 
     use parlia_ibc_lc::client_state::ClientState;
     use parlia_ibc_lc::consensus_state::ConsensusState;
@@ -290,18 +265,34 @@ mod test {
     use parlia_ibc_lc::header::testdata::{
         create_epoch_block, create_previous_epoch_block, fill, to_rlp,
     };
-    use parlia_ibc_lc::misc::{
-        new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, ChainId,
-    };
+    use parlia_ibc_lc::misc::{new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, ChainId, new_height};
 
     use crate::client::{into_any, try_from_any, ParliaLightClient};
 
-    struct MockClientReader;
+    struct MockClientReader{
+    }
 
-    impl ClientReader for MockClientReader {
-        fn client_type(&self, _client_id: &ClientId) -> Result<String, ClientError> {
+    impl HostContext for MockClientReader {
+        fn host_timestamp(&self) -> Time {
+            header::testdata::create_after_checkpoint_headers().timestamp().unwrap()
+        }
+    }
+
+    impl store::KVStore for MockClientReader {
+        fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
             todo!()
         }
+
+        fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+            todo!()
+        }
+
+        fn remove(&mut self, key: &[u8]) {
+            todo!()
+        }
+    }
+
+    impl ClientReader for MockClientReader {
 
         fn client_state(&self, client_id: &ClientId) -> Result<Any, ClientError> {
             let mainnet = ChainId::new(56);
@@ -309,7 +300,7 @@ mod test {
                 ClientState {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: new_ibc_height(1, 2).unwrap(),
+                    latest_height: Height::new(1, 2),
                     trust_level: Default::default(),
                     trusting_period: 1_000_000_000,
                     frozen: false,
@@ -318,7 +309,7 @@ mod test {
                 ClientState {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: new_ibc_height(1, 1).unwrap(),
+                    latest_height: Height::new(1, 1),
                     trust_level: Default::default(),
                     trusting_period: 1_000_000_000,
                     frozen: false,
@@ -365,17 +356,6 @@ mod test {
             }
         }
 
-        fn host_height(&self) -> Height {
-            todo!()
-        }
-
-        fn host_timestamp(&self) -> Timestamp {
-            header::testdata::create_after_checkpoint_headers().timestamp()
-        }
-
-        fn client_counter(&self) -> Result<u64, ClientError> {
-            todo!()
-        }
     }
 
     #[test]
@@ -387,7 +367,7 @@ mod test {
         let client_state = ClientState {
             chain_id: mainnet.clone(),
             ibc_store_address: [0; 20],
-            latest_height: new_ibc_height_with_chain_id(&mainnet, 1).unwrap(),
+            latest_height: new_height(mainnet.version(), 1).unwrap(),
             trust_level: Default::default(),
             trusting_period: 0,
             frozen: false,
@@ -479,7 +459,7 @@ mod test {
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
-                assert_eq!(data.state_commitment.path, Path::from_str(path).unwrap());
+                assert_eq!(data.state_commitment.path, path);
                 assert_eq!(data.state_commitment.height, proof_height.into());
                 assert_eq!(data.state_commitment.value, Some(expected));
             }
@@ -496,7 +476,7 @@ mod test {
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
-                assert_eq!(data.state_commitment.path, Path::from_str(path).unwrap());
+                assert_eq!(data.state_commitment.path,  path.to_string());
                 assert_eq!(data.state_commitment.height, proof_height.into());
                 assert_eq!(data.state_commitment.value, None);
             }

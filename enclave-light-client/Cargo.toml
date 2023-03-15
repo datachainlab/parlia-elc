@@ -7,8 +7,6 @@ edition = "2021"
 [dependencies]
 sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git", optional = true }
 
-ibc = { version = "0.29.0", default-features = false, features = ["serde"] }
-ibc-proto = { version = "0.26.0", default-features = false, features = ["parity-scale-codec", "borsh"] }
 prost = { version = "0.11", default-features = false }
 
 log = { version = "0.4.8", optional = true }
@@ -41,5 +39,7 @@ sgx = [
 ]
 
 [dev-dependencies]
+store = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
+
 parlia-ibc-lc = { path = "../light-client", features = ["testdata"] }
 hex-literal = "0.3.1"

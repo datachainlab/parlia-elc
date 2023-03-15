@@ -1,21 +1,22 @@
 use alloc::vec::Vec;
+use alloc::string::String;
 
-use ibc::core::ics02_client::error::ClientError;
-use ibc::core::ContextError;
-use ibc::timestamp::ParseTimestampError;
 use k256::ecdsa::signature;
-use rlp::DecoderError;
+use lcp_types::{Time, TimeError};
 
 use crate::misc::{Address, BlockNumber, NanoTime};
 
 #[derive(Debug)]
 pub enum Error {
-    ICS02Error(ClientError),
-    ContextError(ContextError),
-    ICSTimestamp(ParseTimestampError),
+    LCPError(light_client::Error),
 
     // data conversion error
-    RLPDecodeError(DecoderError),
+    TimeError(TimeError),
+    RLPDecodeError(rlp::DecoderError),
+    ProtoDecodeError(prost::DecodeError),
+    UnknownHeaderType(String),
+    UnknownClientStateType(String),
+    UnknownConsensusStateType(String),
 
     // ClientState error
     MissingLatestHeight,
@@ -35,6 +36,8 @@ pub enum Error {
     UnexpectedStateRoot(Vec<u8>),
 
     // Header error
+    HeaderNotWithinTrustingPeriod(Time, Time),
+    InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
@@ -60,22 +63,4 @@ pub enum Error {
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
 }
 
-impl From<Error> for ClientError {
-    fn from(value: Error) -> Self {
-        match value {
-            Error::ICS02Error(ce) => ce,
-            e => ClientError::Other {
-                description: format!("{:?}", e),
-            },
-        }
-    }
-}
 
-pub fn into_client_error(e: ContextError) -> ClientError {
-    match e {
-        ContextError::ClientError(e) => e,
-        _ => ClientError::Other {
-            description: format!("{:?}", e),
-        },
-    }
-}
