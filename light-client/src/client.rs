@@ -220,6 +220,7 @@ mod test {
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
     use light_client::{ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient};
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Fraction;
     use crate::client::ParliaLightClient;
 
     use crate::header;
@@ -257,12 +258,15 @@ mod test {
 
         fn client_state(&self, client_id: &ClientId) -> Result<Any, light_client::Error> {
             let mainnet = ChainId::new(56);
-            let cs = if client_id.as_str() == "99-bscchain-0" {
+            let cs = if client_id.as_str() == "99-parlia-0" {
                 ClientState {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
                     latest_height: Height::new(1, 2),
-                    trust_level: Default::default(),
+                    trust_level: Fraction {
+                        numerator: 1,
+                        denominator: 3,
+                    },
                     trusting_period: 1_000_000_000,
                     frozen: false,
                 }
@@ -271,7 +275,10 @@ mod test {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
                     latest_height: Height::new(1, 1),
-                    trust_level: Default::default(),
+                    trust_level: Fraction {
+                        numerator: 1,
+                        denominator: 3,
+                    } ,
                     trusting_period: 1_000_000_000,
                     frozen: false,
                 }
@@ -329,7 +336,10 @@ mod test {
             chain_id: mainnet.clone(),
             ibc_store_address: [0; 20],
             latest_height: new_height(mainnet.version(), 1),
-            trust_level: Default::default(),
+            trust_level: Fraction {
+                numerator: 1,
+                denominator: 3,
+            } ,
             trusting_period: 0,
             frozen: false,
         };
