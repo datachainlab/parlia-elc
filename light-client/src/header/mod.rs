@@ -1,9 +1,9 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use ibc_proto::google::protobuf::Any;
+use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{Height, Time};
+use lcp_types::{Height, Time, Any};
 use prost::Message as _;
 use rlp::Rlp;
 
@@ -44,12 +44,12 @@ impl Header {
         rlp.as_list().map_err(Error::RLPDecodeError)
     }
 
-    pub fn trusted_height(&self) -> &Height {
-        &self.trusted_height
+    pub fn trusted_height(&self) -> Height {
+        self.trusted_height
     }
 
     //TODO cfg when the sufficient test data is found.
-    #[cfg(all(not(test), not(feature = "testdata")))]
+    #[cfg(not(test))]
     pub fn state_root(&self) -> &Hash {
         &self.headers.target.root
     }
@@ -132,10 +132,10 @@ impl From<Header> for RawHeader {
     }
 }
 
-impl TryFrom<Any> for Header {
+impl TryFrom<IBCAny> for Header {
     type Error = Error;
 
-    fn try_from(any: Any) -> Result<Header, Self::Error> {
+    fn try_from(any: IBCAny) -> Result<Header, Self::Error> {
         if any.type_url != PARLIA_HEADER_TYPE_URL {
             return Err(Error::UnknownHeaderType(any.type_url));
         }
@@ -145,6 +145,20 @@ impl TryFrom<Any> for Header {
 }
 
 impl From<Header> for Any {
+    fn from(value: Header) -> Self {
+        IBCAny::from(value).into()
+    }
+}
+
+impl TryFrom<Any> for Header {
+    type Error = Error;
+
+    fn try_from(any: Any) -> Result<Self, Self::Error> {
+        IBCAny::from(any).try_into()
+    }
+}
+
+impl From<Header> for IBCAny {
     fn from(value: Header) -> Self {
         let value: RawHeader = value.into();
         let mut v = Vec::new();
@@ -158,8 +172,8 @@ impl From<Header> for Any {
     }
 }
 
-#[cfg(any(test, feature = "testdata"))]
-pub mod testdata;
+#[cfg(test)]
+pub(crate) mod testdata;
 
 #[cfg(test)]
 mod test {

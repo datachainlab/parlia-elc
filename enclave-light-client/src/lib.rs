@@ -12,6 +12,4 @@ pub(crate) mod sgx_reexport_prelude {
     pub use thiserror_sgx as thiserror;
 }
 
-mod client;
-pub mod context;
 mod errors;

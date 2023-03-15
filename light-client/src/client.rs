@@ -13,13 +13,12 @@ use light_client::{ClientReader, CreateClientResult, Error as LightClientError, 
 use light_client_registry::LightClientRegistry;
 use validation_context::ValidationParams;
 
-use parlia_ibc_lc::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
-use parlia_ibc_lc::consensus_state::ConsensusState;
-use parlia_ibc_lc::header::Header;
+use crate::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
+use crate::consensus_state::ConsensusState;
+use crate::header::Header;
 
-use parlia_ibc_lc::path::YuiIBCPath;
+use crate::path::YuiIBCPath;
 
-use crate::context::Context;
 use crate::errors::Error;
 
 #[derive(Default)]
@@ -44,9 +43,9 @@ impl LightClient for ParliaLightClient {
         ctx: &dyn HostClientReader,
         client_id: &ClientId,
     ) -> Result<Height, LightClientError> {
-        let any_client_state = read_client_state(ctx, client_id)?;
-        let client_state: ClientState = try_from_any(any_client_state)?;
-        Ok(client_state.latest_height().into())
+        let any_client_state = ctx.client_state(client_id)?;
+        let client_state = ClientState::try_from(any_client_state)?;
+        Ok(client_state.latest_height)
     }
 
     fn create_client(
@@ -56,11 +55,11 @@ impl LightClient for ParliaLightClient {
         any_consensus_state: Any,
     ) -> Result<CreateClientResult, LightClientError> {
         let new_state_id = state_id(&any_client_state, &any_consensus_state)?;
-        let client_state: ClientState = try_from_any(any_client_state.clone())?;
-        let consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
+        let client_state = ClientState::try_from(any_client_state.clone())?;
+        let consensus_state =  ConsensusState::try_from(any_consensus_state)?;
 
-        let height = client_state.latest_height().into();
-        let timestamp = consensus_state.timestamp().into();
+        let height = client_state.latest_height;
+        let timestamp = consensus_state.timestamp;
 
         Ok(CreateClientResult {
             height,
@@ -84,54 +83,40 @@ impl LightClient for ParliaLightClient {
         any_header: Any,
     ) -> Result<UpdateClientResult, LightClientError> {
         //Ensure header can be verified.
-        let header: Header = try_from_any(any_header)?;
+        let header = Header::try_from(any_header)?;
         let height = header.height();
-        let timestamp = header.timestamp();
+        let timestamp = header.timestamp()?;
         let trusted_height = header.trusted_height();
-        let any_client_state = read_client_state(ctx, &client_id)?;
-        let any_consensus_state = read_consensus_state(ctx, &client_id, trusted_height.into())?;
+        let any_client_state =  ctx.client_state(&client_id)?;
+        let any_consensus_state = ctx.consensus_state(&client_id, &trusted_height)?;
         let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
 
         //Ensure client is not frozen
-        let client_state: ClientState = try_from_any(any_client_state)?;
-        if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ClientError::ClientFrozen {
-                client_id,
-            }));
+        let client_state = ClientState::try_from(any_client_state)?;
+        if client_state.frozen {
+            return Err(Error::ClientFrozen(client_id).into())
         }
 
-        let trusted_consensus_state: ConsensusState = try_from_any(any_consensus_state)?;
+        let trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
 
         // Create new state and ensure header is valid
-        let UpdatedState {
-            client_state: new_client_state,
-            consensus_state: new_consensus_state,
-        } = client_state
-            .check_header_and_update_state(&trusted_consensus_state, client_id, header.into())
-            .map_err(|e| {
-                LightClientError::ics02(ClientError::HeaderVerificationFailure {
-                    reason: e.to_string(),
-                })
-            })?;
+        let (new_client_state, new_consensus_state) = client_state
+            .check_header_and_update_state(ctx, &trusted_consensus_state, client_id, header)?;
 
-        let new_height = new_client_state.latest_height().into();
-        let new_any_client_state =
-            ClientState::try_from(new_client_state.as_ref()).map_err(LightClientError::ics02)?;
-        let new_any_client_state: Any = IBCAny::from(new_any_client_state).into();
-        let new_any_consensus_state = ConsensusState::try_from(new_consensus_state.as_ref())
-            .map_err(LightClientError::ics02)?;
-        let new_any_consensus_state: Any = IBCAny::from(new_any_consensus_state).into();
+        let new_height = new_client_state.latest_height;
+        let new_any_client_state = Any::from(new_client_state);
+        let new_any_consensus_state = Any::from(new_consensus_state);
         let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
 
         Ok(UpdateClientResult {
             new_any_client_state,
             new_any_consensus_state,
-            height: height.into(),
+            height,
             commitment: UpdateClientCommitment {
                 prev_state_id: Some(prev_state_id),
                 new_state_id,
                 new_state: None,
-                prev_height: Some(trusted_height.into()),
+                prev_height: Some(trusted_height),
                 new_height,
                 timestamp: timestamp.into(),
                 validation_params: ValidationParams::Empty,
@@ -150,7 +135,7 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<StateVerificationResult, LightClientError> {
-        let mut state_id = self.verify_commitment(
+        let state_id = self.verify_commitment(
             ctx,
             client_id,
             &prefix,
@@ -186,66 +171,43 @@ impl ParliaLightClient {
     #[allow(clippy::too_many_arguments)]
     fn verify_commitment(
         &self,
-        ctx: &dyn ClientReader,
+        ctx: &dyn HostClientReader,
         client_id: ClientId,
-        prefix: &CommitmentPrefix,
+        _prefix: &CommitmentPrefix,
         path: &str,
         value: Option<Vec<u8>>,
         proof_height: &Height,
         storage_proof_rlp: Vec<u8>,
     ) -> Result<StateID, LightClientError> {
-        let any_client_state = read_client_state(ctx, &client_id)?;
-        let client_state: ClientState = try_from_any(any_client_state.clone())?;
-        if client_state.is_frozen() {
-            return Err(LightClientError::ics02(ClientError::ClientFrozen {
-                client_id,
-            }));
+        let any_client_state = ctx.client_state(&client_id)?;
+        let client_state = ClientState::try_from(any_client_state.clone())?;
+        if client_state.frozen {
+            return Err(Error::ClientFrozen(client_id).into());
         }
         let proof_height = *proof_height;
-        if client_state.latest_height() != proof_height {
-            return Err(Error::UnexpectedHeight(proof_height).into());
+        if client_state.latest_height != proof_height {
+            return Err(Error::UnexpectedLatestHeight(proof_height, client_state.latest_height).into());
         }
 
-        let any_consensus_state = read_consensus_state(ctx, &client_id, &proof_height)?;
+        let any_consensus_state = ctx.consensus_state(&client_id, &proof_height)?;
+        let state_id = state_id(&any_client_state, &any_consensus_state)?;
 
-        let consensus_state: ConsensusState = try_from_any(any_consensus_state.clone())?;
+        let consensus_state = ConsensusState::try_from(any_consensus_state)?;
         let storage_root = consensus_state.state_root;
         ClientState::verify_commitment(
             &storage_root,
             &storage_proof_rlp,
             YuiIBCPath::from(path.as_bytes()),
             &value,
-        )
-        .map_err(Error::ParliaIBCLC)?;
+        )?;
 
-        state_id(&any_client_state, &any_consensus_state)
+        Ok(state_id)
 
     }
 }
 
 fn state_id(client_state: &Any, consensus_state: &Any) -> Result<StateID, LightClientError> {
     gen_state_id_from_any(client_state, consensus_state).map_err(LightClientError::commitment)
-}
-
-fn read_client_state(
-    ctx: &dyn ClientReader,
-    client_id: &ClientId,
-) -> Result<Any, LightClientError> {
-    ctx.client_state(client_id).map_err(LightClientError::ics02)
-}
-
-fn read_consensus_state(
-    ctx: &dyn ClientReader,
-    client_id: &ClientId,
-    height: &Height,
-) -> Result<Any, LightClientError> {
-    ctx.consensus_state(client_id, height)
-        .map_err(LightClientError::ics02)
-}
-
-fn try_from_any<T: TryFrom<IBCAny, Error = ClientError>>(any: Any) -> Result<T, LightClientError> {
-    let any: IBCAny = any.into();
-    any.try_into().map_err(LightClientError::ics02)
 }
 
 #[cfg(test)]
@@ -258,23 +220,20 @@ mod test {
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
     use light_client::{ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient};
+    use crate::client::ParliaLightClient;
 
-    use parlia_ibc_lc::client_state::ClientState;
-    use parlia_ibc_lc::consensus_state::ConsensusState;
-    use parlia_ibc_lc::header;
-    use parlia_ibc_lc::header::testdata::{
-        create_epoch_block, create_previous_epoch_block, fill, to_rlp,
-    };
-    use parlia_ibc_lc::misc::{new_ibc_height, new_ibc_height_with_chain_id, new_ibc_timestamp, ChainId, new_height};
+    use crate::header;
 
-    use crate::client::{into_any, try_from_any, ParliaLightClient};
+    use crate::client_state::ClientState;
+    use crate::consensus_state::ConsensusState;
+    use crate::header::testdata::{create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block, fill, to_rlp};
+    use crate::misc::{ChainId, Hash, new_height, new_timestamp};
 
-    struct MockClientReader{
-    }
+    struct MockClientReader;
 
     impl HostContext for MockClientReader {
         fn host_timestamp(&self) -> Time {
-            header::testdata::create_after_checkpoint_headers().timestamp().unwrap()
+            create_after_checkpoint_headers().timestamp().unwrap()
         }
     }
 
@@ -292,9 +251,11 @@ mod test {
         }
     }
 
+    impl HostClientReader for MockClientReader {}
+
     impl ClientReader for MockClientReader {
 
-        fn client_state(&self, client_id: &ClientId) -> Result<Any, ClientError> {
+        fn client_state(&self, client_id: &ClientId) -> Result<Any, light_client::Error> {
             let mainnet = ChainId::new(56);
             let cs = if client_id.as_str() == "99-bscchain-0" {
                 ClientState {
@@ -315,40 +276,40 @@ mod test {
                     frozen: false,
                 }
             };
-            Ok(into_any(cs))
+            Ok(Any::from(cs))
         }
 
         fn consensus_state(
             &self,
             _client_id: &ClientId,
-            height: Height,
-        ) -> Result<Any, ClientError> {
+            height: &Height,
+        ) -> Result<Any, light_client::Error> {
             let current_epoch = fill(create_epoch_block());
             let previous_epoch = fill(create_previous_epoch_block());
             if height.revision_height() == 1 {
-                Ok(into_any(ConsensusState {
-                    state_root: CommitmentRoot::from_bytes(&[]),
+                Ok(Any::from(ConsensusState {
+                    state_root: [0 as u8; 32],
                     timestamp: self.host_timestamp(),
                     validator_set: vec![],
                 }))
             } else if height.revision_height() == 2 {
-                Ok(into_any(ConsensusState {
-                    state_root: CommitmentRoot::from_bytes(&hex!(
+                Ok(Any::from(ConsensusState {
+                    state_root: hex!(
                         "c7c2351e84411a86c7165856578a0668fddfe77e30d63965184af89dfb192f18"
-                    )),
+                    ) as Hash,
                     timestamp: self.host_timestamp(),
                     validator_set: vec![],
                 }))
             } else if height.revision_height() == current_epoch.number {
-                Ok(into_any(ConsensusState {
-                    state_root: CommitmentRoot::from_bytes(&current_epoch.root),
-                    timestamp: new_ibc_timestamp(current_epoch.timestamp).unwrap(),
+                Ok(Any::from(ConsensusState {
+                    state_root: current_epoch.root,
+                    timestamp: new_timestamp(current_epoch.timestamp as u128).unwrap(),
                     validator_set: current_epoch.new_validators,
                 }))
             } else if height.revision_height() == previous_epoch.number {
-                Ok(into_any(ConsensusState {
-                    state_root: CommitmentRoot::from_bytes(&previous_epoch.root),
-                    timestamp: new_ibc_timestamp(previous_epoch.timestamp).unwrap(),
+                Ok(Any::from(ConsensusState {
+                    state_root: previous_epoch.root,
+                    timestamp: new_timestamp(previous_epoch.timestamp as u128).unwrap(),
                     validator_set: previous_epoch.new_validators,
                 }))
             } else {
@@ -367,18 +328,18 @@ mod test {
         let client_state = ClientState {
             chain_id: mainnet.clone(),
             ibc_store_address: [0; 20],
-            latest_height: new_height(mainnet.version(), 1).unwrap(),
+            latest_height: new_height(mainnet.version(), 1),
             trust_level: Default::default(),
             trusting_period: 0,
             frozen: false,
         };
         let consensus_state = ConsensusState {
-            state_root: CommitmentRoot::from_bytes(&[0; 32]),
-            timestamp: new_ibc_timestamp(1677130449 * 1_000_000_000).unwrap(),
+            state_root: [0 as u8; 32],
+            timestamp: new_timestamp(1677130449 * 1_000_000_000).unwrap(),
             validator_set: vec![],
         };
-        let any_client_state = into_any(client_state.clone());
-        let any_consensus_state = into_any(consensus_state.clone());
+        let any_client_state = Any::from(client_state.clone());
+        let any_consensus_state = Any::from(consensus_state.clone());
         match client.create_client(&ctx, any_client_state.clone(), any_consensus_state) {
             Ok(result) => {
                 assert_eq!(result.height, client_state.latest_height.into());
@@ -404,30 +365,28 @@ mod test {
         let ctx = MockClientReader;
         let client = ParliaLightClient::default();
 
-        let header = header::testdata::create_after_checkpoint_headers();
-        match client.update_client(&ctx, ClientId::default(), into_any(header.clone())) {
+        let header = create_after_checkpoint_headers();
+        match client.update_client(&ctx, ClientId::new("99-parlia", 0).unwrap(), Any::from(header.clone())) {
             Ok(data) => {
-                let new_client_state: ClientState =
-                    try_from_any(data.new_any_client_state).unwrap();
-                let new_consensus_state: ConsensusState =
-                    try_from_any(data.new_any_consensus_state).unwrap();
+                let new_client_state = ClientState::try_from(data.new_any_client_state).unwrap();
+                let new_consensus_state = ConsensusState::try_from(data.new_any_consensus_state).unwrap();
                 assert_eq!(data.height, header.height().into());
                 assert_eq!(new_client_state.latest_height, header.height());
                 assert_eq!(
-                    new_consensus_state.state_root.as_bytes(),
+                    new_consensus_state.state_root,
                     hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 );
-                assert_eq!(new_consensus_state.timestamp, header.timestamp());
+                assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
                 assert!(new_consensus_state.validator_set.is_empty());
                 assert_eq!(data.commitment.new_height, header.height().into());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
                 assert_eq!(
                     data.commitment.prev_height,
-                    Some(new_ibc_height(1, 1).unwrap().into())
+                    Some(new_height(1, 1))
                 );
                 assert!(data.commitment.prev_state_id.is_some());
-                assert_eq!(data.commitment.timestamp, header.timestamp().into());
+                assert_eq!(data.commitment.timestamp, header.timestamp().unwrap());
             }
             Err(e) => unreachable!("error {:?}", e),
         };
@@ -439,8 +398,8 @@ mod test {
         let client = ParliaLightClient::default();
         let prefix = vec![0];
         let path = "commitments/ports/port-1/channels/channel-1/sequences/1";
-        let proof_height = new_ibc_height(1, 2).unwrap();
-        let client_id = ClientId::from_str("99-bscchain-0").unwrap();
+        let proof_height = new_height(1, 2);
+        let client_id = ClientId::from_str("99-parlia-0").unwrap();
         let mut expected = [0_u8; 32];
         expected[0] = 51;
         expected[1] = 52;
@@ -484,8 +443,4 @@ mod test {
         };
     }
 
-    fn into_any<T: Into<IBCAny>>(src: T) -> Any {
-        let any: IBCAny = src.into();
-        any.into()
-    }
 }

@@ -3,10 +3,10 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::time::Duration;
-use ibc_proto::google::protobuf::Any;
+use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{ClientId, Height};
+use lcp_types::{ClientId, Height, Any};
 use light_client::HostClientReader;
 use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout};
@@ -51,22 +51,13 @@ impl ClientState {
         )
     }
 
-    pub fn latest_height(&self) -> Height {
-        self.latest_height.to_owned()
-    }
-
-    pub fn is_frozen(&self) -> bool {
-        self.frozen
-    }
-
     pub fn check_header_and_update_state(
         &self,
         ctx: &dyn HostClientReader,
         trusted_consensus_state: &ConsensusState,
         client_id: ClientId,
-        header: Any,
+        header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
-        let header: Header = header.try_into()?;
 
         // Ensure last consensus state is within the trusting period
         let now = ctx.host_timestamp();
@@ -167,10 +158,10 @@ impl From<ClientState> for RawClientState {
     }
 }
 
-impl TryFrom<Any> for ClientState {
+impl TryFrom<IBCAny> for ClientState {
     type Error = Error;
 
-    fn try_from(any: Any) -> Result<Self, Self::Error> {
+    fn try_from(any: IBCAny) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CLIENT_STATE_TYPE_URL {
             return Err(Error::UnknownClientStateType(any.type_url))
         }
@@ -180,7 +171,7 @@ impl TryFrom<Any> for ClientState {
     }
 }
 
-impl From<ClientState> for Any {
+impl From<ClientState> for IBCAny {
     fn from(value: ClientState) -> Self {
         let value: RawClientState = value.into();
         let mut v = Vec::new();
@@ -191,6 +182,20 @@ impl From<ClientState> for Any {
             type_url: PARLIA_CLIENT_STATE_TYPE_URL.to_owned(),
             value: v,
         }
+    }
+}
+
+impl From<ClientState> for Any {
+    fn from(value: ClientState) -> Self {
+        IBCAny::from(value).into()
+    }
+}
+
+impl TryFrom<Any> for ClientState {
+    type Error = Error;
+
+    fn try_from(any: Any) -> Result<Self, Self::Error> {
+        IBCAny::from(any).try_into()
     }
 }
 

@@ -21,7 +21,6 @@ commitments = { git = "https://github.com/datachainlab/lcp.git" }
 crypto = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
 validation-context = { git = "https://github.com/datachainlab/lcp.git" }
 
-parlia-ibc-lc = { path = "../light-client" }
 parlia-ibc-proto = { version = "0.1.0", path = "../proto", default-features = false }
 
 [features]
@@ -41,5 +40,4 @@ sgx = [
 [dev-dependencies]
 store = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
 
-parlia-ibc-lc = { path = "../light-client", features = ["testdata"] }
 hex-literal = "0.3.1"

@@ -7,7 +7,12 @@ edition = "2021"
 
 [dependencies]
 light-client = { git = "https://github.com/datachainlab/lcp.git" }
+light-client-registry = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
 lcp-types = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
+commitments = { git = "https://github.com/datachainlab/lcp.git" }
+crypto = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
+validation-context = { git = "https://github.com/datachainlab/lcp.git" }
+
 ibc-proto = { version = "0.26.0", default-features = false, features = ["parity-scale-codec", "borsh"] }
 rlp = { version = "0.5.1", default-features = false }
 prost = { version = "0.11", default-features = false }
@@ -25,6 +30,5 @@ hex-literal = "0.3.1"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
-[features]
-default = []
-testdata = []
+[dev-dependencies]
+store = { git = "https://github.com/datachainlab/lcp.git", default-features = false }

@@ -2,9 +2,9 @@ use alloc::borrow::ToOwned as _;
 
 use alloc::vec::Vec;
 
-use ibc_proto::google::protobuf::Any;
+use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::Time;
+use lcp_types::{Time, Any};
 use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
@@ -70,10 +70,10 @@ impl From<ConsensusState> for RawConsensusState {
     }
 }
 
-impl TryFrom<Any> for ConsensusState {
+impl TryFrom<IBCAny> for ConsensusState {
     type Error = Error;
 
-    fn try_from(any: Any) -> Result<Self, Self::Error> {
+    fn try_from(any: IBCAny) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CONSENSUS_STATE_TYPE_URL {
             return Err(Error::UnknownConsensusStateType(any.type_url));
         }
@@ -83,7 +83,7 @@ impl TryFrom<Any> for ConsensusState {
     }
 }
 
-impl From<ConsensusState> for Any {
+impl From<ConsensusState> for IBCAny {
     fn from(value: ConsensusState) -> Self {
         let value: RawConsensusState = value.into();
         let mut v = Vec::new();
@@ -94,6 +94,20 @@ impl From<ConsensusState> for Any {
             type_url: PARLIA_CONSENSUS_STATE_TYPE_URL.to_owned(),
             value: v,
         }
+    }
+}
+
+impl From<ConsensusState> for Any {
+    fn from(value: ConsensusState) -> Self {
+        IBCAny::from(value).into()
+    }
+}
+
+impl TryFrom<Any> for ConsensusState {
+    type Error = Error;
+
+    fn try_from(any: Any) -> Result<Self, Self::Error> {
+        IBCAny::from(any).try_into()
     }
 }
 

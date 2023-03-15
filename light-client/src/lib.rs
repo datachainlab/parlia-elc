@@ -12,3 +12,4 @@ pub mod errors;
 pub mod header;
 pub mod misc;
 pub mod path;
+pub mod client;
