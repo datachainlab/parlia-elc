@@ -31,3 +31,8 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 store = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
+
+[features]
+default = ["std"]
+std = ["light-client-registry/std", "lcp-types/std"]
+sgx = ["light-client-registry/sgx", "lcp-types/sgx"]
