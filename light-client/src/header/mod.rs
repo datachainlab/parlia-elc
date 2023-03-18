@@ -3,13 +3,13 @@ use alloc::vec::Vec;
 
 use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{Height, Time, Any};
+use lcp_types::{Any, Height, Time};
 use prost::Message as _;
 use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{ChainId, Hash, ValidatorReader, Validators, new_timestamp, new_height};
+use crate::misc::{new_height, new_timestamp, ChainId, Hash, ValidatorReader, Validators};
 
 use super::errors::Error;
 
@@ -32,7 +32,10 @@ pub struct Header {
 
 impl Header {
     pub fn height(&self) -> Height {
-        new_height(self.trusted_height.revision_number(), self.headers.target.number)
+        new_height(
+            self.trusted_height.revision_number(),
+            self.headers.target.number,
+        )
     }
 
     pub fn timestamp(&self) -> Result<Time, Error> {
@@ -196,9 +199,21 @@ mod test {
             header.headers.target, header.headers.all[0],
             "invalid target"
         );
-        assert_eq!(header.timestamp().unwrap().as_unix_timestamp_secs(), header.headers.target.timestamp, "invalid timestamp");
-        assert_eq!(header.height().revision_number(), header.trusted_height.revision_number(), "invalid revision number");
-        assert_eq!(header.height().revision_height(), header.headers.target.number, "invalid revision height");
+        assert_eq!(
+            header.timestamp().unwrap().as_unix_timestamp_secs(),
+            header.headers.target.timestamp,
+            "invalid timestamp"
+        );
+        assert_eq!(
+            header.height().revision_number(),
+            header.trusted_height.revision_number(),
+            "invalid revision number"
+        );
+        assert_eq!(
+            header.height().revision_height(),
+            header.headers.target.number,
+            "invalid revision height"
+        );
     }
 
     #[test]
@@ -218,8 +233,8 @@ mod test {
 
         // Check require trusted height
         match Header::try_from(raw_header.clone()).unwrap_err() {
-           Error::MissingTrustedHeight  => assert!(true),
-            _ => unreachable!()
+            Error::MissingTrustedHeight => assert!(true),
+            _ => unreachable!(),
         }
 
         // Check greater than trusted height
@@ -229,11 +244,11 @@ mod test {
         };
         raw_header.trusted_height = Some(trusted_height.clone());
         match Header::try_from(raw_header.clone()).unwrap_err() {
-            Error::UnexpectedTrustedHeight(a,b)  => {
-                assert_eq!(a,h1.number);
-                assert_eq!(b,trusted_height.revision_height);
-            },
-            _ => unreachable!()
+            Error::UnexpectedTrustedHeight(a, b) => {
+                assert_eq!(a, h1.number);
+                assert_eq!(b, trusted_height.revision_height);
+            }
+            _ => unreachable!(),
         }
 
         // Check relation
@@ -243,11 +258,11 @@ mod test {
         };
         raw_header.trusted_height = Some(trusted_height);
         match Header::try_from(raw_header).unwrap_err() {
-            Error::UnexpectedHeaderRelation(a,b)  => {
-                assert_eq!(a,h1.number);
-                assert_eq!(b,h1.number);
-            },
-            _ => unreachable!()
+            Error::UnexpectedHeaderRelation(a, b) => {
+                assert_eq!(a, h1.number);
+                assert_eq!(b, h1.number);
+            }
+            _ => unreachable!(),
         }
     }
 

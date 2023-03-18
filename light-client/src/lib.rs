@@ -6,10 +6,10 @@ extern crate alloc;
 #[macro_use]
 extern crate std;
 
+pub mod client;
 pub mod client_state;
 pub mod consensus_state;
 pub mod errors;
 pub mod header;
-pub mod client;
-mod path;
 mod misc;
+mod path;

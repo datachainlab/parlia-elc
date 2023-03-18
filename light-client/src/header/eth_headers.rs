@@ -5,10 +5,7 @@ use lcp_types::Height;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::misc::{
-    required_block_count_to_finalize, Address, ChainId,
-    Validators,
-};
+use crate::misc::{required_block_count_to_finalize, Address, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::EPOCH_BLOCK_PERIOD;

@@ -1,17 +1,18 @@
 use alloc::borrow::ToOwned as _;
 
 use alloc::vec::Vec;
+use core::ops::Add;
+use core::time::Duration;
 
 use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{Time, Any};
+use lcp_types::{Any, Time, TimeError};
 use prost::Message as _;
-use parlia_ibc_proto::google::protobuf::Duration;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
 use crate::client_state::ClientState;
-use crate::misc::{Hash, NanoTime, Validators, new_timestamp};
+use crate::misc::{new_timestamp, Hash, Validators};
 
 use super::errors::Error;
 
@@ -26,21 +27,20 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
-
     pub fn assert_within_trust_period(
         &self,
         now: Time,
-        trusting_period_nanos: u128,
+        trusting_period: Duration,
     ) -> Result<(), Error> {
-        //TODO use Duration operation
-        let now_nano = now.as_unix_timestamp_nanos();
-        let timestamp = self.timestamp.as_unix_timestamp_nanos();
-        if now_nano < timestamp {
-            return Err(Error::UnexpectedTimestamp(timestamp));
+        if self.timestamp > now {
+            return Err(Error::IllegalTimestamp(self.timestamp, now));
         }
-        if (now_nano - timestamp) > trusting_period_nanos{
-            let expires_at = Time::from_unix_timestamp_nanos(timestamp + trusting_period_nanos)?;
-            Err(Error::HeaderNotWithinTrustingPeriod(expires_at, now))
+        let deadline = self
+            .timestamp
+            .add(trusting_period)
+            .map_err(Error::UnexpectedTimestamp)?;
+        if deadline < now {
+            Err(Error::HeaderNotWithinTrustingPeriod(deadline, now))
         } else {
             Ok(())
         }
@@ -51,7 +51,10 @@ impl TryFrom<RawConsensusState> for ConsensusState {
     type Error = Error;
 
     fn try_from(value: RawConsensusState) -> Result<Self, Self::Error> {
-        let state_root : Hash = value.state_root.try_into().map_err(Error::UnexpectedStateRoot)?;
+        let state_root: Hash = value
+            .state_root
+            .try_into()
+            .map_err(Error::UnexpectedStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
         let validator_set = value.validator_set;
         Ok(Self {
@@ -115,16 +118,15 @@ impl TryFrom<Any> for ConsensusState {
 
 #[cfg(test)]
 mod test {
-    use core::time::Duration;
-    use std::ops::Add;
-    use lcp_types::Time;
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::misc::new_timestamp;
+    use core::time::Duration;
+    use lcp_types::Time;
+    use std::ops::{Add, Sub};
 
     #[test]
     fn test_assert_within_trust_period() {
-        let diff = Duration::new(1, 0);
         let consensus_state = ConsensusState {
             state_root: [0 as u8; 32],
             timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
@@ -132,31 +134,35 @@ mod test {
         };
 
         // now is after trusting period
-        let now = consensus_state.timestamp.add(diff).unwrap();
+        let now = consensus_state.timestamp.add(Duration::new(1, 1)).unwrap();
         match consensus_state
-            .assert_within_trust_period(now, 0)
+            .assert_within_trust_period(now, Duration::new(1, 0))
             .unwrap_err()
         {
-            Error::HeaderNotWithinTrustingPeriod(a,b) => {
-                assert_eq!(a, consensus_state.timestamp);
+            Error::HeaderNotWithinTrustingPeriod(a, b) => {
+                assert_eq!(
+                    a,
+                    consensus_state.timestamp.add(Duration::new(1, 0)).unwrap()
+                );
                 assert_eq!(b, now);
-            },
+            }
             e => unreachable!("{:?}", e),
         }
 
         // now is within trusting period
         assert!(consensus_state
-            .assert_within_trust_period(now, 0)
+            .assert_within_trust_period(now, Duration::new(1, 1))
             .is_ok());
 
         // illegal timestamp
-        let now = consensus_state.timestamp.add(-diff).unwrap();
+        let now = consensus_state.timestamp.sub(Duration::new(1, 0)).unwrap();
         match consensus_state
-            .assert_within_trust_period(now, 0)
+            .assert_within_trust_period(now, Duration::new(0, 0))
             .unwrap_err()
         {
-            Error::UnexpectedTimestamp(tm) => {
-                assert_eq!(tm, consensus_state.timestamp.as_unix_timestamp_nanos())
+            Error::IllegalTimestamp(t1, t2) => {
+                assert_eq!(t1, consensus_state.timestamp);
+                assert_eq!(t2, now);
             }
             e => unreachable!("{:?}", e),
         }

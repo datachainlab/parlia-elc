@@ -2,25 +2,25 @@ use alloc::borrow::ToOwned as _;
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use core::time::Duration;
 use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::ibc::core::commitment::v1::MerkleProof;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{ClientId, Height, Any};
+use lcp_types::{Any, ClientId, Height};
 use light_client::HostClientReader;
+use parlia_ibc_proto::google;
 use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;
 use rlp::Rlp;
 use trie_eip1186::VerifyError;
-use parlia_ibc_proto::google;
-use parlia_ibc_proto::google::protobuf::Duration;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{Account, Address, ChainId, Hash, NanoTime, ValidatorReader, Validators, new_height};
+use crate::misc::{new_height, Account, Address, ChainId, Hash, ValidatorReader, Validators};
 use crate::path::Path;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -59,12 +59,11 @@ impl ClientState {
         client_id: ClientId,
         header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
-
         // Ensure last consensus state is within the trusting period
         let now = ctx.host_timestamp();
-        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period.nanos)?; //TODO
+        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period.clone())?;
         trusted_consensus_state
-            .assert_within_trust_period(header.timestamp()?, &self.trusting_period)?;
+            .assert_within_trust_period(header.timestamp()?, self.trusting_period.clone())?;
 
         // Ensure header revision is same as chain revision
         let header_height = header.height();
@@ -91,7 +90,10 @@ impl ClientState {
 
         let storage_size = account.storage_root.len();
         let new_consensus_state = ConsensusState {
-            state_root: account.storage_root.try_into().map_err(Error::UnexpectedStateRoot)?,
+            state_root: account
+                .storage_root
+                .try_into()
+                .map_err(Error::UnexpectedStateRoot)?,
             timestamp: header.timestamp()?,
             validator_set: header.validator_set().clone(),
         };
@@ -130,6 +132,8 @@ impl TryFrom<RawClientState> for ClientState {
         };
 
         let trusting_period = value.trusting_period.ok_or(Error::MissingTrustingPeriod)?;
+        let trusting_period =
+            Duration::new(trusting_period.seconds as u64, trusting_period.nanos as u32);
         let frozen = value.frozen;
 
         Ok(Self {
@@ -153,7 +157,10 @@ impl From<ClientState> for RawClientState {
                 revision_height: value.latest_height.revision_height(),
             }),
             trust_level: Some(value.trust_level),
-            trusting_period: Some(value.trusting_period),
+            trusting_period: Some(google::protobuf::Duration {
+                seconds: value.trusting_period.as_secs() as i64,
+                nanos: value.trusting_period.subsec_nanos() as i32,
+            }),
             frozen: value.frozen.to_owned(),
         }
     }
@@ -164,7 +171,7 @@ impl TryFrom<IBCAny> for ClientState {
 
     fn try_from(any: IBCAny) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CLIENT_STATE_TYPE_URL {
-            return Err(Error::UnknownClientStateType(any.type_url))
+            return Err(Error::UnknownClientStateType(any.type_url));
         }
         RawClientState::decode(any.value.as_slice())
             .map_err(Error::ProtoDecodeError)?
@@ -213,7 +220,11 @@ impl<'a> DefaultValidatorReader<'a> {
 
 impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
     fn read(&self, height: Height) -> Result<Validators, Error> {
-        let any = Any::from(self.ctx.consensus_state(self.client_id, &height).map_err(Error::LCPError)?);
+        let any = Any::from(
+            self.ctx
+                .consensus_state(self.client_id, &height)
+                .map_err(Error::LCPError)?,
+        );
         let consensus_state = ConsensusState::try_from(any)?;
         Ok(consensus_state.validator_set)
     }

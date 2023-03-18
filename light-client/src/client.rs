@@ -4,12 +4,17 @@ use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use commitments::{CommitmentPrefix, gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment};
+use commitments::{
+    gen_state_id_from_any, CommitmentPrefix, StateCommitment, StateID, UpdateClientCommitment,
+};
 use crypto::Keccak256;
 
 use ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, ClientId, Height};
-use light_client::{ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient, StateVerificationResult, UpdateClientResult};
+use light_client::{
+    ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
+    StateVerificationResult, UpdateClientResult,
+};
 use light_client_registry::LightClientRegistry;
 use validation_context::ValidationParams;
 
@@ -35,7 +40,7 @@ pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        "99-parlia" .to_string()
+        "99-parlia".to_string()
     }
 
     fn latest_height(
@@ -56,7 +61,7 @@ impl LightClient for ParliaLightClient {
     ) -> Result<CreateClientResult, LightClientError> {
         let new_state_id = state_id(&any_client_state, &any_consensus_state)?;
         let client_state = ClientState::try_from(any_client_state.clone())?;
-        let consensus_state =  ConsensusState::try_from(any_consensus_state)?;
+        let consensus_state = ConsensusState::try_from(any_consensus_state)?;
 
         let height = client_state.latest_height;
         let timestamp = consensus_state.timestamp;
@@ -87,21 +92,25 @@ impl LightClient for ParliaLightClient {
         let height = header.height();
         let timestamp = header.timestamp()?;
         let trusted_height = header.trusted_height();
-        let any_client_state =  ctx.client_state(&client_id)?;
+        let any_client_state = ctx.client_state(&client_id)?;
         let any_consensus_state = ctx.consensus_state(&client_id, &trusted_height)?;
         let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
 
         //Ensure client is not frozen
         let client_state = ClientState::try_from(any_client_state)?;
         if client_state.frozen {
-            return Err(Error::ClientFrozen(client_id).into())
+            return Err(Error::ClientFrozen(client_id).into());
         }
 
         let trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
 
         // Create new state and ensure header is valid
-        let (new_client_state, new_consensus_state) = client_state
-            .check_header_and_update_state(ctx, &trusted_consensus_state, client_id, header)?;
+        let (new_client_state, new_consensus_state) = client_state.check_header_and_update_state(
+            ctx,
+            &trusted_consensus_state,
+            client_id,
+            header,
+        )?;
 
         let new_height = new_client_state.latest_height;
         let new_any_client_state = Any::from(new_client_state);
@@ -160,7 +169,8 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<StateVerificationResult, LightClientError> {
-        let state_id = self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
+        let state_id =
+            self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
         Ok(StateVerificationResult {
             state_commitment: StateCommitment::new(prefix, path, None, proof_height, state_id),
         })
@@ -186,7 +196,9 @@ impl ParliaLightClient {
         }
         let proof_height = *proof_height;
         if client_state.latest_height != proof_height {
-            return Err(Error::UnexpectedLatestHeight(proof_height, client_state.latest_height).into());
+            return Err(
+                Error::UnexpectedLatestHeight(proof_height, client_state.latest_height).into(),
+            );
         }
 
         let any_consensus_state = ctx.consensus_state(&client_id, &proof_height)?;
@@ -202,7 +214,6 @@ impl ParliaLightClient {
         )?;
 
         Ok(state_id)
-
     }
 }
 
@@ -217,18 +228,23 @@ mod test {
     use alloc::vec::Vec;
     use core::str::FromStr;
 
+    use crate::client::ParliaLightClient;
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
-    use light_client::{ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient};
+    use light_client::{
+        ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient,
+    };
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Fraction;
-    use crate::client::ParliaLightClient;
 
     use crate::header;
 
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
-    use crate::header::testdata::{create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block, fill, to_rlp};
-    use crate::misc::{ChainId, Hash, new_height, new_timestamp};
+    use crate::header::testdata::{
+        create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block, fill,
+        to_rlp,
+    };
+    use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
     struct MockClientReader;
 
@@ -255,7 +271,6 @@ mod test {
     impl HostClientReader for MockClientReader {}
 
     impl ClientReader for MockClientReader {
-
         fn client_state(&self, client_id: &ClientId) -> Result<Any, light_client::Error> {
             let mainnet = ChainId::new(56);
             let cs = if client_id.as_str() == "99-parlia-0" {
@@ -278,7 +293,7 @@ mod test {
                     trust_level: Fraction {
                         numerator: 1,
                         denominator: 3,
-                    } ,
+                    },
                     trusting_period: core::time::Duration::new(1, 0),
                     frozen: false,
                 }
@@ -323,7 +338,6 @@ mod test {
                 panic!("no consensus state found {:?}", height);
             }
         }
-
     }
 
     #[test]
@@ -339,8 +353,8 @@ mod test {
             trust_level: Fraction {
                 numerator: 1,
                 denominator: 3,
-            } ,
-            trusting_period: core::time::Duration::new(0,0),
+            },
+            trusting_period: core::time::Duration::new(0, 0),
             frozen: false,
         };
         let consensus_state = ConsensusState {
@@ -376,10 +390,15 @@ mod test {
         let client = ParliaLightClient::default();
 
         let header = create_after_checkpoint_headers();
-        match client.update_client(&ctx, ClientId::new("99-parlia", 0).unwrap(), Any::from(header.clone())) {
+        match client.update_client(
+            &ctx,
+            ClientId::new("99-parlia", 0).unwrap(),
+            Any::from(header.clone()),
+        ) {
             Ok(data) => {
                 let new_client_state = ClientState::try_from(data.new_any_client_state).unwrap();
-                let new_consensus_state = ConsensusState::try_from(data.new_any_consensus_state).unwrap();
+                let new_consensus_state =
+                    ConsensusState::try_from(data.new_any_consensus_state).unwrap();
                 assert_eq!(data.height, header.height().into());
                 assert_eq!(new_client_state.latest_height, header.height());
                 assert_eq!(
@@ -391,10 +410,7 @@ mod test {
                 assert_eq!(data.commitment.new_height, header.height().into());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
-                assert_eq!(
-                    data.commitment.prev_height,
-                    Some(new_height(1, 1))
-                );
+                assert_eq!(data.commitment.prev_height, Some(new_height(1, 1)));
                 assert!(data.commitment.prev_state_id.is_some());
                 assert_eq!(data.commitment.timestamp, header.timestamp().unwrap());
             }
@@ -445,12 +461,11 @@ mod test {
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
-                assert_eq!(data.state_commitment.path,  path.to_string());
+                assert_eq!(data.state_commitment.path, path.to_string());
                 assert_eq!(data.state_commitment.height, proof_height.into());
                 assert_eq!(data.state_commitment.value, None);
             }
             Err(e) => unreachable!("error {:?}", e),
         };
     }
-
 }
