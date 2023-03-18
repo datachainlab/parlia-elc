@@ -2,9 +2,9 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, ClientId, Height};
 use light_client::HostClientReader;
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;

@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use core::ops::Add;
 use core::time::Duration;
 
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Time};
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;

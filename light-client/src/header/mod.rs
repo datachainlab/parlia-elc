@@ -1,8 +1,8 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Height, Time};
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
 use rlp::Rlp;
 
@@ -231,7 +231,7 @@ mod test {
 
         // Check require trusted height
         match Header::try_from(raw_header.clone()).unwrap_err() {
-            Error::MissingTrustedHeight => {},
+            Error::MissingTrustedHeight => {}
             _ => unreachable!(),
         }
 
