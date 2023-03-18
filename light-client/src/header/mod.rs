@@ -185,11 +185,10 @@ mod test {
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-    use crate::alloc::string::ToString;
     use crate::errors::Error;
     use crate::header::testdata::*;
     use crate::header::Header;
-    use crate::misc::{new_height, new_timestamp, ValidatorReader, Validators};
+    use crate::misc::{new_height, ValidatorReader, Validators};
 
     #[test]
     fn test_success_try_from_header() {

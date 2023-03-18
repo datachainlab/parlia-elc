@@ -1,15 +1,12 @@
 use alloc::boxed::Box;
 
-use alloc::str::FromStr;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use commitments::{
     gen_state_id_from_any, CommitmentPrefix, StateCommitment, StateID, UpdateClientCommitment,
 };
-use crypto::Keccak256;
 
-use ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, ClientId, Height};
 use light_client::{
     ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
@@ -127,7 +124,7 @@ impl LightClient for ParliaLightClient {
                 new_state: None,
                 prev_height: Some(trusted_height),
                 new_height,
-                timestamp: timestamp.into(),
+                timestamp,
                 validation_params: ValidationParams::Empty,
             },
             prove: true,
@@ -223,7 +220,7 @@ fn state_id(client_state: &Any, consensus_state: &Any) -> Result<StateID, LightC
 
 #[cfg(test)]
 mod test {
-    use alloc::string::{String, ToString};
+    use alloc::string::ToString;
     use alloc::vec;
     use alloc::vec::Vec;
     use core::str::FromStr;
@@ -231,12 +228,8 @@ mod test {
     use crate::client::ParliaLightClient;
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
-    use light_client::{
-        ClientKeeper, ClientReader, HostClientKeeper, HostClientReader, HostContext, LightClient,
-    };
+    use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Fraction;
-
-    use crate::header;
 
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
@@ -255,15 +248,15 @@ mod test {
     }
 
     impl store::KVStore for MockClientReader {
-        fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
+        fn set(&mut self, _key: Vec<u8>, _value: Vec<u8>) {
             todo!()
         }
 
-        fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        fn get(&self, _key: &[u8]) -> Option<Vec<u8>> {
             todo!()
         }
 
-        fn remove(&mut self, key: &[u8]) {
+        fn remove(&mut self, _key: &[u8]) {
             todo!()
         }
     }
@@ -310,7 +303,7 @@ mod test {
             let previous_epoch = fill(create_previous_epoch_block());
             if height.revision_height() == 1 {
                 Ok(Any::from(ConsensusState {
-                    state_root: [0 as u8; 32],
+                    state_root: [0_u8; 32],
                     timestamp: self.host_timestamp(),
                     validator_set: vec![],
                 }))
@@ -358,7 +351,7 @@ mod test {
             frozen: false,
         };
         let consensus_state = ConsensusState {
-            state_root: [0 as u8; 32],
+            state_root: [0_u8; 32],
             timestamp: new_timestamp(1677130449).unwrap(),
             validator_set: vec![],
         };
@@ -366,17 +359,11 @@ mod test {
         let any_consensus_state = Any::from(consensus_state.clone());
         match client.create_client(&ctx, any_client_state.clone(), any_consensus_state) {
             Ok(result) => {
-                assert_eq!(result.height, client_state.latest_height.into());
-                assert_eq!(
-                    result.commitment.timestamp,
-                    consensus_state.timestamp.into()
-                );
+                assert_eq!(result.height, client_state.latest_height);
+                assert_eq!(result.commitment.timestamp, consensus_state.timestamp);
                 assert_eq!(result.commitment.prev_height, None);
                 assert_eq!(result.commitment.prev_state_id, None);
-                assert_eq!(
-                    result.commitment.new_height,
-                    client_state.latest_height.into()
-                );
+                assert_eq!(result.commitment.new_height, client_state.latest_height);
                 assert_eq!(result.commitment.new_state.unwrap(), any_client_state);
                 assert!(!result.commitment.new_state_id.to_vec().is_empty());
             }
@@ -399,7 +386,7 @@ mod test {
                 let new_client_state = ClientState::try_from(data.new_any_client_state).unwrap();
                 let new_consensus_state =
                     ConsensusState::try_from(data.new_any_consensus_state).unwrap();
-                assert_eq!(data.height, header.height().into());
+                assert_eq!(data.height, header.height());
                 assert_eq!(new_client_state.latest_height, header.height());
                 assert_eq!(
                     new_consensus_state.state_root,
@@ -407,7 +394,7 @@ mod test {
                 );
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
                 assert!(new_consensus_state.validator_set.is_empty());
-                assert_eq!(data.commitment.new_height, header.height().into());
+                assert_eq!(data.commitment.new_height, header.height());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
                 assert_eq!(data.commitment.prev_height, Some(new_height(1, 1)));
@@ -440,12 +427,12 @@ mod test {
             prefix.clone(),
             path.to_string(),
             expected.to_vec(),
-            proof_height.into(),
+            proof_height,
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
                 assert_eq!(data.state_commitment.path, path);
-                assert_eq!(data.state_commitment.height, proof_height.into());
+                assert_eq!(data.state_commitment.height, proof_height);
                 assert_eq!(data.state_commitment.value, Some(expected));
             }
             Err(e) => unreachable!("error {:?}", e),
@@ -457,12 +444,12 @@ mod test {
             client_id,
             prefix,
             path.to_string(),
-            proof_height.into(),
+            proof_height,
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
                 assert_eq!(data.state_commitment.path, path.to_string());
-                assert_eq!(data.state_commitment.height, proof_height.into());
+                assert_eq!(data.state_commitment.height, proof_height);
                 assert_eq!(data.state_commitment.value, None);
             }
             Err(e) => unreachable!("error {:?}", e),

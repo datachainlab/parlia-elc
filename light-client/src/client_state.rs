@@ -1,10 +1,9 @@
 use alloc::borrow::ToOwned as _;
-use alloc::boxed::Box;
-use alloc::string::ToString;
+
 use alloc::vec::Vec;
 use core::time::Duration;
 use ibc_proto::google::protobuf::Any as IBCAny;
-use ibc_proto::ibc::core::commitment::v1::MerkleProof;
+
 use ibc_proto::protobuf::Protobuf;
 use lcp_types::{Any, ClientId, Height};
 use light_client::HostClientReader;
@@ -61,9 +60,9 @@ impl ClientState {
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
         let now = ctx.host_timestamp();
-        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period.clone())?;
+        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period)?;
         trusted_consensus_state
-            .assert_within_trust_period(header.timestamp()?, self.trusting_period.clone())?;
+            .assert_within_trust_period(header.timestamp()?, self.trusting_period)?;
 
         // Ensure header revision is same as chain revision
         let header_height = header.height();
@@ -71,8 +70,7 @@ impl ClientState {
             return Err(Error::UnexpectedHeaderRevision(
                 self.chain_id.version(),
                 header_height.revision_number(),
-            )
-            .into());
+            ));
         }
 
         // Ensure header is valid
@@ -88,7 +86,7 @@ impl ClientState {
             &new_client_state.ibc_store_address,
         )?;
 
-        let storage_size = account.storage_root.len();
+        let _storage_size = account.storage_root.len();
         let new_consensus_state = ConsensusState {
             state_root: account
                 .storage_root
@@ -220,11 +218,10 @@ impl<'a> DefaultValidatorReader<'a> {
 
 impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
     fn read(&self, height: Height) -> Result<Validators, Error> {
-        let any = Any::from(
-            self.ctx
-                .consensus_state(self.client_id, &height)
-                .map_err(Error::LCPError)?,
-        );
+        let any = self
+            .ctx
+            .consensus_state(self.client_id, &height)
+            .map_err(Error::LCPError)?;
         let consensus_state = ConsensusState::try_from(any)?;
         Ok(consensus_state.validator_set)
     }

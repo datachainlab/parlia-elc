@@ -1,6 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt::{write, Formatter};
+use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
 use lcp_types::{ClientId, Height, Time, TimeError};

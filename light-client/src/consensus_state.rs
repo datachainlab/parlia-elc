@@ -6,12 +6,11 @@ use core::time::Duration;
 
 use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
-use lcp_types::{Any, Time, TimeError};
+use lcp_types::{Any, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::client_state::ClientState;
 use crate::misc::{new_timestamp, Hash, Validators};
 
 use super::errors::Error;
@@ -120,7 +119,7 @@ impl TryFrom<Any> for ConsensusState {
 mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
-    use crate::misc::new_timestamp;
+
     use core::time::Duration;
     use lcp_types::Time;
     use std::ops::{Add, Sub};
@@ -128,7 +127,7 @@ mod test {
     #[test]
     fn test_assert_within_trust_period() {
         let consensus_state = ConsensusState {
-            state_root: [0 as u8; 32],
+            state_root: [0_u8; 32],
             timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
             validator_set: vec![],
         };
