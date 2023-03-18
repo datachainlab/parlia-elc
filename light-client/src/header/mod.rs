@@ -8,7 +8,7 @@ use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_height, new_timestamp, ChainId, Hash, ValidatorReader, Validators};
+use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators};
 
 use super::errors::Error;
 
@@ -52,7 +52,7 @@ impl Header {
 
     //TODO cfg when the sufficient test data is found.
     #[cfg(not(test))]
-    pub fn state_root(&self) -> &Hash {
+    pub fn state_root(&self) -> &crate::misc::Hash {
         &self.headers.target.root
     }
 
@@ -231,7 +231,7 @@ mod test {
 
         // Check require trusted height
         match Header::try_from(raw_header.clone()).unwrap_err() {
-            Error::MissingTrustedHeight => assert!(true),
+            Error::MissingTrustedHeight => {},
             _ => unreachable!(),
         }
 

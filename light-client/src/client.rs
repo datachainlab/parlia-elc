@@ -7,7 +7,7 @@ use commitments::{
 };
 use lcp_types::{Any, ClientId, Height};
 use light_client::{
-    ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
+    CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
     StateVerificationResult, UpdateClientResult,
 };
 use light_client_registry::LightClientRegistry;
