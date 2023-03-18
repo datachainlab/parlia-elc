@@ -1,5 +1,4 @@
 use alloc::borrow::ToOwned as _;
-
 use alloc::vec::Vec;
 use core::ops::Add;
 use core::time::Duration;
@@ -117,12 +116,13 @@ impl TryFrom<Any> for ConsensusState {
 
 #[cfg(test)]
 mod test {
+    use core::time::Duration;
+    use std::ops::{Add, Sub};
+
+    use lcp_types::Time;
+
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
-
-    use core::time::Duration;
-    use lcp_types::Time;
-    use std::ops::{Add, Sub};
 
     #[test]
     fn test_assert_within_trust_period() {

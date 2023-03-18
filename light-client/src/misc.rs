@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
-use lcp_types::{Height, Time};
 
+use lcp_types::{Height, Time};
 use rlp::{Decodable, Rlp};
 
 use crate::errors::Error;

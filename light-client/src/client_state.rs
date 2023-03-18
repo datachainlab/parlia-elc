@@ -1,19 +1,18 @@
 use alloc::borrow::ToOwned as _;
-
 use alloc::vec::Vec;
 use core::time::Duration;
-use ibc_proto::google::protobuf::Any as IBCAny;
 
+use ibc_proto::google::protobuf::Any as IBCAny;
 use ibc_proto::protobuf::Protobuf;
 use lcp_types::{Any, ClientId, Height};
 use light_client::HostClientReader;
-use parlia_ibc_proto::google;
 use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;
 use rlp::Rlp;
 use trie_eip1186::VerifyError;
 
+use parlia_ibc_proto::google;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
 use crate::consensus_state::ConsensusState;
@@ -270,7 +269,6 @@ mod test {
     use hex_literal::hex;
 
     use crate::client_state::{resolve_account, verify_proof, ClientState};
-
     use crate::header::testdata::to_rlp;
     use crate::misc::{Account, Hash};
     use crate::path::YuiIBCPath;

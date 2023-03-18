@@ -1,12 +1,10 @@
 use alloc::boxed::Box;
-
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use commitments::{
     gen_state_id_from_any, CommitmentPrefix, StateCommitment, StateID, UpdateClientCommitment,
 };
-
 use lcp_types::{Any, ClientId, Height};
 use light_client::{
     ClientReader, CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
@@ -17,11 +15,9 @@ use validation_context::ValidationParams;
 
 use crate::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
 use crate::consensus_state::ConsensusState;
-use crate::header::Header;
-
-use crate::path::YuiIBCPath;
-
 use crate::errors::Error;
+use crate::header::Header;
+use crate::path::YuiIBCPath;
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -225,12 +221,13 @@ mod test {
     use alloc::vec::Vec;
     use core::str::FromStr;
 
-    use crate::client::ParliaLightClient;
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
+
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Fraction;
 
+    use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
     use crate::header::testdata::{
