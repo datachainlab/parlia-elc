@@ -1,8 +1,7 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use ibc_proto::google::protobuf::Any as IBCAny;
-use ibc_proto::protobuf::Protobuf;
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Height, Time};
 use prost::Message as _;
 use rlp::Rlp;

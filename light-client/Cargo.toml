@@ -13,7 +13,6 @@ commitments = { git = "https://github.com/datachainlab/lcp.git" }
 crypto = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
 validation-context = { git = "https://github.com/datachainlab/lcp.git" }
 
-ibc-proto = { version = "0.26.0", default-features = false, features = ["parity-scale-codec", "borsh"] }
 rlp = { version = "0.5.1", default-features = false }
 prost = { version = "0.11", default-features = false }
 

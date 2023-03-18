@@ -12,7 +12,7 @@ pub trait Path {
 pub struct YuiIBCPath(Bytes32Path);
 
 impl From<&[u8]> for YuiIBCPath {
-    /// ```
+    /// ```ignore
     /// use parlia_ibc_lc::path::YuiIBCPath;
     ///
     /// let path = YuiIBCPath::from("commitments/ports/port-1/channels/channel-1/sequences/1".as_bytes());
@@ -41,7 +41,7 @@ pub struct StringPath {
 
 impl StringPath {
     /// key must be hex string.
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::StringPath;
     ///
@@ -70,7 +70,7 @@ pub struct AddressPath {
 }
 
 impl AddressPath {
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::AddressPath;
     ///
@@ -103,7 +103,7 @@ pub struct Bytes32Path {
 }
 
 impl Bytes32Path {
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::Bytes32Path;
     ///

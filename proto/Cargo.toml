@@ -18,7 +18,6 @@ tonic       = { version = "0.8", optional = true, default-features = false }
 serde       = { version = "1.0", default-features = false }
 schemars    = { version = "0.8", optional = true }
 base64      = { version = "0.21", default-features = false, features = ["alloc"] }
-ibc-proto   = { version = "0.26.0", default-features = false }
 
 [features]
 default     = ["std", "client"]

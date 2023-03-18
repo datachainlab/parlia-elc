@@ -3,8 +3,7 @@ use alloc::vec::Vec;
 use core::ops::Add;
 use core::time::Duration;
 
-use ibc_proto::google::protobuf::Any as IBCAny;
-use ibc_proto::protobuf::Protobuf;
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use lcp_types::{Any, Time};
 use prost::Message as _;
 
@@ -67,7 +66,7 @@ impl From<ConsensusState> for RawConsensusState {
     fn from(value: ConsensusState) -> Self {
         Self {
             state_root: value.state_root.to_vec(),
-            timestamp: value.timestamp.as_unix_timestamp_nanos() as u64, //TODO
+            timestamp: value.timestamp.as_unix_timestamp_secs(),
             validator_set: value.validator_set,
         }
     }

@@ -11,7 +11,6 @@ pub type Address = [u8; 20];
 pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
 pub type StorageKey = [u8; 32];
-pub type HexString<'a> = &'a str;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
