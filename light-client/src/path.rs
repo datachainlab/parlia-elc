@@ -50,6 +50,7 @@ impl StringPath {
     ///     &hex!("0000000000000000000000000000000000000000000000000000000000000002")
     /// );
     /// ```
+    #[allow(dead_code)]
     pub fn new(key: &[u8], slot: &[u8; 32]) -> Self {
         // string key need not to add any zero padding.
         // key = web3.toHex("abcdefghijabcdefghijabcdefghijabc")
@@ -79,6 +80,7 @@ impl AddressPath {
     ///     &hex!("0000000000000000000000000000000000000000000000000000000000000001"),
     /// );
     /// ```
+    #[allow(dead_code)]
     pub fn new(key: &Address, slot: &[u8; 32]) -> Self {
         // address key needs left zero padding.
         // address = "0x18DAd81d93F32575691131E73878E89e20481839"
