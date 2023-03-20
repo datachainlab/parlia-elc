@@ -184,7 +184,7 @@ mod test {
         match result.unwrap_err() {
             Error::InsufficientHeaderToVerify(actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
-                assert_eq!(expected, 0, "expected error");
+                assert_eq!(expected, 1, "expected error");
             }
             e => unreachable!("{:?}", e),
         }
@@ -230,7 +230,7 @@ mod test {
         match result.unwrap_err() {
             Error::InsufficientHeaderToVerify(actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
-                assert_eq!(expected, 0, "expected error");
+                assert_eq!(expected, 1, "expected error");
             }
             e => unreachable!("{:?}", e),
         }
