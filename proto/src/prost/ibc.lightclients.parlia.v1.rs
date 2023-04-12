@@ -39,15 +39,13 @@ pub struct EthHeader {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Header {
-    #[prost(string, tag = "1")]
-    pub identifier: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag = "1")]
     pub headers: ::prost::alloc::vec::Vec<EthHeader>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag = "2")]
     pub trusted_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(bytes = "vec", tag = "5")]
+    #[prost(bytes = "vec", tag = "3")]
     pub account_proof: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
