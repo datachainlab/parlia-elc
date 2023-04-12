@@ -24,11 +24,7 @@ pub struct ConsensusState {
 }
 
 impl ConsensusState {
-    pub fn assert_within_trust_period(
-        &self,
-        now: Time,
-        trusting_period: Duration,
-    ) -> Result<(), Error> {
+    pub fn assert_not_expired(&self, now: Time, trusting_period: Duration) -> Result<(), Error> {
         if self.timestamp > now {
             return Err(Error::IllegalTimestamp(self.timestamp, now));
         }
@@ -124,7 +120,7 @@ mod test {
     use crate::errors::Error;
 
     #[test]
-    fn test_assert_within_trust_period() {
+    fn testassert_not_expired() {
         let consensus_state = ConsensusState {
             state_root: [0_u8; 32],
             timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
@@ -134,7 +130,7 @@ mod test {
         // now is after trusting period
         let now = consensus_state.timestamp.add(Duration::new(1, 1)).unwrap();
         match consensus_state
-            .assert_within_trust_period(now, Duration::new(1, 0))
+            .assert_not_expired(now, Duration::new(1, 0))
             .unwrap_err()
         {
             Error::HeaderNotWithinTrustingPeriod(a, b) => {
@@ -149,13 +145,13 @@ mod test {
 
         // now is within trusting period
         assert!(consensus_state
-            .assert_within_trust_period(now, Duration::new(1, 1))
+            .assert_not_expired(now, Duration::new(1, 1))
             .is_ok());
 
         // illegal timestamp
         let now = consensus_state.timestamp.sub(Duration::new(1, 0)).unwrap();
         match consensus_state
-            .assert_within_trust_period(now, Duration::new(0, 0))
+            .assert_not_expired(now, Duration::new(0, 0))
             .unwrap_err()
         {
             Error::IllegalTimestamp(t1, t2) => {

@@ -11,7 +11,6 @@ use prost::Message as _;
 use rlp::Rlp;
 use trie_eip1186::VerifyError;
 
-use parlia_ibc_proto::google;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
 use crate::consensus_state::ConsensusState;
@@ -58,9 +57,8 @@ impl ClientState {
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
         let now = ctx.host_timestamp();
-        trusted_consensus_state.assert_within_trust_period(now, self.trusting_period)?;
-        trusted_consensus_state
-            .assert_within_trust_period(header.timestamp()?, self.trusting_period)?;
+        trusted_consensus_state.assert_not_expired(now, self.trusting_period)?;
+        trusted_consensus_state.assert_not_expired(header.timestamp()?, self.trusting_period)?;
 
         // Ensure header revision is same as chain revision
         let header_height = header.height();
