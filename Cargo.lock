@@ -250,7 +250,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "commitments"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "crypto",
  "flex-error",
@@ -288,7 +288,7 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 [[package]]
 name = "crypto"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "flex-error",
  "hex",
@@ -878,7 +878,7 @@ checksum = "f9b7d56ba4a8344d6be9729995e6b06f928af29998cdf79fe390cbf6b1fee838"
 [[package]]
 name = "lcp-types"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "flex-error",
  "ibc",
@@ -913,7 +913,7 @@ dependencies = [
 [[package]]
 name = "light-client"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "bincode",
  "commitments",
@@ -929,7 +929,7 @@ dependencies = [
 [[package]]
 name = "light-client-registry"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "flex-error",
  "light-client",
@@ -1718,7 +1718,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "store"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "flex-error",
  "log",
@@ -2154,7 +2154,7 @@ checksum = "957e51f3646910546462e67d5f7599b9e4fb8acdd304b087a6494730f9eebf04"
 [[package]]
 name = "validation-context"
 version = "0.1.0"
-source = "git+https://github.com/datachainlab/lcp.git#08614f64693367abf7f2ed3646ba20351a8bf48c"
+source = "git+https://github.com/datachainlab/lcp.git?rev=v0.1.1#08614f64693367abf7f2ed3646ba20351a8bf48c"
 dependencies = [
  "lcp-types",
  "rlp",

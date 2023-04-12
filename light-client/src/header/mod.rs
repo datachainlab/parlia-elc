@@ -223,7 +223,6 @@ mod test {
         ];
 
         let mut raw_header = RawHeader {
-            identifier: alloc::string::String::from("test"),
             headers: raw_eth_headers,
             trusted_height: None,
             account_proof: vec![],

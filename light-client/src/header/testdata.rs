@@ -42,7 +42,6 @@ pub fn create_after_checkpoint_headers() -> Header {
         create_non_epoch_block10().try_into().unwrap(),
     ];
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
             revision_number: 1,
@@ -69,7 +68,6 @@ pub fn create_before_checkpoint_headers() -> Header {
     ];
 
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
             revision_number: 1,
@@ -95,7 +93,6 @@ pub fn create_across_checkpoint_headers() -> Header {
         create_non_epoch_block_after_epoch12().try_into().unwrap(),
     ];
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
             revision_number: 1,

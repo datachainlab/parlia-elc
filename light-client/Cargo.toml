@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-light-client = { git = "https://github.com/datachainlab/lcp.git" }
-light-client-registry = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
-lcp-types = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
-commitments = { git = "https://github.com/datachainlab/lcp.git" }
-crypto = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
-validation-context = { git = "https://github.com/datachainlab/lcp.git" }
+light-client = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.1" }
+light-client-registry = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
+lcp-types = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
+commitments = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1" }
+crypto = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
+validation-context = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.1" }
 
 rlp = { version = "0.5.1", default-features = false }
 prost = { version = "0.11", default-features = false }
@@ -30,7 +30,7 @@ serde = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-store = { git = "https://github.com/datachainlab/lcp.git", default-features = false }
+store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
 
 [features]
 default = ["std"]
