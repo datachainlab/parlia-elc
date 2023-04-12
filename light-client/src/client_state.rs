@@ -127,9 +127,7 @@ impl TryFrom<RawClientState> for ClientState {
             trust_level
         };
 
-        let trusting_period = value.trusting_period.ok_or(Error::MissingTrustingPeriod)?;
-        let trusting_period =
-            Duration::new(trusting_period.seconds as u64, trusting_period.nanos as u32);
+        let trusting_period = Duration::from_secs(value.trusting_period);
         let frozen = value.frozen;
 
         Ok(Self {
@@ -153,10 +151,7 @@ impl From<ClientState> for RawClientState {
                 revision_height: value.latest_height.revision_height(),
             }),
             trust_level: Some(value.trust_level),
-            trusting_period: Some(google::protobuf::Duration {
-                seconds: value.trusting_period.as_secs() as i64,
-                nanos: value.trusting_period.subsec_nanos() as i32,
-            }),
+            trusting_period: value.trusting_period.as_secs(),
             frozen: value.frozen.to_owned(),
         }
     }

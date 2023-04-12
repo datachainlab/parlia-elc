@@ -21,10 +21,8 @@ pub struct ClientState {
     >,
     #[prost(message, optional, tag = "4")]
     pub trust_level: ::core::option::Option<Fraction>,
-    #[prost(message, optional, tag = "5")]
-    pub trusting_period: ::core::option::Option<
-        super::super::super::super::google::protobuf::Duration,
-    >,
+    #[prost(uint64, tag = "5")]
+    pub trusting_period: u64,
     #[prost(bool, tag = "6")]
     pub frozen: bool,
 }
