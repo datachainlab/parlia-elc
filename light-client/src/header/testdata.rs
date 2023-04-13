@@ -44,7 +44,7 @@ pub fn create_after_checkpoint_headers() -> Header {
     let raw_header = RawHeader {
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
@@ -70,7 +70,7 @@ pub fn create_before_checkpoint_headers() -> Header {
     let raw_header = RawHeader {
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
@@ -95,7 +95,7 @@ pub fn create_across_checkpoint_headers() -> Header {
     let raw_header = RawHeader {
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()

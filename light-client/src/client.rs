@@ -256,7 +256,7 @@ mod test {
                 ClientState {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: Height::new(1, 2),
+                    latest_height: Height::new(0, 2),
                     trust_level: Fraction {
                         numerator: 1,
                         denominator: 3,
@@ -268,7 +268,7 @@ mod test {
                 ClientState {
                     chain_id: mainnet,
                     ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: Height::new(1, 1),
+                    latest_height: Height::new(0, 1),
                     trust_level: Fraction {
                         numerator: 1,
                         denominator: 3,
@@ -383,7 +383,7 @@ mod test {
                 assert_eq!(data.commitment.new_height, header.height());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
-                assert_eq!(data.commitment.prev_height, Some(new_height(1, 1)));
+                assert_eq!(data.commitment.prev_height, Some(new_height(0, 1)));
                 assert!(data.commitment.prev_state_id.is_some());
                 assert_eq!(data.commitment.timestamp, header.timestamp().unwrap());
             }
@@ -397,7 +397,7 @@ mod test {
         let client = ParliaLightClient::default();
         let prefix = vec![0];
         let path = "commitments/ports/port-1/channels/channel-1/sequences/1";
-        let proof_height = new_height(1, 2);
+        let proof_height = new_height(0, 2);
         let client_id = ClientId::from_str("99-parlia-0").unwrap();
         let mut expected = [0_u8; 32];
         expected[0] = 51;
