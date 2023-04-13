@@ -7,3 +7,6 @@ members = [
 exclude = [
     "proto-compiler",
 ]
+
+[workspace.package]
+description = "IBC light client for BSC"
