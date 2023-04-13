@@ -13,3 +13,12 @@ pub mod errors;
 pub mod header;
 mod misc;
 mod path;
+
+pub fn register_implementations(registry: &mut dyn light_client_registry::LightClientRegistry) {
+    registry
+        .put_light_client(
+            alloc::string::String::from(client_state::PARLIA_CLIENT_STATE_TYPE_URL),
+            alloc::boxed::Box::new(client::ParliaLightClient),
+        )
+        .unwrap()
+}

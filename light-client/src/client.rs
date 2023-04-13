@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -10,10 +9,9 @@ use light_client::{
     CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
     StateVerificationResult, UpdateClientResult,
 };
-use light_client_registry::LightClientRegistry;
 use validation_context::ValidationParams;
 
-use crate::client_state::{ClientState, PARLIA_CLIENT_STATE_TYPE_URL};
+use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
@@ -21,15 +19,6 @@ use crate::path::YuiIBCPath;
 
 #[derive(Default)]
 pub struct ParliaLightClient;
-
-pub fn register_implementations(registry: &mut dyn LightClientRegistry) {
-    registry
-        .put_light_client(
-            String::from(PARLIA_CLIENT_STATE_TYPE_URL),
-            Box::new(ParliaLightClient),
-        )
-        .unwrap()
-}
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
