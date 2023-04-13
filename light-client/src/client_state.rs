@@ -107,7 +107,10 @@ impl TryFrom<RawClientState> for ClientState {
 
         let chain_id = ChainId::new(value.chain_id);
 
-        let latest_height = new_height(chain_id.version(), raw_latest_height.revision_height);
+        let latest_height = new_height(
+            raw_latest_height.revision_number,
+            raw_latest_height.revision_height,
+        );
 
         let raw_ibc_store_address = value.ibc_store_address.clone();
         let ibc_store_address = raw_ibc_store_address
@@ -319,5 +322,32 @@ mod test {
         ) {
             unreachable!("{:?}", e);
         }
+    }
+
+    #[test]
+    fn test_try_from_any() {
+        // This is ibc-parlia-relay's unit test data
+        let relayer_client_state_protobuf = vec![
+            10, 39, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
+            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 108, 105, 101, 110, 116, 83, 116,
+            97, 116, 101, 18, 38, 8, 143, 78, 18, 20, 170, 67, 211, 55, 20, 94, 137, 48, 208, 28,
+            180, 230, 10, 191, 101, 149, 198, 146, 146, 30, 26, 3, 16, 200, 1, 34, 4, 8, 1, 16, 3,
+            40, 100,
+        ];
+        let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
+        let cs: ClientState = any.try_into().unwrap();
+
+        // Check if the result are same as relayer's one
+        assert_eq!(0, cs.latest_height.revision_number());
+        assert_eq!(200, cs.latest_height.revision_height());
+        assert_eq!(9999, cs.chain_id.id());
+        assert_eq!(0, cs.chain_id.version());
+        assert_eq!(100, cs.trusting_period.as_secs());
+        assert_eq!(1, cs.trust_level.numerator);
+        assert_eq!(3, cs.trust_level.denominator);
+        assert_eq!(
+            hex!("aa43d337145e8930d01cb4e60abf6595c692921e"),
+            cs.ibc_store_address
+        );
     }
 }

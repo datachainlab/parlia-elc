@@ -22,8 +22,10 @@ impl ChainId {
     pub fn id(&self) -> u64 {
         self.id
     }
+
     pub fn new(id: u64) -> Self {
-        ChainId { id, version: 1 }
+        //TODO support upgrade. currently follow the ethereum-elc-
+        ChainId { id, version: 0 }
     }
 
     pub fn version(&self) -> u64 {
