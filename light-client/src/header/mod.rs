@@ -186,7 +186,7 @@ mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     use crate::errors::Error;
-    
+
     use crate::header::testdata::*;
     use crate::header::Header;
     use crate::misc::{new_height, ChainId, ValidatorReader, Validators};
