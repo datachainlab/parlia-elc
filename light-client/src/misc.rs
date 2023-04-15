@@ -77,11 +77,6 @@ impl<'a> RlpIterator<'a> {
         Ok(result)
     }
 
-    pub fn try_next_as_list<T: Decodable>(&mut self) -> Result<Vec<T>, Error> {
-        let next = self.try_next()?;
-        next.as_list().map_err(Error::RLPDecodeError)
-    }
-
     pub fn try_next_as_val<T: Decodable>(&mut self) -> Result<T, Error> {
         let next = self.try_next()?;
         next.as_val().map_err(Error::RLPDecodeError)

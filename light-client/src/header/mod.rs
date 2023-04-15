@@ -485,6 +485,6 @@ mod test {
             193, 212, 94, 70, 76, 69, 28, 250, 253,
         ];
         let any: lcp_types::Any = relayer_protobuf_any.try_into().unwrap();
-        let header: Header = any.try_into().unwrap();
+        let _header: Header = any.try_into().unwrap();
     }
 }
