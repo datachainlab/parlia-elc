@@ -47,7 +47,7 @@ impl TryFrom<RawConsensusState> for ConsensusState {
         let state_root: Hash = value
             .state_root
             .try_into()
-            .map_err(Error::UnexpectedStateRoot)?;
+            .map_err(Error::UnexpectedConsensusStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
         let validator_set = value.validator_set;
         Ok(Self {

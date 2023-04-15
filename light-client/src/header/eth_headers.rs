@@ -88,8 +88,12 @@ impl ETHHeaders {
 
     pub fn new(trusted_height: Height, value: &[EthHeader]) -> Result<ETHHeaders, Error> {
         let mut new_headers: Vec<ETHHeader> = Vec::with_capacity(value.len());
-        for header in value {
-            new_headers.push(header.try_into()?);
+        for (i, header) in value.iter().enumerate() {
+            new_headers.push(
+                header
+                    .try_into()
+                    .map_err(|e| Error::UnexpectedHeader(i, alloc::boxed::Box::new(e)))?,
+            );
         }
         let target = match new_headers.first() {
             Some(v) => v,

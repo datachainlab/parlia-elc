@@ -38,7 +38,10 @@ pub enum Error {
     UnexpectedTimestamp(TimeError),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
+    UnexpectedStorageRoot(Vec<u8>),
+    UnexpectedConsensusStateRoot(Vec<u8>),
     UnexpectedCommitmentValue(Vec<u8>),
+    UnexpectedHeader(usize, alloc::boxed::Box<Error>),
 
     // Header error
     HeaderNotWithinTrustingPeriod(Time, Time),
@@ -110,6 +113,10 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedTimestamp(e) => write!(f, "UnexpectedTimestamp: {}", e),
             Error::UnexpectedStateRoot(e) => write!(f, "UnexpectedStateRoot: {:?}", e),
+            Error::UnexpectedConsensusStateRoot(e) => {
+                write!(f, "UnexpectedConsensusStateRoot: {:?}", e)
+            }
+            Error::UnexpectedStorageRoot(e) => write!(f, "UnexpectedStorageRoot: {:?}", e),
             Error::UnexpectedCommitmentValue(e) => write!(f, "UnexpectedCommitmentValue: {:?}", e),
             Error::HeaderNotWithinTrustingPeriod(e1, e2) => {
                 write!(f, "HeaderNotWithinTrustingPeriod: {} {}", e1, e2)
@@ -166,6 +173,7 @@ impl core::fmt::Display for Error {
             }
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
+            Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
         }
     }
 }

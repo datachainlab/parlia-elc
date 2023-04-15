@@ -87,7 +87,7 @@ impl ClientState {
             state_root: account
                 .storage_root
                 .try_into()
-                .map_err(Error::UnexpectedStateRoot)?,
+                .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
             validator_set: header.validator_set().clone(),
         };
