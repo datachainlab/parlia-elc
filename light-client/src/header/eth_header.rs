@@ -274,21 +274,21 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
 
         // create block hash
         let mut stream = RlpStream::new_list(15);
-        stream.append(&parent_hash.to_vec());
-        stream.append(&uncle_hash.to_vec());
-        stream.append(&coinbase.to_vec());
+        stream.append(&parent_hash);
+        stream.append(&uncle_hash);
+        stream.append(&coinbase);
         stream.append(&root.to_vec());
-        stream.append(&tx_hash.to_vec());
-        stream.append(&receipt_hash.to_vec());
-        stream.append(&bloom.to_vec());
+        stream.append(&tx_hash);
+        stream.append(&receipt_hash);
+        stream.append(&bloom);
         stream.append(&difficulty);
         stream.append(&number);
         stream.append(&gas_limit);
         stream.append(&gas_used);
         stream.append(&timestamp);
         stream.append(&extra_data);
-        stream.append(&mix_digest.to_vec());
-        stream.append(&nonce.to_vec());
+        stream.append(&mix_digest);
+        stream.append(&nonce);
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
