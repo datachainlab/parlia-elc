@@ -68,7 +68,10 @@ impl Header {
                 let previous_epoch_height = new_height(chain_id.version(), previous_epoch_block);
                 let previous_validator_set = ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {
-                    return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
+                    return Err(Error::PreviousValidatorNotFound(
+                        previous_epoch_block,
+                        target.number,
+                    ));
                 }
                 self.headers
                     .verify(chain_id, &target.new_validators, &previous_validator_set)
@@ -84,7 +87,10 @@ impl Header {
             let last_epoch_height = new_height(chain_id.version(), last_epoch_number);
             let new_validator_set = &ctx.read(last_epoch_height)?;
             if new_validator_set.is_empty() {
-                return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
+                return Err(Error::NewValidatorNotFound(
+                    last_epoch_number,
+                    target.number,
+                ));
             }
             if epoch_count == 0 {
                 // Use genesis epoch validator set
@@ -95,7 +101,10 @@ impl Header {
                 let previous_epoch_height = new_height(chain_id.version(), previous_epoch_number);
                 let previous_validator_set = &ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {
-                    return Err(Error::UnexpectedValidatorInEpochBlock(target.number));
+                    return Err(Error::PreviousValidatorNotFound(
+                        previous_epoch_number,
+                        target.number,
+                    ));
                 }
                 self.headers
                     .verify(chain_id, new_validator_set, previous_validator_set)
@@ -337,8 +346,9 @@ mod test {
             .validators
             .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
-            Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.number)
+            Error::NewValidatorNotFound(epoch, number) => {
+                assert_eq!(epoch, (header.headers.target.number / 200) * 200);
+                assert_eq!(number, header.headers.target.number);
             }
             e => unreachable!("{:?}", e),
         }
@@ -350,8 +360,9 @@ mod test {
             .validators
             .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
-            Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.number)
+            Error::PreviousValidatorNotFound(epoch, number) => {
+                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
+                assert_eq!(number, header.headers.target.number);
             }
             e => unreachable!("{:?}", e),
         }
@@ -380,8 +391,9 @@ mod test {
             .validators
             .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
-            Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.number)
+            Error::PreviousValidatorNotFound(epoch, number) => {
+                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
+                assert_eq!(number, header.headers.target.number);
             }
             e => unreachable!("{:?}", e),
         }
@@ -409,8 +421,9 @@ mod test {
             .validators
             .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
-            Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.number)
+            Error::NewValidatorNotFound(epoch, number) => {
+                assert_eq!(epoch, (header.headers.target.number / 200) * 200);
+                assert_eq!(number, header.headers.target.number);
             }
             e => unreachable!("{:?}", e),
         }
@@ -422,8 +435,9 @@ mod test {
             .validators
             .remove(&new_height(mainnet.version(), epoch.number));
         match header.verify(reader, mainnet).unwrap_err() {
-            Error::UnexpectedValidatorInEpochBlock(number) => {
-                assert_eq!(number, header.headers.target.number)
+            Error::PreviousValidatorNotFound(epoch, number) => {
+                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
+                assert_eq!(number, header.headers.target.number);
             }
             e => unreachable!("{:?}", e),
         }
