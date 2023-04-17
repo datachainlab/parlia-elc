@@ -16,7 +16,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Account, Address, ChainId, Hash, ValidatorReader, Validators};
+use crate::misc::{new_height, Account, Address, ChainId, Hash, ValidatorReader, Validators, decode_proof};
 use crate::path::Path;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -38,8 +38,7 @@ impl ClientState {
         path: impl Path,
         expected_value: &Option<Vec<u8>>,
     ) -> Result<(), Error> {
-        let storage_proof = Rlp::new(storage_proof_rlp);
-        let storage_proof = storage_proof.as_list().map_err(Error::RLPDecodeError)?;
+        let storage_proof = decode_proof(storage_proof_rlp)?;
         verify_proof(
             storage_root,
             &storage_proof,
@@ -261,11 +260,11 @@ fn verify_proof(
 #[cfg(test)]
 mod test {
     use hex_literal::hex;
+    use rlp::Rlp;
 
     use crate::client_state::{resolve_account, verify_proof, ClientState};
-    use crate::header::testdata::to_rlp;
     use crate::misc::{Account, Hash};
-    use crate::path::YuiIBCPath;
+    use crate::path::{Path, YuiIBCPath};
 
     #[test]
     fn test_resolve_account() {
@@ -303,19 +302,19 @@ mod test {
     #[test]
     fn test_verify_commitment() {
         let storage_root = hex!("2a76cf6e2521e6a413a912d96a4220479c68283130d6cef6966f4ff1cf437a32");
-        let storage_proof = to_rlp(vec![
+        let storage_proof = vec![
             hex!("f8918080a0f0d0b833ffb94d6962b74e4b1d5bc5a7cceca74616832065750c00ddd9d1b329808080a0044f9d4608bdd7ff7943cee62a73ac4daeff3c495907afd494dce25436b0c534a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df39480808080a0b19b826b59a7db662e9af57a595710163588c476f642b97df805705790dee4e680808080").to_vec(),
             hex!("f843a030ce6503f917cf7d4ecf54b344bf12226dc86adea09aeb7829c0bb8a1eae2c1aa1a03334000000000000000000000000000000000000000000000000000000000000").to_vec(),
-        ]);
-
+        ];
+        let p = Rlp::new(&storage_proof[0]);
+        let pp : alloc::vec::Vec<u8> = p.as_val().unwrap();
         let path = YuiIBCPath::from("clients/client1/clientState".as_bytes());
-
         let mut expected = [0_u8; 32];
         expected[0] = 51;
         expected[1] = 52;
         if let Err(e) = ClientState::verify_commitment(
             &storage_root,
-            &storage_proof,
+            pp.as_slice(),
             path,
             &Some(expected.to_vec()),
         ) {

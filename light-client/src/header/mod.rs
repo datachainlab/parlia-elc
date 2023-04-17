@@ -4,11 +4,10 @@ use alloc::vec::Vec;
 use lcp_types::{Any, Height, Time};
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
-use rlp::Rlp;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators};
+use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators, decode_proof};
 
 use super::errors::Error;
 
@@ -42,14 +41,7 @@ impl Header {
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        let account_proof = Rlp::new(&self.inner.account_proof);
-        Ok(account_proof
-            .into_iter()
-            .map(|r| {
-                let proof: Vec<Vec<u8>> = r.as_list().unwrap();
-                rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into()
-            })
-            .collect())
+        decode_proof(&self.inner.account_proof)
     }
 
     pub fn trusted_height(&self) -> Height {

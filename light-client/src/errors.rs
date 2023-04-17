@@ -72,6 +72,7 @@ pub enum Error {
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+    ProofRLPError(rlp::DecoderError),
 }
 
 impl core::fmt::Display for Error {
@@ -182,6 +183,7 @@ impl core::fmt::Display for Error {
             Error::NewValidatorNotFound(e1, e2) => {
                 write!(f, "NewValidatorNotFound: epoch={} target={}", e1, e2)
             }
+            Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
         }
     }
 }
