@@ -9,7 +9,8 @@ use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout};
 use prost::Message as _;
 use rlp::Rlp;
-use trie_eip1186::VerifyError;
+use trie_eip1186::{verify_proof as native_verifyProof, VerifyError};
+
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
@@ -261,10 +262,15 @@ fn verify_proof(
 mod test {
     use hex_literal::hex;
     use rlp::Rlp;
+    use alloc::borrow::ToOwned as _;
+    use patricia_merkle_trie::{EIP1186Layout, keccak};
+    use patricia_merkle_trie::keccak::keccak_256;
+    use prost::bytes::{BufMut, BytesMut};
 
     use crate::client_state::{resolve_account, verify_proof, ClientState};
     use crate::misc::{Account, Hash};
     use crate::path::{Path, YuiIBCPath};
+    use trie_eip1186::{verify_proof as native_verifyProof, VerifyError};
 
     #[test]
     fn test_resolve_account() {
@@ -348,4 +354,59 @@ mod test {
             cs.ibc_store_address
         );
     }
+
+    #[test]
+    fn test_verify_membership_with_connection_state() {
+        use ibc_proto::ibc::core::commitment::v1::MerklePrefix;
+        use ibc_proto::ibc::core::connection::v1::{ConnectionEnd, Counterparty, State, Version};
+
+        use prost::Message;
+
+        let storage_root = hex!("f4d65dd2af86e63e5288f0e2ebc1f5c2da9b401d2648afb49fb74b572a968d1a");
+        let path = b"connections/connection-0".to_vec();
+        let value_proof_list = vec![
+            hex!("f901f1a0e82d1005abda0dbaa0902c43770d9dc398c50702086f00ab9df7447c79b678a7a084e18566da24bc07e7be1799899403811edee930436fd3adc5b9c2d285761272a08c41aafb59d00e2065923ac91614ff09ffe216e14bfae531b6be84ac200df42da0126fdcc6fd261e65d23367b45ab14ea9aa9fc9924b1458b101465177663db446a0ece30930b0eb4e30b247256232eb964a1745214d25ad24afd9abe9241bf68dcfa08259f9606fa6d93393d2df42dad317e9ff72fa2a9b5e96b1ef912fd70f1f07f2a0c79a2f5a8170e1588068124a9eba736432c9356eea666b85c1393eb3adfef05fa0852ba9427cbda9328449ba7f44626659ec18ae3d8e3679dddd7665ae14b1ba1fa0dd1e9df94d0deb3dd91184a99371924f03ddd82b9568c5ce8e4590f6c9d84773a0f8f6e4d72660d1857f3be96d1c9338c8a743931631b6ae989a722e0f1b6b6ad2a00919a868f3c8afc01f89729a4e3cd05948e013d6389656e0f8ba546ded16e77da00a0ce3e857333daabbdd1ce9f2f20309960071a573fbebe973a8f2ef25e69f34a016c799afd57d9644df5df08856b1205e17053921304e37449d3bec13a60aac73a0cc9b3cae2233573dbd970d71ccde6c060cdc063d2eee0add4f43f1770d0e4811a061cea851681bc1839f1462e634a53a66894a9fad9cb926d774cfcbd3ed9ef7bb8080").to_vec(),
+            hex!("f8b180a07dbc8337ea92eb56afc5caeed7c6732654a154a2fa1498a0e49faf986323af42808080a060e1914b573ffcc64525ec9dd09a0a309f43a34b23e3e86b0663bf8b004d5f1180a04086ff29349bd47f5fd994973d0547d9c6f7438b65ad6497144bc3ab22ce5b408080a09b5d804d5d9f3b8e97e7305a2355eb8ea200212ed70bf3235ba0630d2d1ab2338080a0f4b194d8748d1c2191c783e25cb1c86f0cf91a9c6f4423ecc733afc406e5a586808080").to_vec(),
+            hex!("f843a0203fc42ddf6c1b5bb218ce24e14c40af9e0eb127a5d76050d37d7369e2fc4a47a1a0ee0a0d14f90336be8485b9c018f7894507e574bc09f19bfc6c7f938ba98a2b1d").to_vec()
+        ];
+
+        let connection_end = ConnectionEnd {
+            client_id: "mock-client-0".to_owned(),
+            versions: vec![Version {
+                identifier: "1".to_owned(),
+                features: vec!["ORDER_ORDERED".to_owned(), "ORDER_UNORDERED".to_owned()],
+            }],
+            state: 3,
+            counterparty: Some(Counterparty {
+                client_id: "mock-client-1".to_owned(),
+                connection_id: "connection-1".to_owned(),
+                prefix: Some(MerklePrefix {
+                    key_prefix: hex!("696263").to_vec(),
+                }),
+            }),
+            delay_period: 3_000_000_000_u64,
+        };
+
+        let mut buf = alloc::vec::Vec::<u8>::new();
+        connection_end.encode(&mut buf).unwrap();
+        let expected_value = keccak_256(&buf).to_vec();
+        let data: alloc::vec::Vec<u8> =
+            hex!("ee0a0d14f90336be8485b9c018f7894507e574bc09f19bfc6c7f938ba98a2b1d").to_vec(); // from eth_getProof.
+        assert_eq!(expected_value, data);
+     //   let expected_value = Some(rlp::encode(&expected_value).to_vec());
+
+        /*
+        let path = keccak_256(&path).to_vec();
+        let mut buffer = BytesMut::with_capacity(256);
+        buffer.put(&path[..]);
+        let storage_slot = hex!("0000000000000000000000000000000000000000000000000000000000000000");
+        buffer.put(&storage_slot[..]);
+        let key: [u8; 32] = keccak_256(&buffer);
+         */
+        let path = YuiIBCPath::from(path.as_slice());
+        let key = path.storage_key();
+
+        assert!(verify_proof(&storage_root, &value_proof_list, key, &Some(expected_value)).is_ok());
+    }
+
 }

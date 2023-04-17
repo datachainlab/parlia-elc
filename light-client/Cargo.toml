@@ -31,6 +31,8 @@ serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
+ibc-proto   = { version = "0.26.0", default-features = false }
+
 
 [features]
 default = ["std"]
