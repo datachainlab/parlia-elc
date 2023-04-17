@@ -32,7 +32,7 @@ impl ConsensusState {
             .timestamp
             .add(trusting_period)
             .map_err(Error::UnexpectedTimestamp)?;
-        if deadline.as_unix_timestamp_secs() < now.as_unix_timestamp_secs() {
+        if deadline < now {
             Err(Error::HeaderNotWithinTrustingPeriod(deadline, now))
         } else {
             Ok(())
