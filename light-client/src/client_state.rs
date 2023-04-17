@@ -82,7 +82,6 @@ impl ClientState {
             &new_client_state.ibc_store_address,
         )?;
 
-        let _storage_size = account.storage_root.len();
         let new_consensus_state = ConsensusState {
             state_root: account
                 .storage_root

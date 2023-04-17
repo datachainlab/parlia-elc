@@ -42,16 +42,20 @@ impl Header {
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        let rlp = Rlp::new(&self.inner.account_proof);
-        rlp.as_list().map_err(Error::RLPDecodeError)
+        let account_proof = Rlp::new(&self.inner.account_proof);
+        Ok(account_proof
+            .into_iter()
+            .map(|r| {
+                let proof: Vec<Vec<u8>> = r.as_list().unwrap();
+                rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into()
+            })
+            .collect())
     }
 
     pub fn trusted_height(&self) -> Height {
         self.trusted_height
     }
 
-    //TODO cfg when the sufficient test data is found.
-    #[cfg(not(test))]
     pub fn state_root(&self) -> &crate::misc::Hash {
         &self.headers.target.root
     }

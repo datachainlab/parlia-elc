@@ -9,7 +9,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 use crate::errors::Error;
 use crate::header::eth_header::ETHHeader;
 use crate::header::Header;
-use crate::misc::{ChainId, Hash};
+use crate::misc::ChainId;
 
 pub fn mainnet() -> ChainId {
     ChainId::new(56)
@@ -783,10 +783,4 @@ pub fn to_rlp(proof: alloc::vec::Vec<alloc::vec::Vec<u8>>) -> BytesMut {
         rlp.append(&v);
     }
     rlp.out()
-}
-
-impl Header {
-    pub fn state_root(&self) -> &Hash {
-        &hex!("c7095cc31e155302a3ff06970f0df0efa1abf5fe6e4be6cc450cc5f9421c2c9f")
-    }
 }
