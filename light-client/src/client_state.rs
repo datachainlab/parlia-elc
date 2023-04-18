@@ -40,7 +40,6 @@ impl ClientState {
         expected_value: &Option<Vec<u8>>,
     ) -> Result<(), Error> {
         let storage_proof = decode_proof(&storage_proof_rlp)?;
-        let expected_value = expected_value.as_ref().map(|e| keccak_256(e).to_vec());
         verify_proof(
             storage_root,
             &storage_proof,
@@ -347,6 +346,7 @@ mod test {
         ];
 
         let expected_value = vec![10, 12, 108, 99, 112, 45, 99, 108, 105, 101, 110, 116, 45, 48, 18, 35, 10, 1, 49, 18, 13, 79, 82, 68, 69, 82, 95, 79, 82, 68, 69, 82, 69, 68, 18, 15, 79, 82, 68, 69, 82, 95, 85, 78, 79, 82, 68, 69, 82, 69, 68, 24, 1, 34, 21, 10, 12, 108, 99, 112, 45, 99, 108, 105, 101, 110, 116, 45, 48, 26, 5, 10, 3, 105, 98, 99];
+        let expected_value = keccak_256(&expected_value).to_vec();
         let path = YuiIBCPath::from("connections/connection-0".as_bytes());
         if let Err(e) = ClientState::verify_commitment(
             &storage_root,
@@ -400,7 +400,7 @@ mod test {
             &storage_root,
             &storage_proof,
             path,
-            &Some(expected_value),
+            &Some(keccak_256(&expected_value).to_vec()),
         ) {
             match e {
                 Error::UnexpectedStateExistingValue(_,_,_,value) => {

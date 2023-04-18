@@ -9,6 +9,7 @@ use light_client::{
     CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
     StateVerificationResult, UpdateClientResult,
 };
+use patricia_merkle_trie::keccak::keccak_256;
 use validation_context::ValidationParams;
 
 use crate::client_state::ClientState;
@@ -126,19 +127,19 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<StateVerificationResult, LightClientError> {
+        let value =  keccak_256(&value);
         let state_id = self.verify_commitment(
             ctx,
             client_id,
             &prefix,
             &path,
-            Some(value.clone()),
+            Some(value.to_vec()),
             &proof_height,
             proof,
         )?;
 
-        let value = Some(value.try_into().map_err(Error::UnexpectedCommitmentValue)?);
         Ok(StateVerificationResult {
-            state_commitment: StateCommitment::new(prefix, path, value, proof_height, state_id),
+            state_commitment: StateCommitment::new(prefix, path, Some(value), proof_height, state_id),
         })
     }
 
