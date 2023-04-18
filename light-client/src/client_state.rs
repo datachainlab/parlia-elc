@@ -227,7 +227,7 @@ fn resolve_account(
 ) -> Result<Account, Error> {
     match verify_proof(state_root, account_proof, address, &None) {
         Ok(_) => Err(Error::AccountNotFound(*address)),
-        Err(Error::UnexpectedStateExistingValue(value, _)) => Rlp::new(&value).try_into(),
+        Err(Error::UnexpectedStateExistingValue(_,_, value, _)) => Rlp::new(&value).try_into(),
         Err(err) => Err(err),
     }
 }
@@ -238,7 +238,10 @@ fn verify_proof(
     key: &[u8],
     expected_value: &Option<Vec<u8>>,
 ) -> Result<(), Error> {
+    let log_hash = root.clone();
+    let log_proof = proof.to_vec();
     let expected_value = expected_value.as_ref().map(|e| rlp::encode(e).to_vec());
+    let log_expected_value = expected_value.clone();
     trie_eip1186::verify_proof::<EIP1186Layout<keccak::KeccakHasher>>(
         &root.into(),
         proof,
@@ -247,14 +250,14 @@ fn verify_proof(
     )
     .map_err(|err| match err {
         VerifyError::ExistingValue(value) => {
-            Error::UnexpectedStateExistingValue(value, key.to_vec())
+            Error::UnexpectedStateExistingValue(log_hash, log_proof, value, key.to_vec())
         }
-        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(key.to_vec()),
-        VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
-        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
-        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
-        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
-        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
+        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(log_hash, log_proof, log_expected_value, key.to_vec()),
+        VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(log_hash, log_proof, log_expected_value, key.to_vec()),
+        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(log_hash, log_proof, log_expected_value, key.to_vec()),
+        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(log_hash, log_proof, log_expected_value, key.to_vec()),
+        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(log_hash, log_proof, log_expected_value, key.to_vec()),
+        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(log_hash, log_proof, log_expected_value, key.to_vec()),
     })
 }
 
