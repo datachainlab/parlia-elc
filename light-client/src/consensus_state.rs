@@ -4,12 +4,12 @@ use core::ops::Add;
 use core::time::Duration;
 
 use lcp_types::{Any, Time};
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
 
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{new_timestamp, Hash, Validators};
+use crate::misc::{Hash, new_timestamp, Validators};
 
 use super::errors::Error;
 
@@ -112,9 +112,9 @@ impl TryFrom<Any> for ConsensusState {
 #[cfg(test)]
 mod test {
     use core::time::Duration;
-    use hex_literal::hex;
     use std::ops::{Add, Sub};
 
+    use hex_literal::hex;
     use lcp_types::Time;
 
     use crate::consensus_state::ConsensusState;

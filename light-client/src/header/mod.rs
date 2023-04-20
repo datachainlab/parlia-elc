@@ -2,12 +2,12 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
 use lcp_types::{Any, Height, Time};
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
 
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators, decode_proof};
+use crate::misc::{ChainId, decode_proof, new_height, new_timestamp, ValidatorReader, Validators};
 
 use super::errors::Error;
 
@@ -184,17 +184,17 @@ pub(crate) mod testdata;
 
 #[cfg(test)]
 mod test {
-    use hex_literal::hex;
     use std::collections::HashMap;
+
+    use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     use crate::errors::Error;
-
-    use crate::header::testdata::*;
     use crate::header::Header;
-    use crate::misc::{new_height, ChainId, ValidatorReader, Validators};
+    use crate::header::testdata::*;
+    use crate::misc::{ChainId, new_height, ValidatorReader, Validators};
 
     #[test]
     fn test_success_try_from_header() {

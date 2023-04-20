@@ -322,8 +322,8 @@ mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     use crate::errors::Error;
-    use crate::header::eth_header::ETHHeader;
     use crate::header::eth_header::{EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
+    use crate::header::eth_header::ETHHeader;
     use crate::header::testdata::*;
 
     #[test]

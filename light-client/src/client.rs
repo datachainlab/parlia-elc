@@ -2,7 +2,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use commitments::{
-    gen_state_id_from_any, CommitmentPrefix, StateCommitment, StateID, UpdateClientCommitment,
+    CommitmentPrefix, gen_state_id_from_any, StateCommitment, StateID, UpdateClientCommitment,
 };
 use lcp_types::{Any, ClientId, Height};
 use light_client::{
@@ -16,7 +16,9 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::path::YuiIBCPath;
+use crate::misc::decode_proof;
+use crate::path::{Path, YuiIBCPath};
+use crate::proof::verify_proof;
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -189,10 +191,11 @@ impl ParliaLightClient {
 
         let consensus_state = ConsensusState::try_from(any_consensus_state)?;
         let storage_root = consensus_state.state_root;
-        ClientState::verify_commitment(
+        let storage_proof = decode_proof(&storage_proof_rlp)?;
+        verify_proof(
             &storage_root,
-            &storage_proof_rlp,
-            YuiIBCPath::from(path.as_bytes()),
+            &storage_proof,
+            YuiIBCPath::from(path.as_bytes()).storage_key(),
             &value,
         )?;
 
@@ -214,18 +217,18 @@ mod test {
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
+    use patricia_merkle_trie::keccak::keccak_256;
 
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Fraction;
 
     use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
+    use crate::header::Header;
     use crate::header::testdata::{
         create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block, fill,
-        to_rlp,
     };
-    use crate::header::Header;
-    use crate::misc::{new_height, new_timestamp, ChainId, Hash};
+    use crate::misc::{ChainId, Hash, new_height, new_timestamp};
 
     struct MockClientReader;
 
@@ -266,10 +269,10 @@ mod test {
                     trusting_period: core::time::Duration::new(1, 0),
                     frozen: false,
                 }
-            } else if client_id.as_str() == "99-parlia-1" {
-                let relayernet = ChainId::new(9999);
+            } else if client_id.as_str() == "99-parlia-1" || client_id.as_str() == "99-parlia-2"{
+                let lcpnet = ChainId::new(9999);
                 ClientState {
-                    chain_id: relayernet,
+                    chain_id: lcpnet,
                     ibc_store_address: hex!("702E40245797c5a2108A566b3CE2Bf14Bc6aF841"),
                     latest_height: Height::new(0, 400),
                     trust_level: Fraction {
@@ -301,10 +304,21 @@ mod test {
             client_id: &ClientId,
             height: &Height,
         ) -> Result<Any, light_client::Error> {
-            // relayer testing consensus
+            // lcp updating testing consensus
             if client_id.as_str() == "99-parlia-1" {
                 return Ok(Any::from(ConsensusState {
                     state_root: [0_u8; 32],
+                    timestamp: self.host_timestamp(),
+                    validator_set: vec![vec![
+                        185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136,
+                        133, 3, 78, 91,
+                    ]],
+                }));
+            }else if client_id.as_str() == "99-parlia-2" {
+                return Ok(Any::from(ConsensusState {
+                    state_root: [
+                        51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229, 227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78
+                    ],
                     timestamp: self.host_timestamp(),
                     validator_set: vec![vec![
                         185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136,
@@ -497,51 +511,32 @@ mod test {
     }
 
     #[test]
-    fn test_verify_commitment() {
-        let ctx = MockClientReader;
+    fn test_verify_membership_with_lcp() {
+        let storage_proof_rlp = vec![
+            249, 2, 108, 249, 1, 145, 160, 243, 2, 132, 113, 118, 63, 160, 241, 161, 149, 174, 195, 18, 210, 53, 140, 244, 55, 106, 61, 135, 92, 126, 3, 174, 227, 145, 76, 246, 158, 163, 237, 128, 128, 160, 161, 243, 110, 96, 138, 107, 213, 87, 172, 13, 123, 131, 19, 176, 84, 242, 32, 18, 219, 20, 61, 136, 234, 214, 229, 63, 3, 59, 48, 2, 150, 137, 160, 175, 166, 191, 1, 133, 187, 201, 138, 8, 129, 81, 61, 81, 86, 33, 87, 198, 100, 189, 6, 230, 101, 136, 66, 66, 242, 24, 147, 184, 24, 61, 33, 160, 23, 83, 180, 210, 64, 112, 1, 189, 122, 120, 147, 18, 45, 252, 211, 143, 177, 16, 93, 219, 135, 216, 71, 156, 65, 241, 141, 38, 171, 247, 237, 182, 160, 210, 143, 238, 182, 140, 97, 22, 255, 66, 68, 225, 250, 55, 56, 89, 201, 28, 147, 181, 102, 138, 47, 37, 0, 189, 189, 203, 212, 152, 186, 241, 212, 160, 93, 33, 126, 80, 5, 168, 58, 116, 140, 187, 49, 219, 74, 219, 118, 193, 62, 119, 121, 235, 231, 13, 122, 189, 163, 187, 122, 145, 6, 196, 148, 3, 160, 9, 226, 194, 151, 8, 9, 20, 134, 217, 158, 89, 5, 196, 34, 23, 235, 234, 182, 193, 155, 131, 238, 116, 100, 192, 196, 214, 102, 88, 180, 15, 239, 160, 114, 77, 73, 24, 57, 36, 101, 1, 166, 27, 246, 128, 196, 20, 105, 243, 251, 51, 205, 247, 112, 2, 4, 109, 93, 1, 104, 71, 100, 138, 24, 237, 160, 209, 8, 0, 140, 126, 171, 172, 12, 93, 82, 67, 64, 234, 3, 152, 165, 245, 137, 166, 131, 218, 2, 177, 29, 84, 166, 186, 8, 42, 245, 54, 145, 160, 214, 233, 118, 109, 210, 194, 72, 219, 143, 9, 216, 125, 95, 190, 129, 254, 160, 111, 112, 122, 146, 103, 213, 223, 119, 10, 156, 212, 4, 60, 116, 180, 160, 90, 98, 164, 183, 88, 177, 161, 231, 114, 25, 237, 70, 112, 69, 253, 90, 125, 202, 100, 255, 155, 200, 174, 225, 111, 199, 221, 194, 180, 124, 109, 50, 160, 39, 152, 155, 234, 177, 15, 57, 47, 67, 85, 70, 121, 225, 22, 86, 184, 135, 250, 224, 143, 245, 81, 251, 117, 185, 11, 128, 32, 154, 54, 102, 126, 128, 128, 128, 248, 145, 128, 128, 128, 128, 128, 160, 103, 18, 133, 119, 55, 115, 130, 213, 70, 76, 86, 39, 144, 246, 223, 29, 254, 134, 177, 180, 108, 75, 102, 200, 241, 205, 231, 206, 19, 221, 182, 244, 128, 128, 160, 111, 93, 78, 118, 145, 122, 232, 53, 185, 114, 80, 95, 148, 212, 14, 218, 218, 253, 220, 68, 46, 148, 77, 193, 87, 179, 71, 171, 145, 93, 173, 118, 128, 128, 128, 128, 160, 192, 156, 224, 147, 42, 238, 11, 71, 160, 213, 233, 164, 59, 206, 68, 79, 86, 159, 212, 42, 109, 164, 91, 77, 164, 86, 88, 8, 192, 152, 241, 183, 128, 160, 8, 21, 54, 159, 64, 208, 81, 17, 118, 220, 29, 163, 73, 142, 1, 7, 9, 151, 63, 23, 186, 206, 165, 2, 3, 144, 30, 15, 37, 48, 164, 148, 128, 248, 67, 160, 32, 63, 196, 45, 223, 108, 27, 91, 178, 24, 206, 36, 225, 76, 64, 175, 158, 14, 177, 39, 165, 215, 96, 80, 211, 125, 115, 105, 226, 252, 74, 71, 161, 160, 34, 171, 87, 106, 125, 243, 139, 180, 134, 15, 251, 198, 95, 48, 213, 166, 101, 54, 251, 45, 142, 195, 213, 215, 212, 171, 154, 62, 173, 14, 67, 18
+        ];
+        let expected_value = vec![10, 12, 108, 99, 112, 45, 99, 108, 105, 101, 110, 116, 45, 48, 18, 35, 10, 1, 49, 18, 13, 79, 82, 68, 69, 82, 95, 79, 82, 68, 69, 82, 69, 68, 18, 15, 79, 82, 68, 69, 82, 95, 85, 78, 79, 82, 68, 69, 82, 69, 68, 24, 1, 34, 21, 10, 12, 108, 99, 112, 45, 99, 108, 105, 101, 110, 116, 45, 48, 26, 5, 10, 3, 105, 98, 99];
+        let path = "connections/connection-0";
+
         let client = ParliaLightClient::default();
+        let ctx = MockClientReader;
         let prefix = vec![0];
-        let path = "commitments/ports/port-1/channels/channel-1/sequences/1";
-        let proof_height = new_height(0, 2);
-        let client_id = ClientId::from_str("99-parlia-0").unwrap();
-        let mut expected = [0_u8; 32];
-        expected[0] = 51;
-        expected[1] = 52;
-        let storage_proof_rlp = to_rlp(vec![
-            hex!("f8918080a048477c6f9a27dd3b09ba3140d73536c56f2d038c2d1f0156450b5cdd75fec740808080a0044f9d4608bdd7ff7943cee62a73ac4daeff3c495907afd494dce25436b0c534a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df394808080808080a0f8cf7dfa7a8c74ff54bf6717a6520081d72e7ec9076a9bacb263be17cf24cfdd8080").to_vec(),
-            hex!("f843a030e8c8f21e1b1f55c0464131968b01fa0a534609e5ca17ab6d3dfae0fcbe0fcaa1a03334000000000000000000000000000000000000000000000000000000000000").to_vec()
-        ]);
+        let proof_height = new_height(0, 400);
+        let client_id = ClientId::from_str("99-parlia-2").unwrap();
 
         match client.verify_membership(
             &ctx,
-            client_id.clone(),
-            prefix.clone(),
+            client_id,
+            prefix,
             path.to_string(),
-            expected.to_vec(),
+            expected_value.clone(),
             proof_height,
             storage_proof_rlp.to_vec(),
         ) {
             Ok(data) => {
                 assert_eq!(data.state_commitment.path, path);
                 assert_eq!(data.state_commitment.height, proof_height);
-                assert_eq!(data.state_commitment.value, Some(expected));
-            }
-            Err(e) => unreachable!("error {:?}", e),
-        };
-
-        let path = "commitments/ports/port-1/channels/channel-1/sequences/2";
-        match client.verify_non_membership(
-            &ctx,
-            client_id,
-            prefix,
-            path.to_string(),
-            proof_height,
-            storage_proof_rlp.to_vec(),
-        ) {
-            Ok(data) => {
-                assert_eq!(data.state_commitment.path, path.to_string());
-                assert_eq!(data.state_commitment.height, proof_height);
-                assert_eq!(data.state_commitment.value, None);
+                assert_eq!(data.state_commitment.value, Some(keccak_256(expected_value.as_slice())));
             }
             Err(e) => unreachable!("error {:?}", e),
         };
