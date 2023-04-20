@@ -9,7 +9,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{Hash, new_timestamp, Validators};
+use crate::misc::{Hash, new_height, new_timestamp, Validators};
 
 use super::errors::Error;
 
@@ -17,13 +17,22 @@ pub const PARLIA_CONSENSUS_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.C
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConsensusState {
+    /// the storage root of the IBC contract
     pub state_root: Hash,
+    /// timestamp from execution payload
     pub timestamp: Time,
-    // Only epoch headers contain validator set
+    /// finalized header's validator set.Only epoch headers contain validator set
     pub validator_set: Validators,
 }
 
 impl ConsensusState {
+
+    /// canonicalize canonicalizes some fields of specified client state
+    /// target fields: nothing
+    pub fn canonicalize(mut self) -> Self{
+        self
+    }
+
     pub fn assert_not_expired(&self, now: Time, trusting_period: Duration) -> Result<(), Error> {
         if self.timestamp > now {
             return Err(Error::IllegalTimestamp(self.timestamp, now));

@@ -44,9 +44,10 @@ impl LightClient for ParliaLightClient {
         any_client_state: Any,
         any_consensus_state: Any,
     ) -> Result<CreateClientResult, LightClientError> {
-        let new_state_id = state_id(&any_client_state, &any_consensus_state)?;
         let client_state = ClientState::try_from(any_client_state.clone())?;
         let consensus_state = ConsensusState::try_from(any_consensus_state)?;
+
+        let new_state_id = gen_state_id(client_state.clone(), consensus_state.clone())?;
 
         let height = client_state.latest_height;
         let timestamp = consensus_state.timestamp;
@@ -79,7 +80,6 @@ impl LightClient for ParliaLightClient {
         let trusted_height = header.trusted_height();
         let any_client_state = ctx.client_state(&client_id)?;
         let any_consensus_state = ctx.consensus_state(&client_id, &trusted_height)?;
-        let prev_state_id = state_id(&any_client_state, &any_consensus_state)?;
 
         //Ensure client is not frozen
         let client_state = ClientState::try_from(any_client_state)?;
@@ -97,21 +97,19 @@ impl LightClient for ParliaLightClient {
             header,
         )?;
 
-        let new_height = new_client_state.latest_height;
-        let new_any_client_state = Any::from(new_client_state);
-        let new_any_consensus_state = Any::from(new_consensus_state);
-        let new_state_id = state_id(&new_any_client_state, &new_any_consensus_state)?;
+        let prev_state_id = gen_state_id(client_state, trusted_consensus_state)?;
+        let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
         Ok(UpdateClientResult {
-            new_any_client_state,
-            new_any_consensus_state,
+            new_any_client_state: new_client_state.into(),
+            new_any_consensus_state: new_consensus_state.into(),
             height,
             commitment: UpdateClientCommitment {
                 prev_state_id: Some(prev_state_id),
                 new_state_id,
                 new_state: None,
                 prev_height: Some(trusted_height),
-                new_height,
+                new_height: height,
                 timestamp,
                 validation_params: ValidationParams::Empty,
             },
@@ -174,8 +172,7 @@ impl ParliaLightClient {
         proof_height: &Height,
         storage_proof_rlp: Vec<u8>,
     ) -> Result<StateID, LightClientError> {
-        let any_client_state = ctx.client_state(&client_id)?;
-        let client_state = ClientState::try_from(any_client_state.clone())?;
+        let client_state = ClientState::try_from( ctx.client_state(&client_id)?)?;
         if client_state.frozen {
             return Err(Error::ClientFrozen(client_id).into());
         }
@@ -186,10 +183,7 @@ impl ParliaLightClient {
             );
         }
 
-        let any_consensus_state = ctx.consensus_state(&client_id, &proof_height)?;
-        let state_id = state_id(&any_client_state, &any_consensus_state)?;
-
-        let consensus_state = ConsensusState::try_from(any_consensus_state)?;
+        let consensus_state = ConsensusState::try_from(ctx.consensus_state(&client_id, &proof_height)?)?;
         let storage_root = consensus_state.state_root;
         let storage_proof = decode_proof(&storage_proof_rlp)?;
         verify_proof(
@@ -199,12 +193,14 @@ impl ParliaLightClient {
             &value,
         )?;
 
-        Ok(state_id)
+        Ok(gen_state_id(client_state, consensus_state)?)
     }
 }
 
-fn state_id(client_state: &Any, consensus_state: &Any) -> Result<StateID, LightClientError> {
-    gen_state_id_from_any(client_state, consensus_state).map_err(LightClientError::commitment)
+fn gen_state_id(client_state: ClientState, consensus_state: ConsensusState) -> Result<StateID, LightClientError> {
+    let client_state = Any::from(client_state.canonicalize());
+    let consensus_state = Any::from(consensus_state.canonicalize());
+    gen_state_id_from_any(&client_state, &consensus_state).map_err(LightClientError::commitment)
 }
 
 #[cfg(test)]

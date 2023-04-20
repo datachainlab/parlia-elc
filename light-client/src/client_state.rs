@@ -19,15 +19,30 @@ pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Clie
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ClientState {
+    /// Chain parameters
     pub chain_id: ChainId,
+
+    /// IBC Solidity parameters
     pub ibc_store_address: Address,
-    pub latest_height: Height,
+
+    ///Light Client parameters
     pub trust_level: Fraction,
     pub trusting_period: Duration,
+
+    /// State
+    pub latest_height: Height,
     pub frozen: bool,
 }
 
 impl ClientState {
+
+    /// canonicalize canonicalizes some fields of specified client state
+    /// target fields: latest_height, frozen
+    pub fn canonicalize(mut self) -> Self {
+        self.latest_height = new_height(self.chain_id.version(), 0);
+        self.frozen = false;
+        self
+    }
 
     pub fn check_header_and_update_state(
         &self,
