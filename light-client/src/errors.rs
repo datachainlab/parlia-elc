@@ -28,13 +28,13 @@ pub enum Error {
 
     // ConsensusState error
     AccountNotFound(Address),
-    UnexpectedStateNonExistingValue(Hash, Vec<Vec<u8>>, Option<Vec<u8>>,  Vec<u8>),
+    UnexpectedStateNonExistingValue(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
     UnexpectedStateExistingValue(Hash, Vec<Vec<u8>>, Vec<u8>, Vec<u8>),
     UnexpectedStateValueMismatch(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
     UnexpectedStateIncompleteProof(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
     UnexpectedStateHashMismatch(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
-    UnexpectedStateDecodeError(Hash, Vec<Vec<u8>>,Option<Vec<u8>>, Vec<u8>),
-    UnexpectedStateHashDecodeError(Hash, Vec<Vec<u8>>,Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateDecodeError(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateHashDecodeError(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
     UnexpectedTimestamp(TimeError),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
@@ -93,26 +93,50 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedLatestHeight: {} {}", e1, e2)
             }
             Error::AccountNotFound(e) => write!(f, "AccountNotFound: {:?}", e),
-            Error::UnexpectedStateNonExistingValue(e1,e2,e3,e4) => {
+            Error::UnexpectedStateNonExistingValue(e1, e2, e3, e4) => {
                 write!(f, "UnexpectedStateNonExistingValue: root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
             }
-            Error::UnexpectedStateExistingValue(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateExistingValue:root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateExistingValue(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateExistingValue:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateValueMismatch(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateValueMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateValueMismatch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateValueMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateIncompleteProof(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateIncompleteProof:root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateIncompleteProof(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateIncompleteProof:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateHashMismatch(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateHashMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateHashMismatch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateHashMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateDecodeError(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateDecodeError: root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateDecodeError(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateDecodeError: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateHashDecodeError(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedStateHashDecodeError:root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
+            Error::UnexpectedStateHashDecodeError(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateHashDecodeError:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
             Error::UnexpectedTimestamp(e) => write!(f, "UnexpectedTimestamp: {}", e),
             Error::UnexpectedStateRoot(e) => write!(f, "UnexpectedStateRoot: {:?}", e),

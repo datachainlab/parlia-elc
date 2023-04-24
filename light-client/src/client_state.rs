@@ -12,7 +12,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{Address, ChainId, new_height, ValidatorReader, Validators};
+use crate::misc::{new_height, Address, ChainId, ValidatorReader, Validators};
 use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -35,7 +35,6 @@ pub struct ClientState {
 }
 
 impl ClientState {
-
     /// canonicalize canonicalizes some fields of specified client state
     /// target fields: latest_height, frozen
     pub fn canonicalize(mut self) -> Self {
@@ -247,5 +246,4 @@ mod test {
             cs.ibc_store_address
         );
     }
-
 }
