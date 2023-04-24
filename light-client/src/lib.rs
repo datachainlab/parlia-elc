@@ -12,7 +12,6 @@ pub mod consensus_state;
 pub mod errors;
 pub mod header;
 mod misc;
-mod path;
 mod proof;
 
 pub fn register_implementations(registry: &mut dyn light_client_registry::LightClientRegistry) {

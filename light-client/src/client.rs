@@ -16,9 +16,7 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::decode_proof;
-use crate::path::{Path, YuiIBCPath};
-use crate::proof::verify_proof;
+use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -185,11 +183,11 @@ impl ParliaLightClient {
 
         let consensus_state = ConsensusState::try_from(ctx.consensus_state(&client_id, &proof_height)?)?;
         let storage_root = consensus_state.state_root;
-        let storage_proof = decode_proof(&storage_proof_rlp)?;
+        let storage_proof = decode_eip1184_rlp_proof(&storage_proof_rlp)?;
         verify_proof(
             &storage_root,
             &storage_proof,
-            YuiIBCPath::from(path.as_bytes()).storage_key(),
+            calculate_ibc_commitment_storage_key(path).as_slice(),
             &value,
         )?;
 

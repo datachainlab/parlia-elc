@@ -7,7 +7,8 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{ChainId, decode_proof, new_height, new_timestamp, ValidatorReader, Validators};
+use crate::misc::{ChainId, new_height, new_timestamp, ValidatorReader, Validators};
+use crate::proof::decode_eip1184_rlp_proof;
 
 use super::errors::Error;
 
@@ -41,7 +42,7 @@ impl Header {
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        decode_proof(&self.inner.account_proof)
+        decode_eip1184_rlp_proof(&self.inner.account_proof)
     }
 
     pub fn trusted_height(&self) -> Height {

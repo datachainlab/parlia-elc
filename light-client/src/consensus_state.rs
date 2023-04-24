@@ -9,7 +9,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{Hash, new_height, new_timestamp, Validators};
+use crate::misc::{Hash, new_timestamp, Validators};
 
 use super::errors::Error;
 
@@ -29,7 +29,7 @@ impl ConsensusState {
 
     /// canonicalize canonicalizes some fields of specified client state
     /// target fields: nothing
-    pub fn canonicalize(mut self) -> Self{
+    pub fn canonicalize(self) -> Self{
         self
     }
 

@@ -10,7 +10,6 @@ pub type Validators = Vec<Validator>;
 pub type Address = [u8; 20];
 pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
-pub type StorageKey = [u8; 32];
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
@@ -94,15 +93,4 @@ pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
 
 pub fn new_timestamp(second: u64) -> Result<Time, Error> {
     Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
-}
-
-pub fn decode_proof(proofs: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
-    let mut proof_encoded: Vec<Vec<u8>> = Vec::with_capacity(proofs.len());
-    let proofs = Rlp::new(proofs);
-    for proof in proofs.iter() {
-        let proof: Vec<Vec<u8>> = proof.as_list().map_err(Error::ProofRLPError)?;
-        let proof = rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into();
-        proof_encoded.push(proof)
-    }
-    Ok(proof_encoded)
 }
