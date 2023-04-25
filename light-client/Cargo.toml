@@ -38,3 +38,4 @@ ibc-proto   = { version = "0.26.0", default-features = false }
 default = ["std"]
 std = ["light-client-registry/std", "lcp-types/std"]
 sgx = ["light-client-registry/sgx", "lcp-types/sgx"]
+dev = []

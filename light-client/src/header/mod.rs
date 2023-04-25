@@ -7,6 +7,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
+use self::constant::BLOCKS_PER_EPOCH;
 use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators};
 use crate::proof::decode_eip1184_rlp_proof;
 
@@ -16,9 +17,8 @@ use self::eth_headers::ETHHeaders;
 
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
-const EPOCH_BLOCK_PERIOD: u64 = 200;
-
 // inner header is module private
+pub mod constant;
 mod eth_header;
 mod eth_headers;
 
@@ -60,8 +60,8 @@ impl Header {
     pub fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
         let target = &self.headers.target;
         if target.is_epoch {
-            if target.number >= EPOCH_BLOCK_PERIOD {
-                let previous_epoch_block = target.number - EPOCH_BLOCK_PERIOD;
+            if target.number >= BLOCKS_PER_EPOCH {
+                let previous_epoch_block = target.number - BLOCKS_PER_EPOCH;
                 let previous_epoch_height = new_height(chain_id.version(), previous_epoch_block);
                 let previous_validator_set = ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {
@@ -79,8 +79,8 @@ impl Header {
                     .verify(chain_id, genesis_validator_set, genesis_validator_set)
             }
         } else {
-            let epoch_count = target.number / EPOCH_BLOCK_PERIOD;
-            let last_epoch_number = epoch_count * EPOCH_BLOCK_PERIOD;
+            let epoch_count = target.number / BLOCKS_PER_EPOCH;
+            let last_epoch_number = epoch_count * BLOCKS_PER_EPOCH;
             let last_epoch_height = new_height(chain_id.version(), last_epoch_number);
             let new_validator_set = &ctx.read(last_epoch_height)?;
             if new_validator_set.is_empty() {
@@ -94,7 +94,7 @@ impl Header {
                 self.headers
                     .verify(chain_id, new_validator_set, new_validator_set)
             } else {
-                let previous_epoch_number = (epoch_count - 1) * EPOCH_BLOCK_PERIOD;
+                let previous_epoch_number = (epoch_count - 1) * BLOCKS_PER_EPOCH;
                 let previous_epoch_height = new_height(chain_id.version(), previous_epoch_number);
                 let previous_validator_set = &ctx.read(previous_epoch_height)?;
                 if previous_validator_set.is_empty() {

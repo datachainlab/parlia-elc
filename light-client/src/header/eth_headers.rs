@@ -9,7 +9,7 @@ use crate::errors::Error;
 use crate::misc::{required_block_count_to_finalize, Address, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
-use super::EPOCH_BLOCK_PERIOD;
+use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
@@ -45,7 +45,7 @@ impl ETHHeaders {
     ) -> Result<(), Error> {
         let headers = &self.all;
         let threshold = required_block_count_to_finalize(previous_validators);
-        if self.target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
+        if self.target.number % BLOCKS_PER_EPOCH < threshold as u64 {
             // Validators created at previous epoch is used for consensus target header
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
@@ -54,7 +54,7 @@ impl ETHHeaders {
             let mut signers_before_checkpoint: BTreeSet<Address> = BTreeSet::default();
             let mut signers_after_checkpoint: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
-                if header.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
+                if header.number % BLOCKS_PER_EPOCH < threshold as u64 {
                     // Each validator can sign only one header
                     let signer = header.verify_seal(previous_validators, chain_id)?;
                     if !signers_before_checkpoint.insert(signer) {

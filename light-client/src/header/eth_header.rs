@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use crate::errors::Error;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
-use super::EPOCH_BLOCK_PERIOD;
+use super::BLOCKS_PER_EPOCH;
 
 const DIFFICULTY_INTURN: u64 = 2;
 const DIFFICULTY_NOTURN: u64 = 1;
@@ -234,7 +234,7 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
             ));
         }
 
-        let is_epoch = number % EPOCH_BLOCK_PERIOD == 0;
+        let is_epoch = number % BLOCKS_PER_EPOCH == 0;
 
         // Ensure that the extra-data contains a signer list on checkpoint, but none otherwize
         let signers_bytes_size = extra_size - EXTRA_VANITY - EXTRA_SEAL;
