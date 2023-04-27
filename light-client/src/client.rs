@@ -229,7 +229,7 @@ mod test {
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
     use crate::header::testdata::{
-        create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block, fill,
+        create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block,
     };
     use crate::header::Header;
     use crate::misc::{new_height, new_timestamp, ChainId, Hash};
@@ -332,8 +332,8 @@ mod test {
                 }));
             }
 
-            let current_epoch = fill(create_epoch_block());
-            let previous_epoch = fill(create_previous_epoch_block());
+            let current_epoch = create_epoch_block();
+            let previous_epoch = create_previous_epoch_block();
             if height.revision_height() == 1 {
                 Ok(Any::from(ConsensusState {
                     state_root: [0_u8; 32],

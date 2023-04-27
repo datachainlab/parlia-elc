@@ -132,7 +132,7 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_after_checkpoint() {
         let header = create_after_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // previous validator is unused
@@ -145,7 +145,7 @@ mod test {
     #[test]
     fn test_error_verify_eth_headers_after_checkpoint() {
         let header = create_after_checkpoint_headers();
-        let mut new_validator_set = fill(create_epoch_block()).new_validators;
+        let mut new_validator_set = create_epoch_block().new_validators;
         new_validator_set.push(new_validator_set[0].clone());
         new_validator_set.push(new_validator_set[1].clone());
 
@@ -167,7 +167,7 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_before_checkpoint() {
         let header = create_before_checkpoint_headers();
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // new validator is unused
@@ -194,7 +194,7 @@ mod test {
         }
 
         // first block uses previous broken validator set
-        let mut previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let mut previous_validator_set = create_previous_epoch_block().new_validators;
         for v in previous_validator_set.iter_mut() {
             v.pop();
         }
@@ -212,8 +212,8 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_across_checkpoint() {
         let header = create_across_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // new validator is unused
@@ -240,7 +240,7 @@ mod test {
         }
 
         // last block uses new empty validator set
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let result = header
             .headers
             .verify(mainnet, &vec![], &previous_validator_set);
@@ -259,7 +259,7 @@ mod test {
     #[test]
     fn test_error_verify_seals() {
         let mut header = create_after_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
         header.headers.all[1] = header.headers.all[0].clone();
 
         let mainnet = &mainnet();

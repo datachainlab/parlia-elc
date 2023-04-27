@@ -326,33 +326,27 @@ mod test {
     use crate::header::eth_header::{EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
     use crate::header::testdata::*;
 
+    fn check_eth_header(header: ETHHeader) -> Error {
+        let raw: RawETHHeader = header.try_into().unwrap();
+        let result: Result<ETHHeader, Error> = (&raw).try_into();
+        assert!(result.is_err());
+        result.unwrap_err()
+    }
+
     #[test]
     fn test_success_try_from_eth_header() {
-        let mut header = create_non_epoch_block();
-        let raw: RawETHHeader = header.clone().try_into().unwrap();
-        let restore: ETHHeader = (&raw).try_into().unwrap();
-        // automatically calculated
-        header.hash = restore.hash;
-        header.is_epoch = restore.is_epoch;
-        header.new_validators = restore.new_validators.clone();
+        let header = create_non_epoch_block();
         assert!(!header.is_epoch);
         assert_eq!(
             header.hash,
             hex!("fb34966d5d9fd58249d21ee942a8388f1ae763fbb48fe9fcbf31c633564f56af")
         );
         assert_eq!(header.new_validators.len(), 0);
-        assert_eq!(header, restore);
     }
 
     #[test]
     fn test_success_try_from_eth_header_epoch() {
-        let mut header = create_epoch_block();
-        let raw: RawETHHeader = header.clone().try_into().unwrap();
-        let restore: ETHHeader = (&raw).try_into().unwrap();
-        // automatically calculated
-        header.hash = restore.hash;
-        header.is_epoch = restore.is_epoch;
-        header.new_validators = restore.new_validators.clone();
+        let header = create_epoch_block();
         assert!(header.is_epoch);
         assert_eq!(
             header.hash,
@@ -443,7 +437,6 @@ mod test {
             header.new_validators[20],
             hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd")
         );
-        assert_eq!(header, restore);
     }
 
     #[test]
@@ -503,8 +496,8 @@ mod test {
 
     #[test]
     fn test_success_verify_seal() {
-        let epoch = fill(create_epoch_block());
-        let non_epoch = fill(create_non_epoch_block());
+        let epoch = create_epoch_block();
+        let non_epoch = create_non_epoch_block();
         let result = non_epoch.verify_seal(&epoch.new_validators, &mainnet());
         if let Err(e) = result {
             unreachable!("{:?}", e);
@@ -513,8 +506,8 @@ mod test {
 
     #[test]
     fn test_error_verify_seal() {
-        let epoch = fill(create_epoch_block());
-        let mut non_epoch = fill(create_non_epoch_block());
+        let epoch = create_epoch_block();
+        let mut non_epoch = create_non_epoch_block();
         let mainnet = &mainnet();
         non_epoch.coinbase = vec![1];
         let result = non_epoch.verify_seal(&epoch.new_validators, mainnet);
@@ -523,7 +516,7 @@ mod test {
             e => unreachable!("{:?}", e),
         };
 
-        let non_epoch = fill(create_non_epoch_block());
+        let non_epoch = create_non_epoch_block();
         let result = non_epoch.verify_seal(&vec![], mainnet);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, signer) => {
@@ -536,8 +529,8 @@ mod test {
 
     #[test]
     fn test_success_verify_cascading_fields() {
-        let non_epoch = fill(create_non_epoch_block());
-        let non_epoch_parent = fill(create_parent_non_epoch_block());
+        let non_epoch = create_non_epoch_block();
+        let non_epoch_parent = create_parent_non_epoch_block();
         let result = non_epoch.verify_cascading_fields(&non_epoch_parent);
         if let Err(e) = result {
             unreachable!("{:?}", e);
@@ -546,10 +539,10 @@ mod test {
 
     #[test]
     fn test_error_verify_cascading_fields() {
-        let mut non_epoch = fill(create_non_epoch_block());
+        let mut non_epoch = create_non_epoch_block();
         non_epoch.gas_limit = 10000;
         non_epoch.gas_used = non_epoch.gas_limit + 1;
-        let non_epoch_parent = fill(create_parent_non_epoch_block());
+        let non_epoch_parent = create_parent_non_epoch_block();
         let result = non_epoch.verify_cascading_fields(&non_epoch_parent);
         match result.unwrap_err() {
             Error::UnexpectedGasUsed(number, used, limit) => {
@@ -560,23 +553,23 @@ mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let mut non_epoch = fill(create_non_epoch_block());
-        let non_epoch_parent = fill(create_parent_non_epoch_block());
+        let mut non_epoch = create_non_epoch_block();
+        let non_epoch_parent = create_parent_non_epoch_block();
         non_epoch.number = non_epoch_parent.number + 2;
         error_relation(non_epoch, non_epoch_parent);
 
-        let mut non_epoch = fill(create_non_epoch_block());
-        let non_epoch_parent = fill(create_parent_non_epoch_block());
+        let mut non_epoch = create_non_epoch_block();
+        let non_epoch_parent = create_parent_non_epoch_block();
         non_epoch.parent_hash = non_epoch.hash.to_vec();
         error_relation(non_epoch, non_epoch_parent);
 
-        let mut non_epoch = fill(create_non_epoch_block());
-        let non_epoch_parent = fill(create_parent_non_epoch_block());
+        let mut non_epoch = create_non_epoch_block();
+        let non_epoch_parent = create_parent_non_epoch_block();
         non_epoch.timestamp = non_epoch_parent.timestamp;
         error_relation(non_epoch, non_epoch_parent);
 
-        let mut non_epoch = fill(create_non_epoch_block());
-        let mut non_epoch_parent = fill(create_parent_non_epoch_block());
+        let mut non_epoch = create_non_epoch_block();
+        let mut non_epoch_parent = create_parent_non_epoch_block();
         non_epoch_parent.gas_limit = 10000;
         non_epoch.gas_limit = 10;
         non_epoch.gas_used = non_epoch.gas_limit;

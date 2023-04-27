@@ -291,7 +291,7 @@ mod test {
 
         fn previous_only() -> Self {
             let mainnet = &mainnet();
-            let previous_epoch = fill(create_previous_epoch_block());
+            let previous_epoch = create_previous_epoch_block();
             let mut validators = HashMap::<lcp_types::Height, Validators>::new();
             validators.insert(
                 new_height(mainnet.version(), previous_epoch.number),
@@ -302,8 +302,8 @@ mod test {
 
         fn default() -> Self {
             let mainnet = &mainnet();
-            let previous_epoch = fill(create_previous_epoch_block());
-            let current_epoch = fill(create_epoch_block());
+            let previous_epoch = create_previous_epoch_block();
+            let current_epoch = create_epoch_block();
             let mut validators = HashMap::<lcp_types::Height, Validators>::new();
             validators.insert(
                 new_height(mainnet.version(), current_epoch.number),
