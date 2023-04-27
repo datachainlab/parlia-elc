@@ -216,7 +216,6 @@ mod test {
     use alloc::string::ToString;
     use alloc::vec;
     use alloc::vec::Vec;
-    use core::str::FromStr;
 
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
@@ -228,17 +227,44 @@ mod test {
     use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
-    use crate::header::testdata::{
-        create_after_checkpoint_headers, create_epoch_block, create_previous_epoch_block,
-    };
-    use crate::header::Header;
-    use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
-    struct MockClientReader;
+    use crate::header::Header;
+    use crate::misc::{new_height, new_timestamp, ChainId};
+
+    impl Default for ClientState {
+        fn default() -> Self {
+            ClientState {
+                chain_id: ChainId::new(9999),
+                ibc_store_address: [0; 20],
+                trust_level: Fraction {
+                    numerator: 1,
+                    denominator: 3,
+                },
+                trusting_period: core::time::Duration::new(86400 * 365 * 100, 0),
+                latest_height: Default::default(),
+                frozen: false,
+            }
+        }
+    }
+
+    impl Default for ConsensusState {
+        fn default() -> Self {
+            ConsensusState {
+                state_root: [0_u8; 32],
+                timestamp: new_timestamp(1677130449).unwrap(),
+                validator_set: vec![],
+            }
+        }
+    }
+
+    struct MockClientReader {
+        client_state: Option<ClientState>,
+        consensus_state: Option<ConsensusState>,
+    }
 
     impl HostContext for MockClientReader {
         fn host_timestamp(&self) -> Time {
-            create_after_checkpoint_headers().timestamp().unwrap()
+            new_timestamp(1677130449).unwrap()
         }
     }
 
@@ -259,135 +285,34 @@ mod test {
     impl HostClientReader for MockClientReader {}
 
     impl ClientReader for MockClientReader {
-        fn client_state(&self, client_id: &ClientId) -> Result<Any, light_client::Error> {
-            let cs = if client_id.as_str() == "99-parlia-0" {
-                let mainnet = ChainId::new(56);
-                ClientState {
-                    chain_id: mainnet,
-                    ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: Height::new(0, 2),
-                    trust_level: Fraction {
-                        numerator: 1,
-                        denominator: 3,
-                    },
-                    trusting_period: core::time::Duration::new(1, 0),
-                    frozen: false,
-                }
-            } else if client_id.as_str() == "99-parlia-1" || client_id.as_str() == "99-parlia-2" {
-                let lcpnet = ChainId::new(9999);
-                ClientState {
-                    chain_id: lcpnet,
-                    ibc_store_address: hex!("702E40245797c5a2108A566b3CE2Bf14Bc6aF841"),
-                    latest_height: Height::new(0, 400),
-                    trust_level: Fraction {
-                        numerator: 1,
-                        denominator: 3,
-                    },
-                    trusting_period: core::time::Duration::new(86400 * 365 * 100, 0),
-                    frozen: false,
-                }
-            } else {
-                let mainnet = ChainId::new(56);
-                ClientState {
-                    chain_id: mainnet,
-                    ibc_store_address: hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef"),
-                    latest_height: Height::new(0, 1),
-                    trust_level: Fraction {
-                        numerator: 1,
-                        denominator: 3,
-                    },
-                    trusting_period: core::time::Duration::new(1, 0),
-                    frozen: false,
-                }
-            };
-            Ok(Any::from(cs))
+        fn client_state(&self, _client_id: &ClientId) -> Result<Any, light_client::Error> {
+            Ok(Any::from(self.client_state.clone().unwrap()))
         }
 
         fn consensus_state(
             &self,
-            client_id: &ClientId,
-            height: &Height,
+            _client_id: &ClientId,
+            _height: &Height,
         ) -> Result<Any, light_client::Error> {
-            // lcp updating testing consensus
-            if client_id.as_str() == "99-parlia-1" {
-                return Ok(Any::from(ConsensusState {
-                    state_root: [0_u8; 32],
-                    timestamp: self.host_timestamp(),
-                    validator_set: vec![vec![
-                        185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136,
-                        133, 3, 78, 91,
-                    ]],
-                }));
-            } else if client_id.as_str() == "99-parlia-2" {
-                return Ok(Any::from(ConsensusState {
-                    state_root: [
-                        51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201,
-                        229, 227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78,
-                    ],
-                    timestamp: self.host_timestamp(),
-                    validator_set: vec![vec![
-                        185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136,
-                        133, 3, 78, 91,
-                    ]],
-                }));
-            }
-
-            let current_epoch = create_epoch_block();
-            let previous_epoch = create_previous_epoch_block();
-            if height.revision_height() == 1 {
-                Ok(Any::from(ConsensusState {
-                    state_root: [0_u8; 32],
-                    timestamp: self.host_timestamp(),
-                    validator_set: vec![],
-                }))
-            } else if height.revision_height() == 2 {
-                Ok(Any::from(ConsensusState {
-                    state_root: hex!(
-                        "c7c2351e84411a86c7165856578a0668fddfe77e30d63965184af89dfb192f18"
-                    ) as Hash,
-                    timestamp: self.host_timestamp(),
-                    validator_set: vec![],
-                }))
-            } else if height.revision_height() == current_epoch.number {
-                Ok(Any::from(ConsensusState {
-                    state_root: current_epoch.root,
-                    timestamp: new_timestamp(current_epoch.timestamp).unwrap(),
-                    validator_set: current_epoch.new_validators,
-                }))
-            } else if height.revision_height() == previous_epoch.number {
-                Ok(Any::from(ConsensusState {
-                    state_root: previous_epoch.root,
-                    timestamp: new_timestamp(previous_epoch.timestamp).unwrap(),
-                    validator_set: previous_epoch.new_validators,
-                }))
-            } else {
-                panic!("no consensus state found {:?}", height);
-            }
+            Ok(Any::from(self.consensus_state.clone().unwrap()))
         }
     }
 
     #[test]
     fn test_create_client() {
         let client = ParliaLightClient::default();
-        let ctx = MockClientReader {};
+        let chain_id = ChainId::new(56);
+        let ctx = MockClientReader {
+            client_state: None,
+            consensus_state: None,
+        };
 
-        let mainnet = ChainId::new(56);
         let client_state = ClientState {
-            chain_id: mainnet.clone(),
-            ibc_store_address: [0; 20],
-            latest_height: new_height(mainnet.version(), 1),
-            trust_level: Fraction {
-                numerator: 1,
-                denominator: 3,
-            },
-            trusting_period: core::time::Duration::new(0, 0),
-            frozen: false,
+            chain_id: chain_id.clone(),
+            latest_height: new_height(chain_id.version(), 1),
+            ..Default::default()
         };
-        let consensus_state = ConsensusState {
-            state_root: [0_u8; 32],
-            timestamp: new_timestamp(1677130449).unwrap(),
-            validator_set: vec![],
-        };
+        let consensus_state = ConsensusState::default();
         let any_client_state = Any::from(client_state.clone());
         let any_consensus_state = Any::from(consensus_state.clone());
         match client.create_client(&ctx, any_client_state.clone(), any_consensus_state) {
@@ -406,9 +331,6 @@ mod test {
 
     #[test]
     fn test_update_client() {
-        let _ctx = MockClientReader;
-        let _client = ParliaLightClient::default();
-
         let relayer_protobuf_any = vec![
             10, 34, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
             46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 72, 101, 97, 100, 101, 114, 18, 194,
@@ -481,7 +403,20 @@ mod test {
             250, 253,
         ];
         let any: Any = relayer_protobuf_any.try_into().unwrap();
-        let ctx = MockClientReader;
+        let ctx = MockClientReader {
+            client_state: Some(ClientState {
+                ibc_store_address: hex!("702E40245797c5a2108A566b3CE2Bf14Bc6aF841"),
+                latest_height: Height::new(0, 400),
+                ..Default::default()
+            }),
+            consensus_state: Some(ConsensusState {
+                validator_set: vec![vec![
+                    185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
+                    3, 78, 91,
+                ]],
+                ..Default::default()
+            }),
+        };
         let client = ParliaLightClient::default();
         let header = Header::try_from(any.clone()).unwrap();
 
@@ -562,10 +497,26 @@ mod test {
         let path = "connections/connection-0";
 
         let client = ParliaLightClient::default();
-        let ctx = MockClientReader;
+        let proof_height = Height::new(0, 400);
+        let ctx = MockClientReader {
+            client_state: Some(ClientState {
+                latest_height: proof_height,
+                ..Default::default()
+            }),
+            consensus_state: Some(ConsensusState {
+                state_root: [
+                    51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229,
+                    227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78,
+                ],
+                validator_set: vec![vec![
+                    185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
+                    3, 78, 91,
+                ]],
+                ..Default::default()
+            }),
+        };
         let prefix = vec![0];
-        let proof_height = new_height(0, 400);
-        let client_id = ClientId::from_str("99-parlia-2").unwrap();
+        let client_id = ClientId::new(client.client_type().as_str(), 0).unwrap();
 
         match client.verify_membership(
             &ctx,
