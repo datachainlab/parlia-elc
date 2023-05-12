@@ -46,7 +46,6 @@ impl ETHHeaders {
         let headers = &self.all;
         let threshold = required_block_count_to_finalize(previous_validators);
         if self.target.number % BLOCKS_PER_EPOCH < threshold as u64 {
-            // Validators created at previous epoch is used for consensus target header
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
@@ -69,7 +68,6 @@ impl ETHHeaders {
                 }
             }
         } else {
-            // Validators created at current epoch is used for consensus target header
             let threshold = required_block_count_to_finalize(current_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));

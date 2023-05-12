@@ -86,27 +86,32 @@ impl LightClient for ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        // Ensure trusted validator set
-        let (current_epoch_height, current_validators_hash) = header.current_validator_set();
-        let current_trusted_validators_hash =
-            ConsensusState::try_from(ctx.consensus_state(&client_id, &current_epoch_height)?)?
-                .validators_hash;
-        if current_validators_hash != current_trusted_validators_hash {
-            return Err(Error::UnexpectedCurrentValidatorsHash(
-                current_epoch_height,
-                current_validators_hash,
-                current_trusted_validators_hash,
-            )
-            .into());
+        // Ensure trusted validator set is valid.
+        // If the submission target is epoch block, the validator set is included in the header and not in the consensus_state.
+        if !header.is_target_epoch() {
+            let (current_epoch_height, current_validators_hash) = header.current_validator_hash();
+            let current_trusted_validators_hash =
+                ConsensusState::try_from(ctx.consensus_state(&client_id, current_epoch_height)?)?
+                    .validators_hash;
+            if current_validators_hash != &current_trusted_validators_hash {
+                return Err(Error::UnexpectedCurrentValidatorsHash(
+                    *current_epoch_height,
+                    *current_validators_hash,
+                    current_trusted_validators_hash,
+                )
+                .into());
+            }
         }
-        let (previous_epoch_height, previous_validators_hash) = header.previous_validator_set();
+
+        // Ensure previous trusted validator set is valid
+        let (previous_epoch_height, previous_validators_hash) = header.previous_validator_hash();
         let previous_trusted_validators_hash =
-            ConsensusState::try_from(ctx.consensus_state(&client_id, &previous_epoch_height)?)?
+            ConsensusState::try_from(ctx.consensus_state(&client_id, previous_epoch_height)?)?
                 .validators_hash;
-        if previous_validators_hash != previous_trusted_validators_hash {
+        if previous_validators_hash != &previous_trusted_validators_hash {
             return Err(Error::UnexpectedPreviousValidatorsHash(
-                previous_epoch_height,
-                previous_validators_hash,
+                *previous_epoch_height,
+                *previous_validators_hash,
                 previous_trusted_validators_hash,
             )
             .into());
@@ -120,7 +125,7 @@ impl LightClient for ParliaLightClient {
             header,
         )?;
 
-        let prev_state_id = gen_state_id(client_state, trusted_consensus_state)?;
+        let prev_state_id = gen_state_id(client_state, latest_trusted_consensus_state)?;
         let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
         Ok(UpdateClientResult {
@@ -254,7 +259,7 @@ mod test {
     use crate::consensus_state::ConsensusState;
 
     use crate::header::Header;
-    use crate::misc::{new_height, new_timestamp, ChainId};
+    use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId};
 
     impl Default for ClientState {
         fn default() -> Self {
@@ -277,7 +282,7 @@ mod test {
             ConsensusState {
                 state_root: [0_u8; 32],
                 timestamp: new_timestamp(1677130449).unwrap(),
-                validator_set: vec![],
+                validators_hash: [0_u8; 32],
             }
         }
     }
@@ -435,10 +440,10 @@ mod test {
                 ..Default::default()
             }),
             consensus_state: Some(ConsensusState {
-                validator_set: vec![vec![
+                validators_hash: keccak_256_vec(&vec![vec![
                     185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
                     3, 78, 91,
-                ]],
+                ]]),
                 ..Default::default()
             }),
         };
@@ -460,7 +465,7 @@ mod test {
                     ],
                 );
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
-                assert!(new_consensus_state.validator_set.is_empty());
+                assert!(new_consensus_state.validators_hash.is_empty());
                 assert_eq!(data.commitment.new_height, header.height());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
@@ -493,7 +498,7 @@ mod test {
             }),
             // validator of 27739200
             consensus_state: Some(ConsensusState {
-                validator_set: vec![
+                validators_hash: keccak_256_vec(&vec![
                     hex!("0bac492386862ad3df4b666bc096b0505bb694da").to_vec(),
                     hex!("2465176c461afb316ebc773c61faee85a6515daa").to_vec(),
                     hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
@@ -515,7 +520,7 @@ mod test {
                     hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
                     hex!("ea0a6e3c511bbd10f4519ece37dc24887e11b55d").to_vec(),
                     hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
-                ],
+                ]),
                 ..Default::default()
             }),
         };
@@ -531,7 +536,7 @@ mod test {
                     hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 );
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
-                assert!(new_consensus_state.validator_set.is_empty());
+                assert!(new_consensus_state.validators_hash.is_empty());
                 assert_eq!(data.commitment.new_height, header.height());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
@@ -604,10 +609,10 @@ mod test {
                     51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229,
                     227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78,
                 ],
-                validator_set: vec![vec![
+                validators_hash: keccak_256_vec(&vec![vec![
                     185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
                     3, 78, 91,
-                ]],
+                ]]),
                 ..Default::default()
             }),
         };

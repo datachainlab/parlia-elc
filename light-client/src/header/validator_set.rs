@@ -1,4 +1,5 @@
 use crate::errors::Error;
+use crate::header::eth_header::ETHHeader;
 use crate::misc::{keccak_256_vec, new_height, Hash, Validators};
 use alloc::vec::Vec;
 use lcp_types::Height;
@@ -15,6 +16,24 @@ pub struct ValidatorSet {
 impl ValidatorSet {
     pub fn validators(&self) -> &Validators {
         &self.validators
+    }
+
+    pub fn height(&self) -> &Height {
+        &self.epoch_height
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.hash
+    }
+
+    pub fn new(revision_number: u64, value: &ETHHeader) -> Self {
+        let validators = value.new_validators.clone();
+        let hash = keccak_256_vec(&validators);
+        Self {
+            epoch_height: new_height(revision_number, value.number),
+            validators,
+            hash,
+        }
     }
 }
 

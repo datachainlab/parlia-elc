@@ -232,7 +232,7 @@ impl core::fmt::Display for Error {
                 write!(f, "MissingCurrentTrustedValidators : {:?}", e)
             }
             Error::MissingTrustedValidatorsHeight => {
-                write!(f, "MissingTrustedValidatorsHeight : {:?}", e)
+                write!(f, "MissingTrustedValidatorsHeight")
             }
         }
     }

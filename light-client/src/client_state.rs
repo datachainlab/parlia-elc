@@ -12,7 +12,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Address, ChainId, ValidatorReader, Validators};
+use crate::misc::{new_height, Address, ChainId, Validators};
 use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -188,28 +188,6 @@ impl TryFrom<Any> for ClientState {
 
     fn try_from(any: Any) -> Result<Self, Self::Error> {
         IBCAny::from(any).try_into()
-    }
-}
-
-struct DefaultValidatorReader<'a> {
-    ctx: &'a dyn HostClientReader,
-    client_id: &'a ClientId,
-}
-
-impl<'a> DefaultValidatorReader<'a> {
-    fn new(ctx: &'a dyn HostClientReader, client_id: &'a ClientId) -> Self {
-        Self { ctx, client_id }
-    }
-}
-
-impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
-    fn read(&self, height: Height) -> Result<Validators, Error> {
-        let any = self
-            .ctx
-            .consensus_state(self.client_id, &height)
-            .map_err(Error::LCPError)?;
-        let consensus_state = ConsensusState::try_from(any)?;
-        Ok(consensus_state.validator_set)
     }
 }
 
