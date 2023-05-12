@@ -63,8 +63,6 @@ pub enum Error {
     MissingSignatureInExtraData(BlockNumber, usize, usize),
     UnexpectedValidatorInNonEpochBlock(BlockNumber),
     UnexpectedValidatorInEpochBlock(BlockNumber),
-    PreviousValidatorSetNotFound(BlockNumber),
-    CurrentValidatorSetNotFound(BlockNumber),
     UnexpectedMixHash(BlockNumber),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
@@ -207,12 +205,6 @@ impl core::fmt::Display for Error {
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
-            Error::PreviousValidatorSetNotFound(e) => {
-                write!(f, "PreviousValidatorSetNotFound: target={}", e)
-            }
-            Error::CurrentValidatorSetNotFound(e) => {
-                write!(f, "CurrentValidatorSetNotFound: target={}", e)
-            }
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
             Error::UnexpectedValidatorsHash(e) => write!(f, "UnexpectedValidatorsHash : {:?}", e),
             Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => write!(

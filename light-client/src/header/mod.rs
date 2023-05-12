@@ -121,7 +121,7 @@ impl TryFrom<RawHeader> for Header {
             ValidatorSet::new(trusted_height.revision_number(), &headers.target)
         } else {
             let raw_current_validators = value
-                .previous_validators
+                .current_validators
                 .as_ref()
                 .ok_or(Error::MissingCurrentTrustedValidators(
                     headers.target.number,
@@ -196,9 +196,10 @@ mod test {
     use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{Header as RawHeader, ValidatorSet};
 
     use crate::errors::Error;
+    use crate::header::eth_header::ETHHeader;
     use crate::header::testdata::*;
     use crate::header::Header;
     use crate::misc::{new_height, ChainId, Validators};
@@ -225,6 +226,23 @@ mod test {
             header.height().revision_height(),
             header.headers.target.number,
             "invalid revision height"
+        );
+        assert_eq!(
+            header.is_target_epoch(),
+            false,
+            "invalid epoch"
+        );
+        let cvh = header.current_validators;
+        assert_eq!(
+            cvh.validators().len(),
+            21,
+            "invalid epoch"
+        );
+        let pvh = header.previous_validators;
+        assert_eq!(
+            pvh.validators().len(),
+            21,
+            "invalid epoch"
         );
     }
 
@@ -270,13 +288,38 @@ mod test {
             revision_height: 1,
         };
         raw_header.trusted_height = Some(trusted_height);
-        match Header::try_from(raw_header).unwrap_err() {
+        match Header::try_from(raw_header.clone()).unwrap_err() {
             Error::UnexpectedHeaderRelation(a, b) => {
                 assert_eq!(a, h1.number);
                 assert_eq!(b, h1.number);
             }
             _ => unreachable!(),
         }
+
+        // Check previous validator set
+        raw_header.headers[1] = create_non_epoch_block1().try_into().unwrap();
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+            Error::MissingPreviousTrustedValidators(a) => {
+                assert_eq!(a, h1.number);
+            }
+            _ => unreachable!(),
+        }
+
+        // Check current validator set
+        raw_header.previous_validators = Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 1,
+            }),
+            validators: vec![],
+        });
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+            Error::MissingCurrentTrustedValidators(a) => {
+                assert_eq!(a, h1.number);
+            }
+            _ => unreachable!(),
+        }
+
     }
 
     struct MockValidatorReader {
@@ -334,49 +377,12 @@ mod test {
     }
 
     #[test]
-    fn test_error_verify_after_checkpoint() {
-        let header = create_after_checkpoint_headers();
-        let mainnet = &mainnet();
-
-        // empty new validator
-        match header.verify(mainnet).unwrap_err() {
-            Error::CurrentValidatorSetNotFound(number) => {
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // empty previous validator
-        match header.verify(mainnet).unwrap_err() {
-            Error::PreviousValidatorSetNotFound(number) => {
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-    }
-
-    #[test]
     fn test_success_verify_epoch() {
         let header = create_before_checkpoint_headers();
         let mainnet = &mainnet();
         // use new validator from epoch
         let result = header.verify(mainnet);
         assert!(result.is_ok())
-    }
-
-    #[test]
-    fn test_error_verify_epoch() {
-        let header = create_before_checkpoint_headers();
-        let _reader = MockValidatorReader::previous_only();
-        let mainnet = &mainnet();
-
-        // empty previous validator
-        match header.verify(mainnet).unwrap_err() {
-            Error::PreviousValidatorSetNotFound(number) => {
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
     }
 
     #[test]
@@ -388,31 +394,9 @@ mod test {
     }
 
     #[test]
-    fn test_error_verify_across_checkpoint() {
-        let header = create_across_checkpoint_headers();
-        let mainnet = &mainnet();
-
-        // empty new validator
-        match header.verify(mainnet).unwrap_err() {
-            Error::CurrentValidatorSetNotFound(number) => {
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // empty previous validator
-        let epoch = create_previous_epoch_block();
-        match header.verify(mainnet).unwrap_err() {
-            Error::PreviousValidatorSetNotFound(number) => {
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-    }
-
-    #[test]
     fn test_try_from_any() {
         // local net relayer data
+        // TODO get from relayer data
         let relayer_protobuf_any = vec![
             10, 34, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
             46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 72, 101, 97, 100, 101, 114, 18, 190,
