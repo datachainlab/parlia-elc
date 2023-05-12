@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use lcp_types::{Any, ClientId, Height};
+use lcp_types::{Any, ClientId, Height, Time};
 use light_client::HostClientReader;
 use prost::Message as _;
 
@@ -45,13 +45,11 @@ impl ClientState {
 
     pub fn check_header_and_update_state(
         &self,
-        ctx: &dyn HostClientReader,
+        now: Time,
         trusted_consensus_state: &ConsensusState,
-        client_id: ClientId,
         header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
-        let now = ctx.host_timestamp();
         trusted_consensus_state.assert_not_expired(now, self.trusting_period)?;
         trusted_consensus_state.assert_not_expired(header.timestamp()?, self.trusting_period)?;
 
@@ -65,7 +63,7 @@ impl ClientState {
         }
 
         // Ensure header is valid
-        header.verify(DefaultValidatorReader::new(ctx, &client_id), &self.chain_id)?;
+        header.verify(&self.chain_id)?;
 
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
@@ -83,7 +81,7 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validator_set: header.validator_set().clone(),
+            validators_hash: header.new_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))

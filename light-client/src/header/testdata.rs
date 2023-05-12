@@ -3,8 +3,8 @@ use prost::bytes::BytesMut;
 use rlp::RlpStream;
 
 use parlia_ibc_proto::ibc::core::client::v1::Height;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader as RawETHHeader, ValidatorSet};
 
 use crate::header::eth_header::ETHHeader;
 use crate::header::Header;
@@ -34,7 +34,65 @@ pub fn create_after_checkpoint_headers() -> Header {
             revision_number: 0,
             revision_height: 1,
         }),
-        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
+        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec(),
+        current_validators: Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 25428800,
+            }),
+            validators: vec![
+                hex!("2465176c461afb316ebc773c61faee85a6515daa").to_vec(),
+                hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
+                hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").to_vec(),
+                hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").to_vec(),
+                hex!("61dd481a114a2e761c554b641742c973867899d3").to_vec(),
+                hex!("685b1ded8013785d6623cc18d214320b6bb64759").to_vec(),
+                hex!("70f657164e5b75689b64b7fd1fa275f334f28e18").to_vec(),
+                hex!("72b61c6014342d914470ec7ac2975be345796c2b").to_vec(),
+                hex!("733fda7714a05960b7536330be4dbb135bef0ed6").to_vec(),
+                hex!("7ae2f5b9e386cd1b50a4550696d957cb4900f03a").to_vec(),
+                hex!("8b6c8fd93d6f4cea42bbb345dbc6f0dfdb5bec73").to_vec(),
+                hex!("9bb832254baf4e8b4cc26bd2b52b31389b56e98b").to_vec(),
+                hex!("a6f79b60359f141df90a0c745125b131caaffd12").to_vec(),
+                hex!("b218c5d6af1f979ac42bc68d98a5a0d796c6ab01").to_vec(),
+                hex!("b4dd66d7c2c7e57f628210187192fb89d4b99dd4").to_vec(),
+                hex!("be807dddb074639cd9fa61b47676c064fc50d62c").to_vec(),
+                hex!("cc8e6d00c17eb431350c6c50d8b8f05176b90b11").to_vec(),
+                hex!("e2d3a739effcd3a99387d015e260eefac72ebea1").to_vec(),
+                hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
+                hex!("ee226379db83cffc681495730c11fdde79ba4c0c").to_vec(),
+                hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
+            ],
+        }),
+        previous_validators: Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 25428600
+            }),
+            validators: vec![
+                hex!("0bac492386862ad3df4b666bc096b0505bb694da").to_vec(),
+                hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
+                hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").to_vec(),
+                hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").to_vec(),
+                hex!("61dd481a114a2e761c554b641742c973867899d3").to_vec(),
+                hex!("70f657164e5b75689b64b7fd1fa275f334f28e18").to_vec(),
+                hex!("72b61c6014342d914470ec7ac2975be345796c2b").to_vec(),
+                hex!("73564052d8e469ed0721c4e53379dc3c91228930").to_vec(),
+                hex!("7ae2f5b9e386cd1b50a4550696d957cb4900f03a").to_vec(),
+                hex!("8b6c8fd93d6f4cea42bbb345dbc6f0dfdb5bec73").to_vec(),
+                hex!("9bb832254baf4e8b4cc26bd2b52b31389b56e98b").to_vec(),
+                hex!("a6f79b60359f141df90a0c745125b131caaffd12").to_vec(),
+                hex!("b4dd66d7c2c7e57f628210187192fb89d4b99dd4").to_vec(),
+                hex!("be807dddb074639cd9fa61b47676c064fc50d62c").to_vec(),
+                hex!("cc8e6d00c17eb431350c6c50d8b8f05176b90b11").to_vec(),
+                hex!("d1d6bf74282782b0b3eb1413c901d6ecf02e8e28").to_vec(),
+                hex!("e2d3a739effcd3a99387d015e260eefac72ebea1").to_vec(),
+                hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
+                hex!("ea0a6e3c511bbd10f4519ece37dc24887e11b55d").to_vec(),
+                hex!("ee226379db83cffc681495730c11fdde79ba4c0c").to_vec(),
+                hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
+            ]
+        }),
     };
     raw_header.try_into().unwrap()
 }
@@ -60,7 +118,37 @@ pub fn create_before_checkpoint_headers() -> Header {
             revision_number: 0,
             revision_height: 1,
         }),
-        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
+        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec(),
+        current_validators: None,
+        previous_validators: Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 25428600
+            }),
+            validators: vec![
+                hex!("0bac492386862ad3df4b666bc096b0505bb694da").to_vec(),
+                hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
+                hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").to_vec(),
+                hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").to_vec(),
+                hex!("61dd481a114a2e761c554b641742c973867899d3").to_vec(),
+                hex!("70f657164e5b75689b64b7fd1fa275f334f28e18").to_vec(),
+                hex!("72b61c6014342d914470ec7ac2975be345796c2b").to_vec(),
+                hex!("73564052d8e469ed0721c4e53379dc3c91228930").to_vec(),
+                hex!("7ae2f5b9e386cd1b50a4550696d957cb4900f03a").to_vec(),
+                hex!("8b6c8fd93d6f4cea42bbb345dbc6f0dfdb5bec73").to_vec(),
+                hex!("9bb832254baf4e8b4cc26bd2b52b31389b56e98b").to_vec(),
+                hex!("a6f79b60359f141df90a0c745125b131caaffd12").to_vec(),
+                hex!("b4dd66d7c2c7e57f628210187192fb89d4b99dd4").to_vec(),
+                hex!("be807dddb074639cd9fa61b47676c064fc50d62c").to_vec(),
+                hex!("cc8e6d00c17eb431350c6c50d8b8f05176b90b11").to_vec(),
+                hex!("d1d6bf74282782b0b3eb1413c901d6ecf02e8e28").to_vec(),
+                hex!("e2d3a739effcd3a99387d015e260eefac72ebea1").to_vec(),
+                hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
+                hex!("ea0a6e3c511bbd10f4519ece37dc24887e11b55d").to_vec(),
+                hex!("ee226379db83cffc681495730c11fdde79ba4c0c").to_vec(),
+                hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
+            ]
+        }),
     };
     raw_header.try_into().unwrap()
 }
@@ -85,7 +173,65 @@ pub fn create_across_checkpoint_headers() -> Header {
             revision_number: 0,
             revision_height: 1,
         }),
-        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
+        account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec(),
+        current_validators: Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 25428800,
+            }),
+            validators: vec![
+                hex!("2465176c461afb316ebc773c61faee85a6515daa").to_vec(),
+                hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
+                hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").to_vec(),
+                hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").to_vec(),
+                hex!("61dd481a114a2e761c554b641742c973867899d3").to_vec(),
+                hex!("685b1ded8013785d6623cc18d214320b6bb64759").to_vec(),
+                hex!("70f657164e5b75689b64b7fd1fa275f334f28e18").to_vec(),
+                hex!("72b61c6014342d914470ec7ac2975be345796c2b").to_vec(),
+                hex!("733fda7714a05960b7536330be4dbb135bef0ed6").to_vec(),
+                hex!("7ae2f5b9e386cd1b50a4550696d957cb4900f03a").to_vec(),
+                hex!("8b6c8fd93d6f4cea42bbb345dbc6f0dfdb5bec73").to_vec(),
+                hex!("9bb832254baf4e8b4cc26bd2b52b31389b56e98b").to_vec(),
+                hex!("a6f79b60359f141df90a0c745125b131caaffd12").to_vec(),
+                hex!("b218c5d6af1f979ac42bc68d98a5a0d796c6ab01").to_vec(),
+                hex!("b4dd66d7c2c7e57f628210187192fb89d4b99dd4").to_vec(),
+                hex!("be807dddb074639cd9fa61b47676c064fc50d62c").to_vec(),
+                hex!("cc8e6d00c17eb431350c6c50d8b8f05176b90b11").to_vec(),
+                hex!("e2d3a739effcd3a99387d015e260eefac72ebea1").to_vec(),
+                hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
+                hex!("ee226379db83cffc681495730c11fdde79ba4c0c").to_vec(),
+                hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
+            ],
+        }),
+        previous_validators: Some(ValidatorSet {
+            epoch_height: Some(Height {
+                revision_number: 0,
+                revision_height: 25428600
+            }),
+            validators: vec![
+                hex!("0bac492386862ad3df4b666bc096b0505bb694da").to_vec(),
+                hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").to_vec(),
+                hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").to_vec(),
+                hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").to_vec(),
+                hex!("61dd481a114a2e761c554b641742c973867899d3").to_vec(),
+                hex!("70f657164e5b75689b64b7fd1fa275f334f28e18").to_vec(),
+                hex!("72b61c6014342d914470ec7ac2975be345796c2b").to_vec(),
+                hex!("73564052d8e469ed0721c4e53379dc3c91228930").to_vec(),
+                hex!("7ae2f5b9e386cd1b50a4550696d957cb4900f03a").to_vec(),
+                hex!("8b6c8fd93d6f4cea42bbb345dbc6f0dfdb5bec73").to_vec(),
+                hex!("9bb832254baf4e8b4cc26bd2b52b31389b56e98b").to_vec(),
+                hex!("a6f79b60359f141df90a0c745125b131caaffd12").to_vec(),
+                hex!("b4dd66d7c2c7e57f628210187192fb89d4b99dd4").to_vec(),
+                hex!("be807dddb074639cd9fa61b47676c064fc50d62c").to_vec(),
+                hex!("cc8e6d00c17eb431350c6c50d8b8f05176b90b11").to_vec(),
+                hex!("d1d6bf74282782b0b3eb1413c901d6ecf02e8e28").to_vec(),
+                hex!("e2d3a739effcd3a99387d015e260eefac72ebea1").to_vec(),
+                hex!("e9ae3261a475a27bb1028f140bc2a7c843318afd").to_vec(),
+                hex!("ea0a6e3c511bbd10f4519ece37dc24887e11b55d").to_vec(),
+                hex!("ee226379db83cffc681495730c11fdde79ba4c0c").to_vec(),
+                hex!("ef0274e31810c9df02f98fafde0f841f4e66a1cd").to_vec(),
+            ]
+        }),
     };
     raw_header.try_into().unwrap()
 }

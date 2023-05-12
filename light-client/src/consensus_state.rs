@@ -22,7 +22,7 @@ pub struct ConsensusState {
     /// timestamp from execution payload
     pub timestamp: Time,
     /// finalized header's validator set.Only epoch headers contain validator set
-    pub validator_set: Validators,
+    pub validators_hash: Hash,
 }
 
 impl ConsensusState {
@@ -57,11 +57,14 @@ impl TryFrom<RawConsensusState> for ConsensusState {
             .try_into()
             .map_err(Error::UnexpectedConsensusStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
-        let validator_set = value.validator_set;
+        let validators_hash: Hash = value
+            .validators_hash
+            .try_into()
+            .map_err(Error::UnexpectedValidatorsHash)?;
         Ok(Self {
             state_root,
             timestamp,
-            validator_set,
+            validators_hash,
         })
     }
 }
@@ -71,7 +74,7 @@ impl From<ConsensusState> for RawConsensusState {
         Self {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
-            validator_set: value.validator_set,
+            validators_hash: value.validators_hash.into(),
         }
     }
 }

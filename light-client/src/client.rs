@@ -16,6 +16,7 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
+use crate::misc::Hash;
 use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
@@ -85,13 +86,37 @@ impl LightClient for ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        let trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
+        // Ensure trusted validator set
+        let (current_epoch_height, current_validators_hash) = header.current_validator_set();
+        let current_trusted_validators_hash =
+            ConsensusState::try_from(ctx.consensus_state(&client_id, &current_epoch_height)?)?
+                .validators_hash;
+        if current_validators_hash != current_trusted_validators_hash {
+            return Err(Error::UnexpectedCurrentValidatorsHash(
+                current_epoch_height,
+                current_validators_hash,
+                current_trusted_validators_hash,
+            )
+            .into());
+        }
+        let (previous_epoch_height, previous_validators_hash) = header.previous_validator_set();
+        let previous_trusted_validators_hash =
+            ConsensusState::try_from(ctx.consensus_state(&client_id, &previous_epoch_height)?)?
+                .validators_hash;
+        if previous_validators_hash != previous_trusted_validators_hash {
+            return Err(Error::UnexpectedPreviousValidatorsHash(
+                previous_epoch_height,
+                previous_validators_hash,
+                previous_trusted_validators_hash,
+            )
+            .into());
+        }
 
         // Create new state and ensure header is valid
+        let latest_trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
         let (new_client_state, new_consensus_state) = client_state.check_header_and_update_state(
-            ctx,
-            &trusted_consensus_state,
-            client_id,
+            ctx.host_timestamp(),
+            &latest_trusted_consensus_state,
             header,
         )?;
 

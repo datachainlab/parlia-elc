@@ -21,7 +21,7 @@ impl ETHHeaders {
     pub fn verify(
         &self,
         chain_id: &ChainId,
-        new_validators: &Validators,
+        current_validators: &Validators,
         previous_validators: &Validators,
     ) -> Result<(), Error> {
         let headers = &self.all;
@@ -34,13 +34,13 @@ impl ETHHeaders {
             }
         }
 
-        self.verify_seals(chain_id, new_validators, previous_validators)
+        self.verify_seals(chain_id, current_validators, previous_validators)
     }
 
     fn verify_seals(
         &self,
         chain_id: &ChainId,
-        new_validators: &Validators,
+        current_validators: &Validators,
         previous_validators: &Validators,
     ) -> Result<(), Error> {
         let headers = &self.all;
@@ -62,7 +62,7 @@ impl ETHHeaders {
                     }
                 } else {
                     // Current epoch validators is used after the checkpoint block.
-                    let signer = header.verify_seal(new_validators, chain_id)?;
+                    let signer = header.verify_seal(current_validators, chain_id)?;
                     if !signers_after_checkpoint.insert(signer) {
                         return Err(Error::UnexpectedDoubleSign(header.number, signer));
                     }
@@ -70,13 +70,13 @@ impl ETHHeaders {
             }
         } else {
             // Validators created at current epoch is used for consensus target header
-            let threshold = required_block_count_to_finalize(new_validators);
+            let threshold = required_block_count_to_finalize(current_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
             let mut signers: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
-                let signer = header.verify_seal(new_validators, chain_id)?;
+                let signer = header.verify_seal(current_validators, chain_id)?;
                 if !signers.insert(signer) {
                     return Err(Error::UnexpectedDoubleSign(header.number, signer));
                 }

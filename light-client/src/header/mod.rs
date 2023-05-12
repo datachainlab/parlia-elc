@@ -2,13 +2,18 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
 use lcp_types::{Any, Height, Time};
+use patricia_merkle_trie::keccak::keccak_256;
 use prost::Message as _;
 
+use crate::header::validator_set::ValidatorSet;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use self::constant::BLOCKS_PER_EPOCH;
-use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators};
+use crate::misc::{
+    keccak_256_vec, new_height, new_timestamp, ChainId, Hash, Validator, ValidatorReader,
+    Validators,
+};
 use crate::proof::decode_eip1184_rlp_proof;
 
 use super::errors::Error;
@@ -21,12 +26,15 @@ pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 pub mod constant;
 mod eth_header;
 mod eth_headers;
+pub(crate) mod validator_set;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
     trusted_height: Height,
+    previous_validators: ValidatorSet,
+    current_validators: ValidatorSet,
 }
 
 impl Header {
@@ -49,64 +57,34 @@ impl Header {
         self.trusted_height
     }
 
-    pub fn state_root(&self) -> &crate::misc::Hash {
+    pub fn state_root(&self) -> &Hash {
         &self.headers.target.root
     }
 
-    pub fn validator_set(&self) -> &Validators {
-        &self.headers.target.new_validators
+    pub fn new_validators_hash(&self) -> Hash {
+        keccak_256_vec(&self.headers.target.new_validators)
     }
 
-    pub fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
-        let target = &self.headers.target;
-        if target.is_epoch {
-            if target.number >= BLOCKS_PER_EPOCH {
-                let previous_epoch_block = target.number - BLOCKS_PER_EPOCH;
-                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_block);
-                let previous_validator_set = ctx.read(previous_epoch_height)?;
-                if previous_validator_set.is_empty() {
-                    return Err(Error::PreviousValidatorNotFound(
-                        previous_epoch_block,
-                        target.number,
-                    ));
-                }
-                self.headers
-                    .verify(chain_id, &target.new_validators, &previous_validator_set)
-            } else {
-                // genesis block
-                let genesis_validator_set = &target.new_validators;
-                self.headers
-                    .verify(chain_id, genesis_validator_set, genesis_validator_set)
-            }
-        } else {
-            let epoch_count = target.number / BLOCKS_PER_EPOCH;
-            let last_epoch_number = epoch_count * BLOCKS_PER_EPOCH;
-            let last_epoch_height = new_height(chain_id.version(), last_epoch_number);
-            let new_validator_set = &ctx.read(last_epoch_height)?;
-            if new_validator_set.is_empty() {
-                return Err(Error::NewValidatorNotFound(
-                    last_epoch_number,
-                    target.number,
-                ));
-            }
-            if epoch_count == 0 {
-                // Use genesis epoch validator set
-                self.headers
-                    .verify(chain_id, new_validator_set, new_validator_set)
-            } else {
-                let previous_epoch_number = (epoch_count - 1) * BLOCKS_PER_EPOCH;
-                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_number);
-                let previous_validator_set = &ctx.read(previous_epoch_height)?;
-                if previous_validator_set.is_empty() {
-                    return Err(Error::PreviousValidatorNotFound(
-                        previous_epoch_number,
-                        target.number,
-                    ));
-                }
-                self.headers
-                    .verify(chain_id, new_validator_set, previous_validator_set)
-            }
-        }
+    pub fn previous_validator_hash(&self) -> (Height, Hash) {
+        (
+            self.previous_validators.height,
+            self.previous_validators.validators_hash,
+        )
+    }
+
+    pub fn current_validator_set(&self) -> (Height, Hash) {
+        (
+            self.current_validators.height,
+            self.current_validators.validators_hash,
+        )
+    }
+
+    pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
+        self.headers.verify(
+            chain_id,
+            &self.current_validators.validators(),
+            &self.previous_validators.validators(),
+        )
     }
 }
 
@@ -125,11 +103,21 @@ impl TryFrom<RawHeader> for Header {
 
         // All the header revision must be same as the revision of trusted_height.
         let headers = ETHHeaders::new(trusted_height, value.headers.as_slice())?;
+        let raw_previous_validators = value
+            .previous_validators
+            .ok_or(Error::MissingPreviousTrustedValidators(targetNumber))?;
+        let raw_current_validators = value
+            .previous_validators
+            .ok_or(Error::MissingCurrentTrustedValidators(targetNumber))?;
+        let previous_validators: ValidatorSet = raw_previous_validators.try_into()?;
+        let current_validators: ValidatorSet = raw_current_validators.try_into()?;
 
         Ok(Self {
             inner: value,
             headers,
             trusted_height,
+            previous_validators,
+            current_validators,
         })
     }
 }
@@ -234,6 +222,8 @@ mod test {
             headers: raw_eth_headers,
             trusted_height: None,
             account_proof: vec![],
+            previous_validators: None,
+            current_validators: None,
         };
 
         // Check require trusted height
