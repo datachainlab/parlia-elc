@@ -107,9 +107,7 @@ impl TryFrom<RawHeader> for Header {
         let raw_previous_validators = value
             .previous_validators
             .as_ref()
-            .ok_or(Error::MissingPreviousTrustedValidators(
-                headers.target.number,
-            ))?
+            .ok_or_else(|| Error::MissingPreviousTrustedValidators(headers.target.number))?
             .clone();
         let previous_validators: ValidatorSet = raw_previous_validators.try_into()?;
 
@@ -120,9 +118,7 @@ impl TryFrom<RawHeader> for Header {
             let raw_current_validators = value
                 .current_validators
                 .as_ref()
-                .ok_or(Error::MissingCurrentTrustedValidators(
-                    headers.target.number,
-                ))?
+                .ok_or_else(|| Error::MissingCurrentTrustedValidators(headers.target.number))?
                 .clone();
             raw_current_validators.try_into()?
         };
@@ -222,7 +218,7 @@ mod test {
             header.headers.target.number,
             "invalid revision height"
         );
-        assert_eq!(header.is_target_epoch(), false, "invalid epoch");
+        assert!(!header.is_target_epoch(), "invalid epoch");
         let cvh = header.current_validators;
         assert_eq!(cvh.validators().len(), 21, "invalid epoch");
         let pvh = header.previous_validators;

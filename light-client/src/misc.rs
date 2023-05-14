@@ -92,7 +92,7 @@ pub fn new_timestamp(second: u64) -> Result<Time, Error> {
     Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
 }
 
-pub fn keccak_256_vec(targets: &Vec<Vec<u8>>) -> Hash {
+pub fn keccak_256_vec(targets: &[Vec<u8>]) -> Hash {
     let flatten: Vec<u8> = targets.iter().flat_map(|x| x.clone()).collect();
     keccak_256(flatten.as_slice())
 }

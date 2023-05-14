@@ -323,9 +323,9 @@ mod test {
             client_id: &ClientId,
             height: &Height,
         ) -> Result<Any, light_client::Error> {
-            let state = self.consensus_state.get(height).ok_or(
-                light_client::Error::consensus_state_not_found(client_id.clone(), *height),
-            )?;
+            let state = self.consensus_state.get(height).ok_or_else(|| {
+                light_client::Error::consensus_state_not_found(client_id.clone(), *height)
+            })?;
             Ok(Any::from(state.clone()))
         }
     }
@@ -371,9 +371,7 @@ mod test {
             ConsensusState {
                 validators_hash: hex!(
                     "4698f363764c0e2bbb128634bd4807dc46083950de351da9b053f189210820ff"
-                )
-                .try_into()
-                .unwrap(),
+                ),
                 ..Default::default()
             },
         );
@@ -382,9 +380,7 @@ mod test {
             ConsensusState {
                 validators_hash: hex!(
                     "4698f363764c0e2bbb128634bd4807dc46083950de351da9b053f189210820ff"
-                )
-                .try_into()
-                .unwrap(),
+                ),
                 ..Default::default()
             },
         );
@@ -408,7 +404,7 @@ mod test {
                 assert_eq!(data.height, header.height());
                 assert_eq!(new_client_state.latest_height, header.height());
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
-                assert_eq!(new_consensus_state.validators_hash, keccak_256_vec(&vec![]));
+                assert_eq!(new_consensus_state.validators_hash, keccak_256_vec(&[]));
                 assert_eq!(
                     new_consensus_state.state_root,
                     hex!("d7cb130faec40201a8c1656faee693ca0902f6220c9b67649f0a306daa85d113")
@@ -520,7 +516,7 @@ mod test {
                     hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
                 );
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
-                assert_eq!(new_consensus_state.validators_hash, keccak_256_vec(&vec![]));
+                assert_eq!(new_consensus_state.validators_hash, keccak_256_vec(&[]));
                 assert_eq!(data.commitment.new_height, header.height());
                 assert_eq!(data.commitment.new_state, None);
                 assert!(!data.commitment.new_state_id.to_vec().is_empty());
@@ -591,7 +587,7 @@ mod test {
                     51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229,
                     227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78,
                 ],
-                validators_hash: keccak_256_vec(&vec![vec![
+                validators_hash: keccak_256_vec(&[vec![
                     185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
                     3, 78, 91,
                 ]]),
