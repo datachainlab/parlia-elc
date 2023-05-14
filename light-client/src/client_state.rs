@@ -2,8 +2,7 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use lcp_types::{Any, ClientId, Height, Time};
-use light_client::HostClientReader;
+use lcp_types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -12,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Address, ChainId, Validators};
+use crate::misc::{new_height, Address, ChainId};
 use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";

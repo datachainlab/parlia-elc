@@ -16,7 +16,6 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::Hash;
 use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
@@ -258,7 +257,6 @@ mod test {
     use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
-
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId};
 
@@ -326,7 +324,7 @@ mod test {
             height: &Height,
         ) -> Result<Any, light_client::Error> {
             let state = self.consensus_state.get(height).ok_or(
-                light_client::Error::consensus_state_not_found(client_id.clone(), height.clone()),
+                light_client::Error::consensus_state_not_found(client_id.clone(), *height),
             )?;
             Ok(Any::from(state.clone()))
         }
@@ -587,7 +585,7 @@ mod test {
         let proof_height = Height::new(0, 400);
         let mut mock_consensus_state = BTreeMap::new();
         mock_consensus_state.insert(
-            proof_height.clone(),
+            proof_height,
             ConsensusState {
                 state_root: [
                     51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229,

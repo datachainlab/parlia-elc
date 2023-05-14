@@ -2,21 +2,18 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
 use lcp_types::{Any, Height, Time};
-use patricia_merkle_trie::keccak::keccak_256;
 use prost::Message as _;
 
-use crate::header::validator_set::ValidatorSet;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use self::constant::BLOCKS_PER_EPOCH;
-use crate::misc::{
-    keccak_256_vec, new_height, new_timestamp, ChainId, Hash, Validator, Validators,
-};
+use crate::header::validator_set::ValidatorSet;
+use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
 use crate::proof::decode_eip1184_rlp_proof;
 
 use super::errors::Error;
 
+use self::constant::BLOCKS_PER_EPOCH;
 use self::eth_headers::ETHHeaders;
 
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
@@ -85,8 +82,8 @@ impl Header {
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
-            &self.current_validators.validators(),
-            &self.previous_validators.validators(),
+            self.current_validators.validators(),
+            self.previous_validators.validators(),
         )
     }
 }
@@ -199,7 +196,6 @@ mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{Header as RawHeader, ValidatorSet};
 
     use crate::errors::Error;
-    use crate::header::eth_header::ETHHeader;
     use crate::header::testdata::*;
     use crate::header::Header;
     use crate::misc::{new_height, ChainId, Validators};

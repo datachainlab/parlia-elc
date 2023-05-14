@@ -9,7 +9,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{new_timestamp, Hash, Validators};
+use crate::misc::{new_timestamp, Hash};
 
 use super::errors::Error;
 

@@ -1,10 +1,10 @@
+use lcp_types::Height;
+
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::ValidatorSet as RawValidatorSet;
+
 use crate::errors::Error;
 use crate::header::eth_header::ETHHeader;
 use crate::misc::{keccak_256_vec, new_height, Hash, Validators};
-use alloc::vec::Vec;
-use lcp_types::Height;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::ValidatorSet as RawValidatorSet;
-use patricia_merkle_trie::keccak::keccak_256;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValidatorSet {
