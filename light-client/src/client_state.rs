@@ -199,13 +199,7 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = vec![
-            10, 39, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
-            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 108, 105, 101, 110, 116, 83, 116,
-            97, 116, 101, 18, 38, 8, 143, 78, 18, 20, 170, 67, 211, 55, 20, 94, 137, 48, 208, 28,
-            180, 230, 10, 191, 101, 149, 198, 146, 146, 30, 26, 3, 16, 200, 1, 34, 4, 8, 1, 16, 3,
-            40, 100,
-        ];
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651226088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a0310c8012204080110032864").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 

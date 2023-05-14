@@ -227,23 +227,11 @@ mod test {
             header.headers.target.number,
             "invalid revision height"
         );
-        assert_eq!(
-            header.is_target_epoch(),
-            false,
-            "invalid epoch"
-        );
+        assert_eq!(header.is_target_epoch(), false, "invalid epoch");
         let cvh = header.current_validators;
-        assert_eq!(
-            cvh.validators().len(),
-            21,
-            "invalid epoch"
-        );
+        assert_eq!(cvh.validators().len(), 21, "invalid epoch");
         let pvh = header.previous_validators;
-        assert_eq!(
-            pvh.validators().len(),
-            21,
-            "invalid epoch"
-        );
+        assert_eq!(pvh.validators().len(), 21, "invalid epoch");
     }
 
     #[test]
@@ -319,7 +307,6 @@ mod test {
             }
             _ => unreachable!(),
         }
-
     }
 
     struct MockValidatorReader {
