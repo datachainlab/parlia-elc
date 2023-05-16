@@ -22,7 +22,6 @@ const EXTRA_SEAL: usize = 65;
 const VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN: usize = 20;
 const BLS_PUBKEY_LENGTH: usize = 48;
 const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
-const VALIDATOR_NUMBER_SIZE: usize = 1;
 
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 
@@ -239,15 +238,15 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
         }
 
         let is_epoch = number % BLOCKS_PER_EPOCH == 0;
-        let signers_bytes_size = extra_size - EXTRA_VANITY - EXTRA_SEAL;
         let is_luban = number >= LUBAN_FORK;
 
         // Ensure that the extra-data contains a signer list on checkpoint, but none otherwize
+        let validators_bytes = &extra_data[EXTRA_VANITY..extra_data.len() - EXTRA_SEAL];
         let new_validators: Validators = if is_epoch {
-            extract_validators(is_luban, signers_bytes_size, &extra_data)
+            extract_validators(is_luban, validators_bytes)
                 .ok_or(Error::UnexpectedValidatorInEpochBlock(number))?
         } else {
-            if !is_luban && signers_bytes_size != 0 {
+            if !is_luban && validators_bytes.len() != 0 {
                 return Err(Error::UnexpectedValidatorInNonEpochBlock(number));
             }
             vec![]
@@ -315,30 +314,30 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
     }
 }
 
-fn extract_validators(
-    is_luban: bool,
-    signers_bytes_size: usize,
-    extra_data: &[u8],
-) -> Option<Validators> {
-    // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L341
+fn extract_validators(is_luban: bool, validators_bytes: &[u8]) -> Option<Validators> {
+    // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
     if is_luban {
-        let num = extra_data[EXTRA_VANITY] as usize;
-        if num == 0 || signers_bytes_size <= num * VALIDATOR_BYTES_LENGTH {
+        let num = validators_bytes[0] as usize;
+        if num == 0 || validators_bytes.len() <= num * VALIDATOR_BYTES_LENGTH {
             return None;
         }
-        Some(extra_data[EXTRA_VANITY + VALIDATOR_NUMBER_SIZE ..extra_data.len() - EXTRA_SEAL]
-            .chunks(VALIDATOR_BYTES_LENGTH)
-            // discard vote attestation
-            .map(|s| s[..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].into())
-            .collect())
+        Some(
+            validators_bytes[1..num * VALIDATOR_BYTES_LENGTH]
+                .chunks(VALIDATOR_BYTES_LENGTH)
+                // discard vote attestation
+                .map(|s| s[..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].into())
+                .collect(),
+        )
     } else {
-        if signers_bytes_size % VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN != 0 {
+        if validators_bytes.len() % VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN != 0 {
             return None;
         }
-        Some(extra_data[EXTRA_VANITY..extra_data.len() - EXTRA_SEAL]
-            .chunks(VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN)
-            .map(|s| s.into())
-            .collect())
+        Some(
+            validators_bytes
+                .chunks(VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN)
+                .map(|s| s.into())
+                .collect(),
+        )
     }
 }
 
@@ -641,12 +640,17 @@ mod test {
             new_validators: vec![],
         };
         let raw: RawETHHeader = epoch.try_into().unwrap();
-        let epoch : ETHHeader = (&raw).try_into().unwrap();
+        let epoch: ETHHeader = (&raw).try_into().unwrap();
         assert!(epoch.is_epoch);
-        assert_eq!(epoch.hash, hex!("51daf288b19c1b9bd6565be70c5bfb79c6fc470ce55ca684f6099c01b4ed7494"));
-        assert_eq!(epoch.new_validators.len(), 10);
+        assert_eq!(
+            epoch.hash,
+            hex!("51daf288b19c1b9bd6565be70c5bfb79c6fc470ce55ca684f6099c01b4ed7494")
+        );
+        assert_eq!(epoch.new_validators.len(), 7);
         // same validator is used in this test block
-        epoch.verify_seal(&epoch.new_validators, &ChainId::new(97)).unwrap();
+        epoch
+            .verify_seal(&epoch.new_validators, &ChainId::new(97))
+            .unwrap();
 
         // 29835601
         // https://testnet.bscscan.com/api?module=proxy&action=eth_getBlockByNumber&tag=0x1c74151&boolean=false&apikey=
@@ -672,13 +676,18 @@ mod test {
             new_validators: vec![],
         };
         let raw: RawETHHeader = non_epoch.try_into().unwrap();
-        let non_epoch : ETHHeader = (&raw).try_into().unwrap();
+        let non_epoch: ETHHeader = (&raw).try_into().unwrap();
         assert!(!non_epoch.is_epoch);
-        assert_eq!(non_epoch.hash, hex!("8a75dd8ac962e4c4ab33e17f83c453ebe3fc97f722cef4affef092fd70c79d5f"));
+        assert_eq!(
+            non_epoch.hash,
+            hex!("8a75dd8ac962e4c4ab33e17f83c453ebe3fc97f722cef4affef092fd70c79d5f")
+        );
         assert_eq!(non_epoch.new_validators.len(), 0);
 
         // same validator is used in this test block
-        non_epoch.verify_seal(&epoch.new_validators, &ChainId::new(97)).unwrap();
+        non_epoch
+            .verify_seal(&epoch.new_validators, &ChainId::new(97))
+            .unwrap();
 
         non_epoch.verify_cascading_fields(&epoch).unwrap()
     }
