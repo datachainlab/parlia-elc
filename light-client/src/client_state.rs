@@ -146,7 +146,7 @@ impl IBCClientState for ClientState {
                 self.chain_id.version(),
                 header_height.revision_number(),
             )
-            .into());
+                .into());
         }
 
         // Ensure header is valid
@@ -463,17 +463,17 @@ fn verify_proof(
         &keccak_256(key),
         expected_value.as_deref(),
     )
-    .map_err(|err| match err {
-        VerifyError::ExistingValue(value) => {
-            Error::UnexpectedStateExistingValue(value, key.to_vec())
-        }
-        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(key.to_vec()),
-        VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
-        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
-        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
-        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
-        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
-    })
+        .map_err(|err| match err {
+            VerifyError::ExistingValue(value) => {
+                Error::UnexpectedStateExistingValue(value, key.to_vec())
+            }
+            VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(key.to_vec()),
+            VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
+            VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
+            VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
+            VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
+            VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
+        })
 }
 
 #[cfg(test)]

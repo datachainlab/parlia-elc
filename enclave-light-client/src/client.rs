@@ -226,7 +226,7 @@ impl ParliaLightClient {
             YuiIBCPath::from(path.to_string().as_bytes()),
             &value,
         )
-        .map_err(Error::ParliaIBCLC)?;
+            .map_err(Error::ParliaIBCLC)?;
 
         let state_id = state_id(&any_client_state, &any_consensus_state)?;
 
