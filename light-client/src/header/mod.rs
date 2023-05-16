@@ -69,10 +69,13 @@ impl Header {
         let height = &self.height().revision_height();
         let mut epoch_count = height / BLOCKS_PER_EPOCH;
         if epoch_count > 0 {
-           epoch_count -= 1;
+            epoch_count -= 1;
         }
         (
-            Height::new(self.height().revision_number(), epoch_count * BLOCKS_PER_EPOCH),
+            Height::new(
+                self.height().revision_number(),
+                epoch_count * BLOCKS_PER_EPOCH,
+            ),
             self.previous_validators.hash(),
         )
     }
@@ -114,7 +117,9 @@ impl TryFrom<RawHeader> for Header {
 
         let previous_validators: ValidatorSet = value.previous_validators.clone().into();
         if previous_validators.validators().is_empty() {
-            return Err(Error::MissingPreviousTrustedValidators(headers.target.number))
+            return Err(Error::MissingPreviousTrustedValidators(
+                headers.target.number,
+            ));
         }
 
         // Epoch header contains validator set
@@ -124,7 +129,9 @@ impl TryFrom<RawHeader> for Header {
             value.current_validators.clone().into()
         };
         if current_validators.validators().is_empty() {
-            return Err(Error::MissingCurrentTrustedValidators(headers.target.number))
+            return Err(Error::MissingCurrentTrustedValidators(
+                headers.target.number,
+            ));
         }
 
         Ok(Self {
@@ -192,7 +199,7 @@ mod test {
     use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{Header as RawHeader};
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     use crate::errors::Error;
     use crate::header::testdata::*;

@@ -3,8 +3,8 @@ use prost::bytes::BytesMut;
 use rlp::RlpStream;
 
 use parlia_ibc_proto::ibc::core::client::v1::Height;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader as RawETHHeader};
 
 use crate::header::eth_header::ETHHeader;
 use crate::header::Header;

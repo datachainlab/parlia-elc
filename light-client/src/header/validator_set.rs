@@ -17,8 +17,7 @@ impl ValidatorSet {
 }
 
 impl From<Validators> for ValidatorSet {
-
-    fn from(value: Validators) -> Self{
+    fn from(value: Validators) -> Self {
         let hash = keccak_256_vec(&value);
         Self {
             validators: value,
