@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use lcp_types::{Height, Time};
 use rlp::{Decodable, Rlp};
 
 use crate::errors::Error;
@@ -10,8 +11,6 @@ pub type Address = [u8; 20];
 pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
 pub type StorageKey = [u8; 32];
-pub type NanoTime = u64;
-pub type HexString<'a> = &'a str;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
@@ -23,8 +22,10 @@ impl ChainId {
     pub fn id(&self) -> u64 {
         self.id
     }
+
     pub fn new(id: u64) -> Self {
-        ChainId { id, version: 1 }
+        //TODO support upgrade. currently follow the ethereum-elc-
+        ChainId { id, version: 0 }
     }
 
     pub fn version(&self) -> u64 {
@@ -33,7 +34,7 @@ impl ChainId {
 }
 
 pub trait ValidatorReader {
-    fn read(&self, height: ibc::Height) -> Result<Validators, Error>;
+    fn read(&self, height: Height) -> Result<Validators, Error>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -76,11 +77,6 @@ impl<'a> RlpIterator<'a> {
         Ok(result)
     }
 
-    pub fn try_next_as_list<T: Decodable>(&mut self) -> Result<Vec<T>, Error> {
-        let next = self.try_next()?;
-        next.as_list().map_err(Error::RLPDecodeError)
-    }
-
     pub fn try_next_as_val<T: Decodable>(&mut self) -> Result<T, Error> {
         let next = self.try_next()?;
         next.as_val().map_err(Error::RLPDecodeError)
@@ -89,25 +85,13 @@ impl<'a> RlpIterator<'a> {
 
 pub(crate) fn required_block_count_to_finalize(validators: &Validators) -> usize {
     let validator_size = validators.len();
-    if validator_size % 2 == 1 {
-        validator_size / 2 + 1
-    } else {
-        validator_size / 2
-    }
+    validator_size / 2 + 1
 }
 
-pub fn new_ibc_height_with_chain_id(
-    chain_id: &ChainId,
-    height: BlockNumber,
-) -> Result<ibc::Height, Error> {
-    new_ibc_height(chain_id.version(), height)
+pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
+    Height::new(revision_number, height)
 }
 
-pub fn new_ibc_height(revision_number: u64, height: BlockNumber) -> Result<ibc::Height, Error> {
-    //TODO Ethereum based block number uses big.Int. It can be bigger than u64.
-    ibc::Height::new(revision_number, height).map_err(Error::ICS02Error)
-}
-
-pub fn new_ibc_timestamp(nano: u64) -> Result<ibc::timestamp::Timestamp, Error> {
-    ibc::timestamp::Timestamp::from_nanoseconds(nano).map_err(Error::ICSTimestamp)
+pub fn new_timestamp(second: u64) -> Result<Time, Error> {
+    Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
 }

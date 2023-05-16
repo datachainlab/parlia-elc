@@ -1,10 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "enclave-light-client",
     "light-client",
     "proto",
 ]
 exclude = [
     "proto-compiler",
 ]
+
+[workspace.package]
+description = "IBC light client for BSC"

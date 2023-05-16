@@ -9,7 +9,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 use crate::errors::Error;
 use crate::header::eth_header::ETHHeader;
 use crate::header::Header;
-use crate::misc::{ChainId, Hash};
+use crate::misc::ChainId;
 
 pub fn mainnet() -> ChainId {
     ChainId::new(56)
@@ -42,10 +42,9 @@ pub fn create_after_checkpoint_headers() -> Header {
         create_non_epoch_block10().try_into().unwrap(),
     ];
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
@@ -69,10 +68,9 @@ pub fn create_before_checkpoint_headers() -> Header {
     ];
 
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
@@ -95,10 +93,9 @@ pub fn create_across_checkpoint_headers() -> Header {
         create_non_epoch_block_after_epoch12().try_into().unwrap(),
     ];
     let raw_header = RawHeader {
-        identifier: alloc::string::String::from("test"),
         headers: raw_eth_headers,
         trusted_height: Some(Height {
-            revision_number: 1,
+            revision_number: 0,
             revision_height: 1,
         }),
         account_proof: to_rlp(vec![hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec()]).to_vec()
@@ -786,10 +783,4 @@ pub fn to_rlp(proof: alloc::vec::Vec<alloc::vec::Vec<u8>>) -> BytesMut {
         rlp.append(&v);
     }
     rlp.out()
-}
-
-impl Header {
-    pub fn state_root(&self) -> &Hash {
-        &hex!("c7095cc31e155302a3ff06970f0df0efa1abf5fe6e4be6cc450cc5f9421c2c9f")
-    }
 }

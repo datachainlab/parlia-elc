@@ -1,21 +1,15 @@
 use alloc::borrow::ToOwned as _;
-
 use alloc::vec::Vec;
+use core::ops::Add;
+use core::time::Duration;
 
-use ibc::core::ics02_client::consensus_state::{
-    downcast_consensus_state, ConsensusState as IBCConsensusState,
-};
-use ibc::core::ics02_client::error::ClientError;
-use ibc::core::ics23_commitment::commitment::CommitmentRoot;
-use ibc::timestamp::Timestamp;
-use ibc_proto::google::protobuf::Any;
-use ibc_proto::protobuf::Protobuf;
+use lcp_types::{Any, Time};
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::client_state::ClientState;
-use crate::misc::{new_ibc_timestamp, Hash, NanoTime, Validators};
+use crate::misc::{new_timestamp, Hash, Validators};
 
 use super::errors::Error;
 
@@ -23,64 +17,38 @@ pub const PARLIA_CONSENSUS_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.C
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConsensusState {
-    pub state_root: CommitmentRoot,
-    pub timestamp: Timestamp,
+    pub state_root: Hash,
+    pub timestamp: Time,
     // Only epoch headers contain validator set
     pub validator_set: Validators,
 }
 
 impl ConsensusState {
-    pub fn state_root(&self) -> Result<Hash, Error> {
-        self.state_root
-            .as_bytes()
-            .try_into()
-            .map_err(|_| Error::UnexpectedStateRoot(self.state_root.clone().into_vec()))
-    }
-
-    pub fn assert_within_trust_period(
-        &self,
-        now: Timestamp,
-        trusting_period: NanoTime,
-    ) -> Result<(), Error> {
-        // We can't use std::time in the TEE environment.
-        let now_nano = now.nanoseconds();
-        let timestamp = self.timestamp.nanoseconds();
-        if now_nano < timestamp {
-            return Err(Error::UnexpectedTimestamp(timestamp));
+    pub fn assert_not_expired(&self, now: Time, trusting_period: Duration) -> Result<(), Error> {
+        if self.timestamp > now {
+            return Err(Error::IllegalTimestamp(self.timestamp, now));
         }
-        if (now_nano - timestamp) > trusting_period {
-            let expires_at = new_ibc_timestamp(timestamp + trusting_period)?;
-            Err(Error::ICS02Error(ClientError::HeaderNotWithinTrustPeriod {
-                latest_time: expires_at,
-                update_time: now,
-            }))
+        let deadline = self
+            .timestamp
+            .add(trusting_period)
+            .map_err(Error::UnexpectedTimestamp)?;
+        if deadline < now {
+            Err(Error::HeaderNotWithinTrustingPeriod(deadline, now))
         } else {
             Ok(())
         }
     }
 }
 
-impl Protobuf<RawConsensusState> for ConsensusState {}
-impl Protobuf<Any> for ConsensusState {}
-
-impl TryFrom<&dyn IBCConsensusState<Error = ClientError>> for ConsensusState {
-    type Error = ClientError;
-
-    fn try_from(value: &dyn IBCConsensusState<Error = ClientError>) -> Result<Self, Self::Error> {
-        downcast_consensus_state::<Self>(value)
-            .ok_or_else(|| ClientError::ClientArgsTypeMismatch {
-                client_type: ClientState::client_type(),
-            })
-            .map(Clone::clone)
-    }
-}
-
 impl TryFrom<RawConsensusState> for ConsensusState {
-    type Error = ClientError;
+    type Error = Error;
 
     fn try_from(value: RawConsensusState) -> Result<Self, Self::Error> {
-        let state_root = CommitmentRoot::from_bytes(value.state_root.as_slice());
-        let timestamp = new_ibc_timestamp(value.timestamp)?;
+        let state_root: Hash = value
+            .state_root
+            .try_into()
+            .map_err(Error::UnexpectedConsensusStateRoot)?;
+        let timestamp = new_timestamp(value.timestamp)?;
         let validator_set = value.validator_set;
         Ok(Self {
             state_root,
@@ -93,39 +61,27 @@ impl TryFrom<RawConsensusState> for ConsensusState {
 impl From<ConsensusState> for RawConsensusState {
     fn from(value: ConsensusState) -> Self {
         Self {
-            state_root: value.state_root.into_vec(),
-            timestamp: value.timestamp.nanoseconds(),
+            state_root: value.state_root.to_vec(),
+            timestamp: value.timestamp.as_unix_timestamp_secs(),
             validator_set: value.validator_set,
         }
     }
 }
 
-impl IBCConsensusState for ConsensusState {
-    fn root(&self) -> &CommitmentRoot {
-        &self.state_root
-    }
+impl TryFrom<IBCAny> for ConsensusState {
+    type Error = Error;
 
-    fn timestamp(&self) -> Timestamp {
-        self.timestamp
-    }
-}
-
-impl TryFrom<Any> for ConsensusState {
-    type Error = ClientError;
-
-    fn try_from(any: Any) -> Result<Self, Self::Error> {
+    fn try_from(any: IBCAny) -> Result<Self, Self::Error> {
         if any.type_url != PARLIA_CONSENSUS_STATE_TYPE_URL {
-            return Err(ClientError::UnknownConsensusStateType {
-                consensus_state_type: any.type_url,
-            });
+            return Err(Error::UnknownConsensusStateType(any.type_url));
         }
         RawConsensusState::decode(any.value.as_slice())
-            .map_err(ClientError::Decode)?
+            .map_err(Error::ProtoDecodeError)?
             .try_into()
     }
 }
 
-impl From<ConsensusState> for Any {
+impl From<ConsensusState> for IBCAny {
     fn from(value: ConsensusState) -> Self {
         let value: RawConsensusState = value.into();
         let mut v = Vec::new();
@@ -139,44 +95,115 @@ impl From<ConsensusState> for Any {
     }
 }
 
+impl From<ConsensusState> for Any {
+    fn from(value: ConsensusState) -> Self {
+        IBCAny::from(value).into()
+    }
+}
+
+impl TryFrom<Any> for ConsensusState {
+    type Error = Error;
+
+    fn try_from(any: Any) -> Result<Self, Self::Error> {
+        IBCAny::from(any).try_into()
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use ibc::core::ics23_commitment::commitment::CommitmentRoot;
+    use core::time::Duration;
+    use hex_literal::hex;
+    use std::ops::{Add, Sub};
+
+    use lcp_types::Time;
 
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
-    use crate::misc::new_ibc_timestamp;
 
     #[test]
-    fn test_assert_within_trust_period() {
-        let as_seconds = 1_000_000_000;
+    fn test_assert_not_expired() {
         let consensus_state = ConsensusState {
-            state_root: CommitmentRoot::from_bytes(&[]),
-            timestamp: new_ibc_timestamp(1560000000 * as_seconds).unwrap(),
+            state_root: [0_u8; 32],
+            timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
             validator_set: vec![],
         };
 
-        let now = new_ibc_timestamp(consensus_state.timestamp.nanoseconds() + as_seconds).unwrap();
+        // now is after trusting period
+        let now = consensus_state.timestamp.add(Duration::new(1, 1)).unwrap();
         match consensus_state
-            .assert_within_trust_period(now, 0)
+            .assert_not_expired(now, Duration::new(1, 0))
             .unwrap_err()
         {
-            Error::ICS02Error(_) => assert!(true),
-            e => unreachable!("{:?}", e),
-        }
-        assert!(consensus_state
-            .assert_within_trust_period(now, as_seconds)
-            .is_ok());
-
-        let now = new_ibc_timestamp(consensus_state.timestamp.nanoseconds() - as_seconds).unwrap();
-        match consensus_state
-            .assert_within_trust_period(now, 0)
-            .unwrap_err()
-        {
-            Error::UnexpectedTimestamp(tm) => {
-                assert_eq!(tm, consensus_state.timestamp.nanoseconds())
+            Error::HeaderNotWithinTrustingPeriod(a, b) => {
+                assert_eq!(
+                    a,
+                    consensus_state.timestamp.add(Duration::new(1, 0)).unwrap()
+                );
+                assert_eq!(b, now);
             }
             e => unreachable!("{:?}", e),
         }
+
+        // now is within trusting period
+        assert!(consensus_state
+            .assert_not_expired(now, Duration::new(1, 1))
+            .is_ok());
+
+        // illegal timestamp
+        let now = consensus_state.timestamp.sub(Duration::new(1, 0)).unwrap();
+        match consensus_state
+            .assert_not_expired(now, Duration::new(0, 0))
+            .unwrap_err()
+        {
+            Error::IllegalTimestamp(t1, t2) => {
+                assert_eq!(t1, consensus_state.timestamp);
+                assert_eq!(t2, now);
+            }
+            e => unreachable!("{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_try_from_any() {
+        // This is ibc-parlia-relay's unit test data
+        let relayer_consensus_state_protobuf = vec![
+            10, 42, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
+            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 111, 110, 115, 101, 110, 115, 117,
+            115, 83, 116, 97, 116, 101, 18, 240, 3, 10, 32, 195, 96, 136, 113, 9, 143, 33, 181,
+            150, 7, 239, 63, 185, 65, 42, 9, 29, 233, 36, 106, 209, 40, 26, 146, 245, 176, 125,
+            194, 244, 101, 183, 160, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let any: lcp_types::Any = relayer_consensus_state_protobuf.try_into().unwrap();
+        let cs: ConsensusState = any.try_into().unwrap();
+
+        // Check if the result are same as relayer's one
+        assert_eq!(21, cs.validator_set.len());
+        for val in cs.validator_set {
+            assert_eq!(
+                hex!("0000000000000000000000000000000000000000").to_vec(),
+                val
+            );
+        }
+        assert_eq!(0, cs.timestamp.as_unix_timestamp_secs());
+        assert_eq!(
+            hex!("c3608871098f21b59607ef3fb9412a091de9246ad1281a92f5b07dc2f465b7a0"),
+            cs.state_root
+        );
     }
 }

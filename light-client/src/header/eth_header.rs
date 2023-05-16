@@ -29,19 +29,6 @@ const EMPTY_MIX_HASH: Hash =
     hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Target {
-    pub ibc_height: ibc::Height,
-    pub ibc_timestamp: ibc::timestamp::Timestamp,
-    pub header: ETHHeader,
-}
-
-impl AsRef<ETHHeader> for Target {
-    fn as_ref(&self) -> &ETHHeader {
-        &self.header
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
     pub uncle_hash: Vec<u8>,
@@ -183,21 +170,21 @@ impl TryFrom<ETHHeader> for RawETHHeader {
 
     fn try_from(header: ETHHeader) -> Result<Self, Self::Error> {
         let mut stream = RlpStream::new_list(15);
-        stream.append_list(&header.parent_hash);
-        stream.append_list(&header.uncle_hash);
-        stream.append_list(&header.coinbase);
-        stream.append_list(header.root.as_ref());
-        stream.append_list(&header.tx_hash);
-        stream.append_list(&header.receipt_hash);
-        stream.append_list(&header.bloom);
+        stream.append(&header.parent_hash);
+        stream.append(&header.uncle_hash);
+        stream.append(&header.coinbase);
+        stream.append(&header.root.to_vec());
+        stream.append(&header.tx_hash);
+        stream.append(&header.receipt_hash);
+        stream.append(&header.bloom);
         stream.append(&header.difficulty);
         stream.append(&header.number);
         stream.append(&header.gas_limit);
         stream.append(&header.gas_used);
         stream.append(&header.timestamp);
-        stream.append_list(&header.extra_data);
-        stream.append_list(&header.mix_digest);
-        stream.append_list(&header.nonce);
+        stream.append(&header.extra_data);
+        stream.append(&header.mix_digest);
+        stream.append(&header.nonce);
         Ok(RawETHHeader {
             header: stream.out().to_vec(),
         })
@@ -211,24 +198,24 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
     /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L324
     fn try_from(value: &RawETHHeader) -> Result<Self, Self::Error> {
         let mut rlp = RlpIterator::new(Rlp::new(value.header.as_slice()));
-        let parent_hash = rlp.try_next_as_list()?;
-        let uncle_hash = rlp.try_next_as_list()?;
-        let coinbase = rlp.try_next_as_list()?;
+        let parent_hash: Vec<u8> = rlp.try_next_as_val()?;
+        let uncle_hash: Vec<u8> = rlp.try_next_as_val()?;
+        let coinbase: Vec<u8> = rlp.try_next_as_val()?;
         let root: Hash = rlp
-            .try_next_as_list()?
+            .try_next_as_val::<Vec<u8>>()?
             .try_into()
             .map_err(Error::UnexpectedStateRoot)?;
-        let tx_hash = rlp.try_next_as_list()?;
-        let receipt_hash = rlp.try_next_as_list()?;
-        let bloom = rlp.try_next_as_list()?;
+        let tx_hash: Vec<u8> = rlp.try_next_as_val()?;
+        let receipt_hash: Vec<u8> = rlp.try_next_as_val()?;
+        let bloom: Vec<u8> = rlp.try_next_as_val()?;
         let difficulty = rlp.try_next_as_val()?;
         let number = rlp.try_next_as_val()?;
         let gas_limit = rlp.try_next_as_val()?;
         let gas_used = rlp.try_next_as_val()?;
         let timestamp = rlp.try_next_as_val()?;
-        let extra_data = rlp.try_next_as_list()?;
-        let mix_digest = rlp.try_next_as_list()?;
-        let nonce = rlp.try_next_as_list()?;
+        let extra_data: Vec<u8> = rlp.try_next_as_val()?;
+        let mix_digest: Vec<u8> = rlp.try_next_as_val()?;
+        let nonce: Vec<u8> = rlp.try_next_as_val()?;
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -287,21 +274,21 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
 
         // create block hash
         let mut stream = RlpStream::new_list(15);
-        stream.append(&parent_hash.to_vec());
-        stream.append(&uncle_hash.to_vec());
-        stream.append(&coinbase.to_vec());
+        stream.append(&parent_hash);
+        stream.append(&uncle_hash);
+        stream.append(&coinbase);
         stream.append(&root.to_vec());
-        stream.append(&tx_hash.to_vec());
-        stream.append(&receipt_hash.to_vec());
-        stream.append(&bloom.to_vec());
+        stream.append(&tx_hash);
+        stream.append(&receipt_hash);
+        stream.append(&bloom);
         stream.append(&difficulty);
         stream.append(&number);
         stream.append(&gas_limit);
         stream.append(&gas_used);
         stream.append(&timestamp);
         stream.append(&extra_data);
-        stream.append(&mix_digest.to_vec());
-        stream.append(&nonce.to_vec());
+        stream.append(&mix_digest);
+        stream.append(&nonce);
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 

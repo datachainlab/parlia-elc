@@ -1,20 +1,19 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
+use lcp_types::Height;
+
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::misc::{
-    new_ibc_height, new_ibc_timestamp, required_block_count_to_finalize, Address, ChainId,
-    Validators,
-};
+use crate::misc::{required_block_count_to_finalize, Address, ChainId, Validators};
 
-use super::eth_header::{ETHHeader, Target};
+use super::eth_header::ETHHeader;
 use super::EPOCH_BLOCK_PERIOD;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
-    pub target: Target,
+    pub target: ETHHeader,
     pub all: Vec<ETHHeader>,
 }
 
@@ -45,9 +44,8 @@ impl ETHHeaders {
         previous_validators: &Validators,
     ) -> Result<(), Error> {
         let headers = &self.all;
-        let target = self.target.as_ref();
         let threshold = required_block_count_to_finalize(previous_validators);
-        if target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
+        if self.target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
             // Validators created at previous epoch is used for consensus target header
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
@@ -88,10 +86,14 @@ impl ETHHeaders {
         Ok(())
     }
 
-    pub fn new(trusted_height: ibc::Height, value: &[EthHeader]) -> Result<ETHHeaders, Error> {
+    pub fn new(trusted_height: Height, value: &[EthHeader]) -> Result<ETHHeaders, Error> {
         let mut new_headers: Vec<ETHHeader> = Vec::with_capacity(value.len());
-        for header in value {
-            new_headers.push(header.try_into()?);
+        for (i, header) in value.iter().enumerate() {
+            new_headers.push(
+                header
+                    .try_into()
+                    .map_err(|e| Error::UnexpectedHeader(i, alloc::boxed::Box::new(e)))?,
+            );
         }
         let target = match new_headers.first() {
             Some(v) => v,
@@ -114,16 +116,8 @@ impl ETHHeaders {
             }
         }
 
-        // timestamp is UnixTime https://github.com/bnb-chain/bsc/blob/master/consensus/parlia/parlia.go#L643. but ibc::Timestamp requires nanotime
-        let ibc_timestamp = new_ibc_timestamp(target.timestamp * 1_000_000_000)?;
-        let ibc_height = new_ibc_height(trusted_height.revision_number(), target.number)?;
-
         Ok(ETHHeaders {
-            target: Target {
-                ibc_height,
-                ibc_timestamp,
-                header: target.clone(),
-            },
+            target: target.clone(),
             all: new_headers,
         })
     }
@@ -194,7 +188,7 @@ mod test {
         match result.unwrap_err() {
             Error::InsufficientHeaderToVerify(actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
-                assert_eq!(expected, 0, "expected error");
+                assert_eq!(expected, 1, "expected error");
             }
             e => unreachable!("{:?}", e),
         }
@@ -209,7 +203,7 @@ mod test {
             .verify(mainnet, &vec![], &previous_validator_set);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
-                assert_eq!(number, header.headers.target.header.number)
+                assert_eq!(number, header.headers.target.number)
             }
             e => unreachable!("{:?}", e),
         }
@@ -240,7 +234,7 @@ mod test {
         match result.unwrap_err() {
             Error::InsufficientHeaderToVerify(actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
-                assert_eq!(expected, 0, "expected error");
+                assert_eq!(expected, 1, "expected error");
             }
             e => unreachable!("{:?}", e),
         }

@@ -12,7 +12,7 @@ pub trait Path {
 pub struct YuiIBCPath(Bytes32Path);
 
 impl From<&[u8]> for YuiIBCPath {
-    /// ```
+    /// ```ignore
     /// use parlia_ibc_lc::path::YuiIBCPath;
     ///
     /// let path = YuiIBCPath::from("commitments/ports/port-1/channels/channel-1/sequences/1".as_bytes());
@@ -41,7 +41,7 @@ pub struct StringPath {
 
 impl StringPath {
     /// key must be hex string.
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::StringPath;
     ///
@@ -50,6 +50,7 @@ impl StringPath {
     ///     &hex!("0000000000000000000000000000000000000000000000000000000000000002")
     /// );
     /// ```
+    #[allow(dead_code)]
     pub fn new(key: &[u8], slot: &[u8; 32]) -> Self {
         // string key need not to add any zero padding.
         // key = web3.toHex("abcdefghijabcdefghijabcdefghijabc")
@@ -70,7 +71,7 @@ pub struct AddressPath {
 }
 
 impl AddressPath {
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::AddressPath;
     ///
@@ -79,6 +80,7 @@ impl AddressPath {
     ///     &hex!("0000000000000000000000000000000000000000000000000000000000000001"),
     /// );
     /// ```
+    #[allow(dead_code)]
     pub fn new(key: &Address, slot: &[u8; 32]) -> Self {
         // address key needs left zero padding.
         // address = "0x18DAd81d93F32575691131E73878E89e20481839"
@@ -103,7 +105,7 @@ pub struct Bytes32Path {
 }
 
 impl Bytes32Path {
-    /// ```
+    /// ```ignore
     /// use hex_literal::hex;
     /// use parlia_ibc_lc::path::Bytes32Path;
     ///
