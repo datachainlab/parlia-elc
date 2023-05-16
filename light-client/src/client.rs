@@ -23,7 +23,7 @@ pub struct ParliaLightClient;
 
 impl LightClient for ParliaLightClient {
     fn client_type(&self) -> String {
-        "99-parlia".to_string()
+        "xx-parlia".to_string()
     }
 
     fn latest_height(
