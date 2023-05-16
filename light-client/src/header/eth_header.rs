@@ -9,6 +9,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::header::constant::{is_luban, LUBAN_FORK};
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
 use super::BLOCKS_PER_EPOCH;
@@ -18,7 +19,10 @@ const DIFFICULTY_NOTURN: u64 = 1;
 
 const EXTRA_VANITY: usize = 32;
 const EXTRA_SEAL: usize = 65;
-const VALIDATOR_BYTES_LENGTH: usize = 20;
+const VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN: usize = 20;
+const BLS_PUBKEY_LENGTH: usize = 48;
+const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
+const VALIDATOR_NUMBER_SIZE: u8 = 1;
 
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 
@@ -235,21 +239,16 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
         }
 
         let is_epoch = number % BLOCKS_PER_EPOCH == 0;
+        let signers_bytes_size = extra_size - EXTRA_VANITY - EXTRA_SEAL;
 
         // Ensure that the extra-data contains a signer list on checkpoint, but none otherwize
-        let signers_bytes_size = extra_size - EXTRA_VANITY - EXTRA_SEAL;
-        if !is_epoch && signers_bytes_size != 0 {
-            return Err(Error::UnexpectedValidatorInNonEpochBlock(number));
-        }
         let new_validators: Validators = if is_epoch {
-            if signers_bytes_size % VALIDATOR_BYTES_LENGTH != 0 {
-                return Err(Error::UnexpectedValidatorInEpochBlock(number));
-            }
-            extra_data[EXTRA_VANITY..extra_size - EXTRA_SEAL]
-                .chunks(VALIDATOR_BYTES_LENGTH)
-                .map(|s| s.into())
-                .collect()
+            extract_validators(number >= LUBAN_FORK, signers_bytes_size, &extra_data)
+                .ok_or(Error::UnexpectedValidatorInEpochBlock(number))?
         } else {
+            if signers_bytes_size != 0 {
+                return Err(Error::UnexpectedValidatorInNonEpochBlock(number));
+            }
             vec![]
         };
 
@@ -312,6 +311,33 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
             hash,
             is_epoch,
         })
+    }
+}
+
+fn extract_validators(
+    is_luban: bool,
+    signers_bytes_size: usize,
+    extra_data: &[u8],
+) -> Option<Validators> {
+    // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L341
+    if is_luban {
+        let num = extra_data[EXTRA_VANITY] as usize;
+        if num == 0 || signers_bytes_size <= num * VALIDATOR_BYTES_LENGTH {
+            return None;
+        }
+        extra_data[EXTRA_VANITY + VALIDATOR_NUMBER_SIZE..extra_size - EXTRA_SEAL]
+            .chunks(VALIDATOR_BYTES_LENGTH)
+            // discard vote attestation
+            .map(|s| s[..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].into())
+            .collect()
+    } else {
+        if signers_bytes_size % VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN != 0 {
+            return None;
+        }
+        extra_data[EXTRA_VANITY..extra_size - EXTRA_SEAL]
+            .chunks(VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN)
+            .map(|s| s.into())
+            .collect()
     }
 }
 
