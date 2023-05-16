@@ -244,9 +244,9 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
         let validators_bytes = &extra_data[EXTRA_VANITY..extra_data.len() - EXTRA_SEAL];
         let new_validators: Validators = if is_epoch {
             extract_validators(is_luban, validators_bytes)
-                .ok_or(Error::UnexpectedValidatorInEpochBlock(number))?
+                .ok_or_else(|| Error::UnexpectedValidatorInEpochBlock(number))?
         } else {
-            if !is_luban && validators_bytes.len() != 0 {
+            if !is_luban && !validators_bytes.is_empty() {
                 return Err(Error::UnexpectedValidatorInNonEpochBlock(number));
             }
             vec![]
