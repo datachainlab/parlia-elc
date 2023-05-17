@@ -45,6 +45,10 @@ pub struct Header {
     >,
     #[prost(bytes = "vec", tag = "3")]
     pub account_proof: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", repeated, tag = "4")]
+    pub previous_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    pub current_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -54,6 +58,6 @@ pub struct ConsensusState {
     pub state_root: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "2")]
     pub timestamp: u64,
-    #[prost(bytes = "vec", repeated, tag = "3")]
-    pub validator_set: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub validators_hash: ::prost::alloc::vec::Vec<u8>,
 }

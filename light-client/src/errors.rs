@@ -5,7 +5,7 @@ use core::fmt::Formatter;
 use k256::ecdsa::signature;
 use lcp_types::{ClientId, Height, Time, TimeError};
 
-use crate::misc::{Address, BlockNumber};
+use crate::misc::{Address, BlockNumber, Hash};
 
 #[derive(Debug)]
 pub enum Error {
@@ -28,13 +28,13 @@ pub enum Error {
 
     // ConsensusState error
     AccountNotFound(Address),
-    UnexpectedStateNonExistingValue(Vec<u8>),
-    UnexpectedStateExistingValue(Vec<u8>, Vec<u8>),
-    UnexpectedStateValueMismatch(Vec<u8>),
-    UnexpectedStateIncompleteProof(Vec<u8>),
-    UnexpectedStateHashMismatch(Vec<u8>),
-    UnexpectedStateDecodeError(Vec<u8>),
-    UnexpectedStateHashDecodeError(Vec<u8>),
+    UnexpectedStateNonExistingValue(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateExistingValue(Hash, Vec<Vec<u8>>, Vec<u8>, Vec<u8>),
+    UnexpectedStateValueMismatch(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateIncompleteProof(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateHashMismatch(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateDecodeError(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateHashDecodeError(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
     UnexpectedTimestamp(TimeError),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
@@ -42,8 +42,14 @@ pub enum Error {
     UnexpectedConsensusStateRoot(Vec<u8>),
     UnexpectedCommitmentValue(Vec<u8>),
     UnexpectedHeader(usize, alloc::boxed::Box<Error>),
+    UnexpectedValidatorsHash(Vec<u8>),
+    UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
 
     // Header error
+    MissingPreviousTrustedValidators(BlockNumber),
+    MissingCurrentTrustedValidators(BlockNumber),
+    MissingTrustedValidatorsHeight,
     HeaderNotWithinTrustingPeriod(Time, Time),
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
@@ -57,8 +63,6 @@ pub enum Error {
     MissingSignatureInExtraData(BlockNumber, usize, usize),
     UnexpectedValidatorInNonEpochBlock(BlockNumber),
     UnexpectedValidatorInEpochBlock(BlockNumber),
-    PreviousValidatorNotFound(BlockNumber, BlockNumber),
-    NewValidatorNotFound(BlockNumber, BlockNumber),
     UnexpectedMixHash(BlockNumber),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
@@ -72,6 +76,7 @@ pub enum Error {
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+    ProofRLPError(rlp::DecoderError),
 }
 
 impl core::fmt::Display for Error {
@@ -92,26 +97,50 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedLatestHeight: {} {}", e1, e2)
             }
             Error::AccountNotFound(e) => write!(f, "AccountNotFound: {:?}", e),
-            Error::UnexpectedStateNonExistingValue(e) => {
-                write!(f, "UnexpectedStateNonExistingValue: {:?}", e)
+            Error::UnexpectedStateNonExistingValue(e1, e2, e3, e4) => {
+                write!(f, "UnexpectedStateNonExistingValue: root={:?}, proof={:?}, expected={:?}, key={:?}", e1,e2,e3,e4)
             }
-            Error::UnexpectedStateExistingValue(e1, e2) => {
-                write!(f, "UnexpectedStateExistingValue: {:?} {:?}", e1, e2)
+            Error::UnexpectedStateExistingValue(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateExistingValue:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateValueMismatch(e) => {
-                write!(f, "UnexpectedStateValueMismatch: {:?}", e)
+            Error::UnexpectedStateValueMismatch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateValueMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateIncompleteProof(e) => {
-                write!(f, "UnexpectedStateIncompleteProof: {:?}", e)
+            Error::UnexpectedStateIncompleteProof(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateIncompleteProof:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateHashMismatch(e) => {
-                write!(f, "UnexpectedStateHashMismatch: {:?}", e)
+            Error::UnexpectedStateHashMismatch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateHashMismatch: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateDecodeError(e) => {
-                write!(f, "UnexpectedStateDecodeError: {:?}", e)
+            Error::UnexpectedStateDecodeError(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateDecodeError: root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedStateHashDecodeError(e) => {
-                write!(f, "UnexpectedStateHashDecodeError: {:?}", e)
+            Error::UnexpectedStateHashDecodeError(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedStateHashDecodeError:root={:?}, proof={:?}, expected={:?}, key={:?}",
+                    e1, e2, e3, e4
+                )
             }
             Error::UnexpectedTimestamp(e) => write!(f, "UnexpectedTimestamp: {}", e),
             Error::UnexpectedStateRoot(e) => write!(f, "UnexpectedStateRoot: {:?}", e),
@@ -176,11 +205,26 @@ impl core::fmt::Display for Error {
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
-            Error::PreviousValidatorNotFound(e1, e2) => {
-                write!(f, "PreviousValidatorNotFound: epoch={} target={}", e1, e2)
+            Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
+            Error::UnexpectedValidatorsHash(e) => write!(f, "UnexpectedValidatorsHash : {:?}", e),
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => write!(
+                f,
+                "UnexpectedPreviousValidatorsHash : {} {:?} {:?}",
+                e1, e2, e3
+            ),
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3) => write!(
+                f,
+                "UnexpectedCurrentValidatorsHash : {} {:?} {:?}",
+                e1, e2, e3
+            ),
+            Error::MissingPreviousTrustedValidators(e) => {
+                write!(f, "MissingPreviousTrustedValidators : {:?}", e)
             }
-            Error::NewValidatorNotFound(e1, e2) => {
-                write!(f, "NewValidatorNotFound: epoch={} target={}", e1, e2)
+            Error::MissingCurrentTrustedValidators(e) => {
+                write!(f, "MissingCurrentTrustedValidators : {:?}", e)
+            }
+            Error::MissingTrustedValidatorsHeight => {
+                write!(f, "MissingTrustedValidatorsHeight")
             }
         }
     }
