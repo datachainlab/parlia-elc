@@ -2,8 +2,7 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use lcp_types::{Any, ClientId, Height};
-use light_client::HostClientReader;
+use lcp_types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -12,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Address, ChainId, ValidatorReader, Validators};
+use crate::misc::{new_height, Address, ChainId};
 use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -45,13 +44,11 @@ impl ClientState {
 
     pub fn check_header_and_update_state(
         &self,
-        ctx: &dyn HostClientReader,
+        now: Time,
         trusted_consensus_state: &ConsensusState,
-        client_id: ClientId,
         header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
-        let now = ctx.host_timestamp();
         trusted_consensus_state.assert_not_expired(now, self.trusting_period)?;
         trusted_consensus_state.assert_not_expired(header.timestamp()?, self.trusting_period)?;
 
@@ -65,7 +62,7 @@ impl ClientState {
         }
 
         // Ensure header is valid
-        header.verify(DefaultValidatorReader::new(ctx, &client_id), &self.chain_id)?;
+        header.verify(&self.chain_id)?;
 
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
@@ -83,7 +80,7 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validator_set: header.validator_set().clone(),
+            validators_hash: header.new_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))
@@ -193,28 +190,6 @@ impl TryFrom<Any> for ClientState {
     }
 }
 
-struct DefaultValidatorReader<'a> {
-    ctx: &'a dyn HostClientReader,
-    client_id: &'a ClientId,
-}
-
-impl<'a> DefaultValidatorReader<'a> {
-    fn new(ctx: &'a dyn HostClientReader, client_id: &'a ClientId) -> Self {
-        Self { ctx, client_id }
-    }
-}
-
-impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
-    fn read(&self, height: Height) -> Result<Validators, Error> {
-        let any = self
-            .ctx
-            .consensus_state(self.client_id, &height)
-            .map_err(Error::LCPError)?;
-        let consensus_state = ConsensusState::try_from(any)?;
-        Ok(consensus_state.validator_set)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use hex_literal::hex;
@@ -223,13 +198,7 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = vec![
-            10, 39, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
-            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 108, 105, 101, 110, 116, 83, 116,
-            97, 116, 101, 18, 38, 8, 143, 78, 18, 20, 170, 67, 211, 55, 20, 94, 137, 48, 208, 28,
-            180, 230, 10, 191, 101, 149, 198, 146, 146, 30, 26, 3, 16, 200, 1, 34, 4, 8, 1, 16, 3,
-            40, 100,
-        ];
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651226088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a0310c8012204080110032864").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 

@@ -42,8 +42,14 @@ pub enum Error {
     UnexpectedConsensusStateRoot(Vec<u8>),
     UnexpectedCommitmentValue(Vec<u8>),
     UnexpectedHeader(usize, alloc::boxed::Box<Error>),
+    UnexpectedValidatorsHash(Vec<u8>),
+    UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
 
     // Header error
+    MissingPreviousTrustedValidators(BlockNumber),
+    MissingCurrentTrustedValidators(BlockNumber),
+    MissingTrustedValidatorsHeight,
     HeaderNotWithinTrustingPeriod(Time, Time),
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
@@ -57,8 +63,6 @@ pub enum Error {
     MissingSignatureInExtraData(BlockNumber, usize, usize),
     UnexpectedValidatorInNonEpochBlock(BlockNumber),
     UnexpectedValidatorInEpochBlock(BlockNumber),
-    PreviousValidatorNotFound(BlockNumber, BlockNumber),
-    NewValidatorNotFound(BlockNumber, BlockNumber),
     UnexpectedMixHash(BlockNumber),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
@@ -201,13 +205,27 @@ impl core::fmt::Display for Error {
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
-            Error::PreviousValidatorNotFound(e1, e2) => {
-                write!(f, "PreviousValidatorNotFound: epoch={} target={}", e1, e2)
-            }
-            Error::NewValidatorNotFound(e1, e2) => {
-                write!(f, "NewValidatorNotFound: epoch={} target={}", e1, e2)
-            }
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
+            Error::UnexpectedValidatorsHash(e) => write!(f, "UnexpectedValidatorsHash : {:?}", e),
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => write!(
+                f,
+                "UnexpectedPreviousValidatorsHash : {} {:?} {:?}",
+                e1, e2, e3
+            ),
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3) => write!(
+                f,
+                "UnexpectedCurrentValidatorsHash : {} {:?} {:?}",
+                e1, e2, e3
+            ),
+            Error::MissingPreviousTrustedValidators(e) => {
+                write!(f, "MissingPreviousTrustedValidators : {:?}", e)
+            }
+            Error::MissingCurrentTrustedValidators(e) => {
+                write!(f, "MissingCurrentTrustedValidators : {:?}", e)
+            }
+            Error::MissingTrustedValidatorsHeight => {
+                write!(f, "MissingTrustedValidatorsHeight")
+            }
         }
     }
 }

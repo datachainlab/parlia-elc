@@ -9,7 +9,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
-use crate::misc::{new_timestamp, Hash, Validators};
+use crate::misc::{new_timestamp, Hash};
 
 use super::errors::Error;
 
@@ -22,7 +22,7 @@ pub struct ConsensusState {
     /// timestamp from execution payload
     pub timestamp: Time,
     /// finalized header's validator set.Only epoch headers contain validator set
-    pub validator_set: Validators,
+    pub validators_hash: Hash,
 }
 
 impl ConsensusState {
@@ -57,11 +57,14 @@ impl TryFrom<RawConsensusState> for ConsensusState {
             .try_into()
             .map_err(Error::UnexpectedConsensusStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
-        let validator_set = value.validator_set;
+        let validators_hash: Hash = value
+            .validators_hash
+            .try_into()
+            .map_err(Error::UnexpectedValidatorsHash)?;
         Ok(Self {
             state_root,
             timestamp,
-            validator_set,
+            validators_hash,
         })
     }
 }
@@ -71,7 +74,7 @@ impl From<ConsensusState> for RawConsensusState {
         Self {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
-            validator_set: value.validator_set,
+            validators_hash: value.validators_hash.into(),
         }
     }
 }
@@ -131,9 +134,9 @@ mod test {
     #[test]
     fn test_assert_not_expired() {
         let consensus_state = ConsensusState {
-            state_root: [0_u8; 32],
+            state_root: [0u8; 32],
             timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
-            validator_set: vec![],
+            validators_hash: [0u8; 32],
         };
 
         // now is after trusting period
@@ -174,43 +177,18 @@ mod test {
     #[test]
     fn test_try_from_any() {
         // This is ibc-parlia-relay's unit test data
-        let relayer_consensus_state_protobuf = vec![
-            10, 42, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
-            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 111, 110, 115, 101, 110, 115, 117,
-            115, 83, 116, 97, 116, 101, 18, 240, 3, 10, 32, 195, 96, 136, 113, 9, 143, 33, 181,
-            150, 7, 239, 63, 185, 65, 42, 9, 29, 233, 36, 106, 209, 40, 26, 146, 245, 176, 125,
-            194, 244, 101, 183, 160, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            26, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+        let relayer_consensus_state_protobuf = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e737573537461746512440a20c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4701a2073b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c").to_vec();
         let any: lcp_types::Any = relayer_consensus_state_protobuf.try_into().unwrap();
         let cs: ConsensusState = any.try_into().unwrap();
 
         // Check if the result are same as relayer's one
-        assert_eq!(21, cs.validator_set.len());
-        for val in cs.validator_set {
-            assert_eq!(
-                hex!("0000000000000000000000000000000000000000").to_vec(),
-                val
-            );
-        }
+        assert_eq!(
+            hex!("73b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c"),
+            cs.validators_hash
+        );
         assert_eq!(0, cs.timestamp.as_unix_timestamp_secs());
         assert_eq!(
-            hex!("c3608871098f21b59607ef3fb9412a091de9246ad1281a92f5b07dc2f465b7a0"),
+            hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
             cs.state_root
         );
     }
