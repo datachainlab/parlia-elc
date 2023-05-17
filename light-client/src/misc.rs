@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 
 use lcp_types::{Height, Time};
+use patricia_merkle_trie::keccak::keccak_256;
 use rlp::{Decodable, Rlp};
 
 use crate::errors::Error;
@@ -10,7 +11,6 @@ pub type Validators = Vec<Validator>;
 pub type Address = [u8; 20];
 pub type BlockNumber = u64;
 pub type Hash = [u8; 32];
-pub type StorageKey = [u8; 32];
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChainId {
@@ -31,10 +31,6 @@ impl ChainId {
     pub fn version(&self) -> u64 {
         self.version
     }
-}
-
-pub trait ValidatorReader {
-    fn read(&self, height: Height) -> Result<Validators, Error>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,4 +90,9 @@ pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
 
 pub fn new_timestamp(second: u64) -> Result<Time, Error> {
     Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
+}
+
+pub fn keccak_256_vec(targets: &[Vec<u8>]) -> Hash {
+    let flatten: Vec<u8> = targets.iter().flat_map(|x| x.clone()).collect();
+    keccak_256(flatten.as_slice())
 }

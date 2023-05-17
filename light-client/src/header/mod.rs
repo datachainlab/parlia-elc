@@ -2,31 +2,35 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
 use lcp_types::{Any, Height, Time};
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use prost::Message as _;
-use rlp::Rlp;
 
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::misc::{new_height, new_timestamp, ChainId, ValidatorReader, Validators};
+use crate::header::validator_set::ValidatorSet;
+use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
+use crate::proof::decode_eip1184_rlp_proof;
 
 use super::errors::Error;
 
+use self::constant::BLOCKS_PER_EPOCH;
 use self::eth_headers::ETHHeaders;
 
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
-const EPOCH_BLOCK_PERIOD: u64 = 200;
-
 // inner header is module private
+pub mod constant;
 mod eth_header;
 mod eth_headers;
+pub(crate) mod validator_set;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
     trusted_height: Height,
+    previous_validators: ValidatorSet,
+    current_validators: ValidatorSet,
 }
 
 impl Header {
@@ -37,83 +41,61 @@ impl Header {
         )
     }
 
+    pub fn is_target_epoch(&self) -> bool {
+        self.headers.target.is_epoch
+    }
+
     pub fn timestamp(&self) -> Result<Time, Error> {
         new_timestamp(self.headers.target.timestamp)
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        let account_proof = Rlp::new(&self.inner.account_proof);
-        Ok(account_proof
-            .into_iter()
-            .map(|r| {
-                let proof: Vec<Vec<u8>> = r.as_list().unwrap();
-                rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into()
-            })
-            .collect())
+        decode_eip1184_rlp_proof(&self.inner.account_proof)
     }
 
     pub fn trusted_height(&self) -> Height {
         self.trusted_height
     }
 
-    pub fn state_root(&self) -> &crate::misc::Hash {
+    pub fn state_root(&self) -> &Hash {
         &self.headers.target.root
     }
 
-    pub fn validator_set(&self) -> &Validators {
-        &self.headers.target.new_validators
+    pub fn new_validators_hash(&self) -> Hash {
+        keccak_256_vec(&self.headers.target.new_validators)
     }
 
-    pub fn verify(&self, ctx: impl ValidatorReader, chain_id: &ChainId) -> Result<(), Error> {
-        let target = &self.headers.target;
-        if target.is_epoch {
-            if target.number >= EPOCH_BLOCK_PERIOD {
-                let previous_epoch_block = target.number - EPOCH_BLOCK_PERIOD;
-                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_block);
-                let previous_validator_set = ctx.read(previous_epoch_height)?;
-                if previous_validator_set.is_empty() {
-                    return Err(Error::PreviousValidatorNotFound(
-                        previous_epoch_block,
-                        target.number,
-                    ));
-                }
-                self.headers
-                    .verify(chain_id, &target.new_validators, &previous_validator_set)
-            } else {
-                // genesis block
-                let genesis_validator_set = &target.new_validators;
-                self.headers
-                    .verify(chain_id, genesis_validator_set, genesis_validator_set)
-            }
-        } else {
-            let epoch_count = target.number / EPOCH_BLOCK_PERIOD;
-            let last_epoch_number = epoch_count * EPOCH_BLOCK_PERIOD;
-            let last_epoch_height = new_height(chain_id.version(), last_epoch_number);
-            let new_validator_set = &ctx.read(last_epoch_height)?;
-            if new_validator_set.is_empty() {
-                return Err(Error::NewValidatorNotFound(
-                    last_epoch_number,
-                    target.number,
-                ));
-            }
-            if epoch_count == 0 {
-                // Use genesis epoch validator set
-                self.headers
-                    .verify(chain_id, new_validator_set, new_validator_set)
-            } else {
-                let previous_epoch_number = (epoch_count - 1) * EPOCH_BLOCK_PERIOD;
-                let previous_epoch_height = new_height(chain_id.version(), previous_epoch_number);
-                let previous_validator_set = &ctx.read(previous_epoch_height)?;
-                if previous_validator_set.is_empty() {
-                    return Err(Error::PreviousValidatorNotFound(
-                        previous_epoch_number,
-                        target.number,
-                    ));
-                }
-                self.headers
-                    .verify(chain_id, new_validator_set, previous_validator_set)
-            }
+    pub fn previous_epoch_validators(&self) -> (Height, &Hash) {
+        let height = &self.height().revision_height();
+        let mut epoch_count = height / BLOCKS_PER_EPOCH;
+        if epoch_count > 0 {
+            epoch_count -= 1;
         }
+        (
+            Height::new(
+                self.height().revision_number(),
+                epoch_count * BLOCKS_PER_EPOCH,
+            ),
+            self.previous_validators.hash(),
+        )
+    }
+
+    pub fn current_epoch_validators(&self) -> (Height, &Hash) {
+        let height = &self.height().revision_height();
+        let epoch_count = height / BLOCKS_PER_EPOCH;
+        let epoch_block = epoch_count * BLOCKS_PER_EPOCH;
+        (
+            Height::new(self.height().revision_number(), epoch_block),
+            self.current_validators.hash(),
+        )
+    }
+
+    pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
+        self.headers.verify(
+            chain_id,
+            self.current_validators.validators(),
+            self.previous_validators.validators(),
+        )
     }
 }
 
@@ -133,10 +115,31 @@ impl TryFrom<RawHeader> for Header {
         // All the header revision must be same as the revision of trusted_height.
         let headers = ETHHeaders::new(trusted_height, value.headers.as_slice())?;
 
+        let previous_validators: ValidatorSet = value.previous_validators.clone().into();
+        if previous_validators.validators().is_empty() {
+            return Err(Error::MissingPreviousTrustedValidators(
+                headers.target.number,
+            ));
+        }
+
+        // Epoch header contains validator set
+        let current_validators: ValidatorSet = if headers.target.is_epoch {
+            headers.target.new_validators.clone().into()
+        } else {
+            value.current_validators.clone().into()
+        };
+        if current_validators.validators().is_empty() {
+            return Err(Error::MissingCurrentTrustedValidators(
+                headers.target.number,
+            ));
+        }
+
         Ok(Self {
             inner: value,
             headers,
             trusted_height,
+            previous_validators,
+            current_validators,
         })
     }
 }
@@ -192,17 +195,16 @@ pub(crate) mod testdata;
 
 #[cfg(test)]
 mod test {
+
     use hex_literal::hex;
-    use std::collections::HashMap;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     use crate::errors::Error;
-
     use crate::header::testdata::*;
     use crate::header::Header;
-    use crate::misc::{new_height, ChainId, ValidatorReader, Validators};
+    use crate::misc::ChainId;
 
     #[test]
     fn test_success_try_from_header() {
@@ -227,6 +229,11 @@ mod test {
             header.headers.target.number,
             "invalid revision height"
         );
+        assert!(!header.is_target_epoch(), "invalid epoch");
+        let cvh = header.current_validators;
+        assert_eq!(cvh.validators().len(), 21, "invalid epoch");
+        let pvh = header.previous_validators;
+        assert_eq!(pvh.validators().len(), 21, "invalid epoch");
     }
 
     #[test]
@@ -241,6 +248,8 @@ mod test {
             headers: raw_eth_headers,
             trusted_height: None,
             account_proof: vec![],
+            previous_validators: vec![],
+            current_validators: vec![],
         };
 
         // Check require trusted height
@@ -269,261 +278,71 @@ mod test {
             revision_height: 1,
         };
         raw_header.trusted_height = Some(trusted_height);
-        match Header::try_from(raw_header).unwrap_err() {
+        match Header::try_from(raw_header.clone()).unwrap_err() {
             Error::UnexpectedHeaderRelation(a, b) => {
                 assert_eq!(a, h1.number);
                 assert_eq!(b, h1.number);
             }
             _ => unreachable!(),
         }
-    }
 
-    struct MockValidatorReader {
-        validators: HashMap<lcp_types::Height, Validators>,
-    }
-    impl MockValidatorReader {
-        fn relayer_friendly() -> Self {
-            let mut validators = HashMap::<lcp_types::Height, Validators>::new();
-            // local net validator address
-            validators.insert(
-                new_height(0, 2400),
-                vec![hex!("cDd981378Da00E4552E7624866dBC3bC1E1802E6").to_vec()],
-            );
-            validators.insert(
-                new_height(0, 2600),
-                vec![hex!("cDd981378Da00E4552E7624866dBC3bC1E1802E6").to_vec()],
-            );
-            Self { validators }
+        // Check previous validator set
+        raw_header.headers[1] = create_non_epoch_block1().try_into().unwrap();
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+            Error::MissingPreviousTrustedValidators(a) => {
+                assert_eq!(a, h1.number);
+            }
+            _ => unreachable!(),
         }
 
-        fn previous_only() -> Self {
-            let mainnet = &mainnet();
-            let previous_epoch = fill(create_previous_epoch_block());
-            let mut validators = HashMap::<lcp_types::Height, Validators>::new();
-            validators.insert(
-                new_height(mainnet.version(), previous_epoch.number),
-                previous_epoch.new_validators,
-            );
-            Self { validators }
-        }
-
-        fn default() -> Self {
-            let mainnet = &mainnet();
-            let previous_epoch = fill(create_previous_epoch_block());
-            let current_epoch = fill(create_epoch_block());
-            let mut validators = HashMap::<lcp_types::Height, Validators>::new();
-            validators.insert(
-                new_height(mainnet.version(), current_epoch.number),
-                current_epoch.new_validators,
-            );
-            validators.insert(
-                new_height(mainnet.version(), previous_epoch.number),
-                previous_epoch.new_validators,
-            );
-            Self { validators }
-        }
-    }
-    impl ValidatorReader for MockValidatorReader {
-        fn read(&self, height: lcp_types::Height) -> Result<Validators, Error> {
-            Ok(self.validators.get(&height).unwrap_or(&vec![]).clone())
+        // Check current validator set
+        raw_header.previous_validators = vec![vec![]];
+        match Header::try_from(raw_header.clone()).unwrap_err() {
+            Error::MissingCurrentTrustedValidators(a) => {
+                assert_eq!(a, h1.number);
+            }
+            _ => unreachable!(),
         }
     }
 
     #[test]
     fn test_success_verify_after_checkpoint() {
         let header = create_after_checkpoint_headers();
-        let reader = MockValidatorReader::default();
         let mainnet = &mainnet();
-        let result = header.verify(reader, mainnet);
+        let result = header.verify(mainnet);
         assert!(result.is_ok())
-    }
-
-    #[test]
-    fn test_error_verify_after_checkpoint() {
-        let header = create_after_checkpoint_headers();
-        let mainnet = &mainnet();
-
-        // empty new validator
-        let epoch = create_epoch_block();
-        let mut reader = MockValidatorReader::default();
-        reader
-            .validators
-            .remove(&new_height(mainnet.version(), epoch.number));
-        match header.verify(reader, mainnet).unwrap_err() {
-            Error::NewValidatorNotFound(epoch, number) => {
-                assert_eq!(epoch, (header.headers.target.number / 200) * 200);
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // empty previous validator
-        let epoch = create_previous_epoch_block();
-        let mut reader = MockValidatorReader::default();
-        reader
-            .validators
-            .remove(&new_height(mainnet.version(), epoch.number));
-        match header.verify(reader, mainnet).unwrap_err() {
-            Error::PreviousValidatorNotFound(epoch, number) => {
-                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
     }
 
     #[test]
     fn test_success_verify_epoch() {
         let header = create_before_checkpoint_headers();
-        let reader = MockValidatorReader::previous_only();
         let mainnet = &mainnet();
         // use new validator from epoch
-        let result = header.verify(reader, mainnet);
+        let result = header.verify(mainnet);
         assert!(result.is_ok())
-    }
-
-    #[test]
-    fn test_error_verify_epoch() {
-        let header = create_before_checkpoint_headers();
-        let _reader = MockValidatorReader::previous_only();
-        let mainnet = &mainnet();
-
-        // empty previous validator
-        let epoch = create_previous_epoch_block();
-        let mut reader = MockValidatorReader::default();
-        reader
-            .validators
-            .remove(&new_height(mainnet.version(), epoch.number));
-        match header.verify(reader, mainnet).unwrap_err() {
-            Error::PreviousValidatorNotFound(epoch, number) => {
-                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
     }
 
     #[test]
     fn test_success_verify_across_checkpoint() {
         let header = create_across_checkpoint_headers();
-        let reader = MockValidatorReader::default();
         let mainnet = &mainnet();
-        let result = header.verify(reader, mainnet);
+        let result = header.verify(mainnet);
         assert!(result.is_ok())
-    }
-
-    #[test]
-    fn test_error_verify_across_checkpoint() {
-        let header = create_across_checkpoint_headers();
-        let _reader = MockValidatorReader::default();
-        let mainnet = &mainnet();
-
-        // empty new validator
-        let epoch = create_epoch_block();
-        let mut reader = MockValidatorReader::default();
-        reader
-            .validators
-            .remove(&new_height(mainnet.version(), epoch.number));
-        match header.verify(reader, mainnet).unwrap_err() {
-            Error::NewValidatorNotFound(epoch, number) => {
-                assert_eq!(epoch, (header.headers.target.number / 200) * 200);
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // empty previous validator
-        let epoch = create_previous_epoch_block();
-        let mut reader = MockValidatorReader::default();
-        reader
-            .validators
-            .remove(&new_height(mainnet.version(), epoch.number));
-        match header.verify(reader, mainnet).unwrap_err() {
-            Error::PreviousValidatorNotFound(epoch, number) => {
-                assert_eq!(epoch, (header.headers.target.number / 200 - 1) * 200);
-                assert_eq!(number, header.headers.target.number);
-            }
-            e => unreachable!("{:?}", e),
-        }
     }
 
     #[test]
     fn test_try_from_any() {
         // local net relayer data
-        let relayer_protobuf_any = vec![
-            10, 34, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
-            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 72, 101, 97, 100, 101, 114, 18, 190,
-            10, 10, 223, 4, 10, 220, 4, 249, 2, 89, 160, 54, 196, 190, 181, 119, 53, 88, 36, 19,
-            246, 247, 143, 186, 196, 48, 90, 76, 168, 98, 215, 183, 209, 5, 138, 183, 210, 59, 87,
-            208, 49, 135, 179, 160, 29, 204, 77, 232, 222, 199, 93, 122, 171, 133, 181, 103, 182,
-            204, 212, 26, 211, 18, 69, 27, 148, 138, 116, 19, 240, 161, 66, 253, 64, 212, 147, 71,
-            148, 205, 217, 129, 55, 141, 160, 14, 69, 82, 231, 98, 72, 102, 219, 195, 188, 30, 24,
-            2, 230, 160, 211, 186, 69, 153, 137, 160, 244, 215, 125, 101, 160, 38, 123, 111, 64,
-            19, 164, 229, 153, 113, 138, 14, 84, 201, 166, 205, 247, 231, 62, 129, 179, 19, 160,
-            86, 232, 31, 23, 27, 204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224,
-            27, 153, 108, 173, 192, 1, 98, 47, 181, 227, 99, 180, 33, 160, 86, 232, 31, 23, 27,
-            204, 85, 166, 255, 131, 69, 230, 146, 192, 248, 110, 91, 72, 224, 27, 153, 108, 173,
-            192, 1, 98, 47, 181, 227, 99, 180, 33, 185, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 130, 10, 111, 132, 2, 98, 90, 0, 128, 132, 100,
-            58, 179, 112, 184, 97, 217, 131, 1, 1, 17, 132, 103, 101, 116, 104, 137, 103, 111, 49,
-            46, 49, 54, 46, 49, 53, 133, 108, 105, 110, 117, 120, 0, 0, 59, 176, 211, 76, 141, 143,
-            30, 173, 188, 247, 194, 220, 37, 22, 240, 30, 104, 106, 218, 217, 228, 232, 59, 182,
-            194, 31, 88, 126, 65, 200, 115, 12, 108, 207, 239, 70, 67, 166, 8, 235, 144, 22, 227,
-            215, 225, 82, 209, 50, 179, 0, 218, 67, 33, 181, 74, 255, 10, 28, 52, 107, 84, 142,
-            187, 228, 165, 176, 7, 230, 1, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 136, 0, 0, 0, 0, 0, 0, 0, 0, 18, 2, 16,
-            110, 26, 213, 5, 249, 2, 210, 249, 1, 209, 160, 105, 187, 98, 219, 170, 120, 77, 28,
-            14, 150, 77, 148, 60, 47, 32, 107, 211, 25, 150, 160, 99, 105, 131, 141, 166, 196, 224,
-            69, 43, 20, 98, 155, 160, 9, 182, 152, 169, 25, 250, 125, 30, 148, 47, 243, 247, 4,
-            175, 226, 254, 122, 213, 134, 133, 25, 104, 58, 77, 84, 78, 124, 195, 228, 47, 97, 58,
-            160, 71, 142, 109, 238, 82, 173, 122, 207, 36, 235, 38, 111, 220, 44, 63, 33, 254, 113,
-            82, 62, 125, 175, 12, 144, 185, 196, 122, 173, 6, 105, 74, 151, 128, 128, 160, 206, 87,
-            79, 196, 82, 184, 227, 84, 49, 145, 64, 103, 88, 216, 241, 71, 68, 241, 195, 35, 152,
-            130, 255, 54, 222, 101, 195, 17, 163, 16, 50, 200, 160, 108, 182, 100, 44, 140, 34,
-            109, 143, 192, 41, 110, 92, 4, 232, 209, 184, 188, 248, 216, 97, 23, 177, 206, 152,
-            113, 101, 34, 161, 169, 50, 46, 228, 160, 153, 234, 95, 3, 51, 102, 120, 221, 98, 76,
-            218, 77, 174, 75, 209, 78, 250, 255, 158, 66, 80, 103, 8, 213, 183, 21, 245, 169, 39,
-            128, 202, 247, 160, 156, 70, 94, 84, 113, 199, 143, 195, 253, 22, 129, 251, 128, 4, 90,
-            199, 64, 184, 218, 163, 231, 56, 225, 139, 77, 106, 166, 225, 82, 166, 142, 177, 160,
-            95, 73, 61, 178, 46, 40, 102, 248, 32, 30, 37, 113, 195, 33, 213, 203, 198, 144, 34,
-            17, 158, 186, 213, 150, 250, 10, 147, 60, 246, 84, 75, 69, 160, 60, 164, 238, 4, 7,
-            155, 92, 84, 227, 96, 140, 72, 98, 105, 21, 124, 214, 49, 174, 123, 123, 38, 104, 137,
-            173, 103, 2, 49, 177, 28, 48, 73, 160, 16, 17, 192, 82, 68, 23, 128, 202, 112, 180,
-            106, 27, 138, 255, 190, 140, 214, 184, 166, 80, 247, 240, 99, 243, 148, 58, 82, 71, 66,
-            208, 180, 104, 160, 180, 21, 4, 26, 22, 221, 167, 87, 11, 1, 162, 40, 80, 103, 6, 2, 3,
-            246, 54, 63, 3, 91, 4, 164, 154, 194, 12, 117, 195, 246, 163, 109, 160, 65, 238, 228,
-            77, 124, 253, 117, 35, 82, 150, 163, 166, 128, 93, 100, 51, 145, 102, 243, 94, 167,
-            148, 25, 245, 49, 63, 185, 117, 228, 181, 30, 157, 160, 74, 179, 210, 254, 22, 132,
-            148, 110, 25, 40, 122, 144, 182, 161, 108, 66, 170, 37, 139, 252, 61, 133, 254, 204,
-            46, 6, 201, 18, 53, 73, 140, 43, 160, 20, 171, 164, 52, 235, 29, 156, 63, 233, 220, 74,
-            113, 213, 208, 21, 145, 210, 113, 139, 11, 127, 249, 119, 78, 120, 101, 15, 131, 42,
-            213, 142, 201, 128, 248, 145, 128, 128, 128, 128, 128, 128, 128, 128, 160, 98, 83, 21,
-            101, 201, 254, 118, 167, 28, 161, 113, 154, 235, 159, 83, 123, 61, 223, 8, 45, 193,
-            103, 196, 255, 165, 123, 60, 184, 233, 80, 202, 32, 128, 160, 86, 99, 70, 186, 205,
-            206, 196, 105, 140, 61, 134, 113, 65, 245, 102, 232, 250, 220, 0, 152, 37, 210, 58, 67,
-            124, 171, 191, 134, 168, 213, 146, 122, 128, 160, 226, 236, 91, 250, 8, 116, 215, 78,
-            192, 253, 255, 192, 118, 2, 218, 180, 90, 165, 164, 38, 237, 140, 229, 195, 241, 28,
-            149, 126, 245, 204, 236, 202, 160, 99, 187, 218, 1, 124, 204, 165, 156, 9, 241, 27,
-            239, 206, 74, 131, 38, 90, 162, 66, 45, 129, 130, 48, 195, 211, 123, 108, 239, 185, 0,
-            143, 66, 128, 128, 128, 248, 105, 160, 32, 156, 194, 102, 146, 39, 197, 99, 147, 155,
-            61, 178, 16, 154, 96, 128, 30, 226, 115, 245, 13, 234, 105, 41, 210, 100, 111, 172,
-            183, 10, 210, 52, 184, 70, 248, 68, 1, 128, 160, 129, 42, 168, 21, 82, 202, 144, 72,
-            218, 91, 110, 24, 166, 41, 232, 199, 26, 5, 127, 49, 180, 156, 21, 135, 106, 147, 75,
-            38, 241, 70, 9, 195, 160, 6, 21, 236, 38, 131, 128, 77, 181, 83, 7, 54, 3, 200, 108,
-            196, 158, 131, 214, 45, 104, 205, 52, 149, 193, 212, 94, 70, 76, 69, 28, 250, 253,
-        ];
+        // not epoch
+        let relayer_protobuf_any= hex!("0a222f6962632e6c69676874636c69656e74732e7061726c69612e76312e48656164657212f4160adf040adc04f90259a0fbd3b94c30e0cde738fb1068689b4f972779bba3250f1858d60c873e24e19e31a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347949e1cb61bd90f224222f09b3e993edf73cceb0e4fa070b83c7438e336b2851fe920cb020ec7a19c9741c3bc3cc7ae402195c39d05f8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028201088402625a0080846463462db861d983010111846765746889676f312e31362e3135856c696e75780000079a6cd8f1908de07d3c38808769dacdf5bfee24b5f31f8b70463d6b8407b4cad82c94ae0f898f52aa3e9214d306ffdefe9c370cd9366f4e1e98ba9ab13d0ed84417b20a00a000000000000000000000000000000000000000000000000000000000000000008800000000000000000adf040adc04f90259a0a24be12f523faf18fbcd655e294596e0f260242bc8ca43026d43234ee46c7921a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941a2bf881c9335e9aa1ce43a00894340bfa70dcdaa070b83c7438e336b2851fe920cb020ec7a19c9741c3bc3cc7ae402195c39d05f8a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028201098402625a00808464634630b861d983010111846765746889676f312e31362e3135856c696e75780000079a6cd8e56b4386e27b2b3c1d2c700705b2ce11c5cffc61d7fe62bf5dbbf9db706b76da48001efeeb50efeaef2b0567ab4373da5294ef07507e0ee62f44fd43338a68b700a000000000000000000000000000000000000000000000000000000000000000008800000000000000000ae2040adf04f9025ca00b1cb6df5310082ce188bf2b9471a69f1c31cf3eae5f047a4800cf13635a9ddea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479442897d87959d07b83a924a34e93b613e7f4798c2a051b17b0832a6a94cc36fcf7ea75a81c3cf033413e6ebdfb930e723986b1022dea07b22a41ad5ce87dcc1f8b34a8acd6695c8a405b45cbf0bb2ac62f591b26bbdbaa0e23c409e300f95ca40d75c456696ae7f34ffed09531d025314bb398c7d3ba9d8b90100000000000000000000000040000000000000000000000000000000000000000000001000000000000000000000000000000002000000000000000000000000000000000000000000000000002000000020100000000000000000000000000000000800200002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000001040000000000000000000000000000100000000000100000000000000000000000000000000000282010a8402625a00830550738464634633b861d983010111846765746889676f312e31362e3135856c696e75780000079a6cd826227fe7ecdd311192dd440f7078406eb83a651d6e57ce6690e128277cc2406f0b6c206ea1922591651ae10d177288ac8688768920fa04fec5ea2b4f6711d30200a0000000000000000000000000000000000000000000000000000000000000000088000000000000000012031084021ae706f90364f901f1a0f976cf586bd5a6755525a358f798375dda58de9e0acd9a4419d959b34878f0baa0840518e61f1ff71336cb3f06f8e279fafecee685bbb662c86a7bc6c3a4544508a0ef49012499405671c7d41d87f698a2e1f8c71a18506f43e9b72172ad3412e9e8a0ccaff84a535bd0c22286f3312c2f2ceb9905bf9a800ed2d1e47a90077db733e280a0ce574fc452b8e3543191406758d8f14744f1c3239882ff36de65c311a31032c8a0ce3e90fd6a5751569e8c041a9fe514ee2349a0e28d1c32c73dbc69d4ea5280b6a099ea5f03336678dd624cda4dae4bd14efaff9e42506708d5b715f5a92780caf7a0387977db57341099efcaa7c4c9e4a84322a19157544c35e1989c6efe17dad4f1a05f493db22e2866f8201e2571c321d5cbc69022119ebad596fa0a933cf6544b45a03ca4ee04079b5c54e3608c486269157cd631ae7b7b266889ad670231b11c3049a01011c052441780ca70b46a1b8affbe8cd6b8a650f7f063f3943a524742d0b468a0df5caa3e95ccc684184708dcb9080f369fdaa419b0b1c08d9809aeadf0a4f7e0a041eee44d7cfd75235296a3a6805d64339166f35ea79419f5313fb975e4b51e9da04ab3d2fe1684946e19287a90b6a16c42aa258bfc3d85fecc2e06c91235498c2ba014aba434eb1d9c3fe9dc4a71d5d01591d2718b0b7ff9774e78650f832ad58ec980f8b1808080808080a00d9124c72201f582e29b9c0a24125069594c6948fa9456fc6788590ba0b3925e80a062531565c9fe76a71ca1719aeb9f537b3ddf082dc167c4ffa57b3cb8e950ca2080a03a48f75ef9575e4c8c7ec9163def6c7805e5fc99e5e7513e418c3508c48501ec80a0e2ec5bfa0874d74ec0fdffc07602dab45aa5a426ed8ce5c3f11c957ef5cceccaa063bbda017ccca59c09f11befce4a83265aa2422d818230c3d37b6cefb9008f42808080f85180a03548f0b11fbbfd4744ad6e80f11a1f82c9a36922089e3235bfc5214fbb92080380808080808080a0b0f90dabeb623fb56f8f9a7f835eaa23ab89e12c9c50ca6e895e2e2e0394d53780808080808080f8689f3cc2669227c563939b3db2109a60801ee273f50dea6929d2646facb70ad234b846f8440180a0f9f57a8dacbdb91b54b646ffaf6347a46513d93fcb3b0942f49c9a5b57066e7ca00615ec2683804db553073603c86cc49e83d62d68cd3495c1d45e464c451cfafd22141a2bf881c9335e9aa1ce43a00894340bfa70dcda221442897d87959d07b83a924a34e93b613e7f4798c2221492a84b62acf90b6e82e1583da79fa9cb9e0fc0a722149cb4ec6fc8c53e33c67d91563a07dca0140efbf422149e1cb61bd90f224222f09b3e993edf73cceb0e4f2a141a2bf881c9335e9aa1ce43a00894340bfa70dcda2a1442897d87959d07b83a924a34e93b613e7f4798c22a1492a84b62acf90b6e82e1583da79fa9cb9e0fc0a72a149cb4ec6fc8c53e33c67d91563a07dca0140efbf42a149e1cb61bd90f224222f09b3e993edf73cceb0e4f").to_vec();
         let any: lcp_types::Any = relayer_protobuf_any.try_into().unwrap();
         let header: Header = any.try_into().unwrap();
-        header
-            .verify(MockValidatorReader::relayer_friendly(), &ChainId::new(9999))
-            .unwrap();
+        header.verify(&ChainId::new(9999)).unwrap();
+
+        // epoch
+        let relayer_protobuf_any = hex!("0a222f6962632e6c69676874636c69656e74732e7061726c69612e76312e48656164657212e7160ac2050abf05f902bca027e36c636e0304875e5032431fd1e430cb1c35a64b65a53034778b0668889cd9a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347941a2bf881c9335e9aa1ce43a00894340bfa70dcdaa07a270c25052b62e6217676b9e4acda21e0bdf9427685b17e3c2845d72e3ca145a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000281c88402625a0080846463456db8c5d983010111846765746889676f312e31362e3135856c696e75780000079a6cd81a2bf881c9335e9aa1ce43a00894340bfa70dcda42897d87959d07b83a924a34e93b613e7f4798c292a84b62acf90b6e82e1583da79fa9cb9e0fc0a79cb4ec6fc8c53e33c67d91563a07dca0140efbf49e1cb61bd90f224222f09b3e993edf73cceb0e4f42fe74646a8aba5bf71e4df246febc4c3d449d4309ab95a8f46244c71b3e3e853bdc72183e50c76ec3a36a2949628c98f972556d92112cfec67be506f580597001a000000000000000000000000000000000000000000000000000000000000000008800000000000000000ade040adb04f90258a0a7b13c6bfe6c7404c108dc25e743202c236554787016968d8f1eb2ad7acf9b29a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479442897d87959d07b83a924a34e93b613e7f4798c2a07a270c25052b62e6217676b9e4acda21e0bdf9427685b17e3c2845d72e3ca145a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000281c98402625a00808464634570b861d983010111846765746889676f312e31362e3135856c696e75780000079a6cd817319d1e7a080e13da9b831cf071883d27d097e7c6c334acec4c7ac2390c535711f3ea0926c73aff5cd257367eacf547872dcb2acb723d3ae3959c7d90f5fb4700a000000000000000000000000000000000000000000000000000000000000000008800000000000000000ae1040ade04f9025ba09df17e1383e307dfb3777ebeeb28294f4c5b16b0dd3269514c85e58ec354246ba01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d493479492a84b62acf90b6e82e1583da79fa9cb9e0fc0a7a0076b825081ab80bae42923d4b5734e82d28e54d6590678d3a4139f38417332cda0beed143786ab0f2f6984506bfe47b5d899df9aa13cfe41bb9b5d5a75df682cdda0975d5aa1e8eceb74dfdd8fc76fc89135faeda9583c482c4b341ee667f014cc8fb90100000000000000000000000040000000000000000000000000008000000000000000001000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000020100000000400000000000000000000000800200002000000000000000000000000000010000000000000200000000000000000000000000000000000000000000004000000000000000008000000000000000000000000000000001000000000000040000000000000008000000000000000000000000000000000000000000000000000000000001040000000000000000000000000000100000000000100000000000000000000000000000000000281ca8402625a00830513178464634573b861d983010111846765746889676f312e31362e3135856c696e75780000079a6cd81f915dc559a6b4179b58429967479ba833c2667041279829f3915067a7b9aa6d1e5d7689f91d96470b646af4a1ad1924e5b96c1531d364c59cd8894b58626f0700a00000000000000000000000000000000000000000000000000000000000000000880000000000000000120310b5011ae706f90364f901f1a0b4a252b1dc3db95e90dc46ac919f7b4ac6f0adb533f4d5430c57edb356fc5277a091fea5718ee1b0595a31b07ce41d5e3050df96e3c1963221747780f73dc0fae3a0fad66f93dc9eb6779da55e5dc05132e965c1cde80d87db5a1f48e0ca6c3a85c7a0dfa015424914c6067f332c37b9ba774a171bc96f31e3d62499f5e1ddc26c094c80a0ce574fc452b8e3543191406758d8f14744f1c3239882ff36de65c311a31032c8a0fa157c3269eedf0a9348d23d63b5ef99e4dcc77a5b506e7adaadcd16b2b9d9b2a099ea5f03336678dd624cda4dae4bd14efaff9e42506708d5b715f5a92780caf7a03065af93f8593882d5c6724561c2711f6a8abd5cc32133202f2dd6cf38df670ea05f493db22e2866f8201e2571c321d5cbc69022119ebad596fa0a933cf6544b45a03ca4ee04079b5c54e3608c486269157cd631ae7b7b266889ad670231b11c3049a01011c052441780ca70b46a1b8affbe8cd6b8a650f7f063f3943a524742d0b468a05889dfab95ded6e9dbc44fb60c7891a353bbfd8be896ecf19cfbc36d606bfff6a041eee44d7cfd75235296a3a6805d64339166f35ea79419f5313fb975e4b51e9da04ab3d2fe1684946e19287a90b6a16c42aa258bfc3d85fecc2e06c91235498c2ba014aba434eb1d9c3fe9dc4a71d5d01591d2718b0b7ff9774e78650f832ad58ec980f8b1808080808080a0b8ac6b4622465ef91d066541f9eee3a6dfeba3a3498b32868fba9a148d8653af80a062531565c9fe76a71ca1719aeb9f537b3ddf082dc167c4ffa57b3cb8e950ca2080a0718d997e59514f5bf2de01dfe3ba30bcb6dab85feb69d9d7bdc0836959cdec8280a0e2ec5bfa0874d74ec0fdffc07602dab45aa5a426ed8ce5c3f11c957ef5cceccaa063bbda017ccca59c09f11befce4a83265aa2422d818230c3d37b6cefb9008f42808080f85180a0c9b7ce26c451011917947ebe8b6f76fe43d6e2e19c81e220d373027fecba0bfd80808080808080a050c41fc681bedc6ab0c021bb2ac63d6dbbc4bc8d37979de20912412e63694c5180808080808080f8689f3cc2669227c563939b3db2109a60801ee273f50dea6929d2646facb70ad234b846f8440180a041b9a3c9dae0a6f360fe6ed0e724b0fe4cc6d7f531423065ef5ddd407059df18a00615ec2683804db553073603c86cc49e83d62d68cd3495c1d45e464c451cfafd22141a2bf881c9335e9aa1ce43a00894340bfa70dcda221442897d87959d07b83a924a34e93b613e7f4798c2221492a84b62acf90b6e82e1583da79fa9cb9e0fc0a722149cb4ec6fc8c53e33c67d91563a07dca0140efbf422149e1cb61bd90f224222f09b3e993edf73cceb0e4f").to_vec();
+        let any: lcp_types::Any = relayer_protobuf_any.try_into().unwrap();
+        let header: Header = any.try_into().unwrap();
+        header.verify(&ChainId::new(9999)).unwrap();
     }
 }

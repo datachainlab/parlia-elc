@@ -9,7 +9,7 @@ use crate::errors::Error;
 use crate::misc::{required_block_count_to_finalize, Address, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
-use super::EPOCH_BLOCK_PERIOD;
+use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
@@ -21,7 +21,7 @@ impl ETHHeaders {
     pub fn verify(
         &self,
         chain_id: &ChainId,
-        new_validators: &Validators,
+        current_validators: &Validators,
         previous_validators: &Validators,
     ) -> Result<(), Error> {
         let headers = &self.all;
@@ -34,19 +34,18 @@ impl ETHHeaders {
             }
         }
 
-        self.verify_seals(chain_id, new_validators, previous_validators)
+        self.verify_seals(chain_id, current_validators, previous_validators)
     }
 
     fn verify_seals(
         &self,
         chain_id: &ChainId,
-        new_validators: &Validators,
+        current_validators: &Validators,
         previous_validators: &Validators,
     ) -> Result<(), Error> {
         let headers = &self.all;
         let threshold = required_block_count_to_finalize(previous_validators);
-        if self.target.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
-            // Validators created at previous epoch is used for consensus target header
+        if self.target.number % BLOCKS_PER_EPOCH < threshold as u64 {
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
@@ -54,7 +53,7 @@ impl ETHHeaders {
             let mut signers_before_checkpoint: BTreeSet<Address> = BTreeSet::default();
             let mut signers_after_checkpoint: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
-                if header.number % EPOCH_BLOCK_PERIOD < threshold as u64 {
+                if header.number % BLOCKS_PER_EPOCH < threshold as u64 {
                     // Each validator can sign only one header
                     let signer = header.verify_seal(previous_validators, chain_id)?;
                     if !signers_before_checkpoint.insert(signer) {
@@ -62,21 +61,20 @@ impl ETHHeaders {
                     }
                 } else {
                     // Current epoch validators is used after the checkpoint block.
-                    let signer = header.verify_seal(new_validators, chain_id)?;
+                    let signer = header.verify_seal(current_validators, chain_id)?;
                     if !signers_after_checkpoint.insert(signer) {
                         return Err(Error::UnexpectedDoubleSign(header.number, signer));
                     }
                 }
             }
         } else {
-            // Validators created at current epoch is used for consensus target header
-            let threshold = required_block_count_to_finalize(new_validators);
+            let threshold = required_block_count_to_finalize(current_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
             let mut signers: BTreeSet<Address> = BTreeSet::default();
             for header in headers {
-                let signer = header.verify_seal(new_validators, chain_id)?;
+                let signer = header.verify_seal(current_validators, chain_id)?;
                 if !signers.insert(signer) {
                     return Err(Error::UnexpectedDoubleSign(header.number, signer));
                 }
@@ -132,7 +130,7 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_after_checkpoint() {
         let header = create_after_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // previous validator is unused
@@ -145,7 +143,7 @@ mod test {
     #[test]
     fn test_error_verify_eth_headers_after_checkpoint() {
         let header = create_after_checkpoint_headers();
-        let mut new_validator_set = fill(create_epoch_block()).new_validators;
+        let mut new_validator_set = create_epoch_block().new_validators;
         new_validator_set.push(new_validator_set[0].clone());
         new_validator_set.push(new_validator_set[1].clone());
 
@@ -167,7 +165,7 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_before_checkpoint() {
         let header = create_before_checkpoint_headers();
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // new validator is unused
@@ -194,7 +192,7 @@ mod test {
         }
 
         // first block uses previous broken validator set
-        let mut previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let mut previous_validator_set = create_previous_epoch_block().new_validators;
         for v in previous_validator_set.iter_mut() {
             v.pop();
         }
@@ -212,8 +210,8 @@ mod test {
     #[test]
     fn test_success_verify_eth_headers_across_checkpoint() {
         let header = create_across_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let mainnet = &mainnet();
 
         // new validator is unused
@@ -240,7 +238,7 @@ mod test {
         }
 
         // last block uses new empty validator set
-        let previous_validator_set = fill(create_previous_epoch_block()).new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
         let result = header
             .headers
             .verify(mainnet, &vec![], &previous_validator_set);
@@ -259,7 +257,7 @@ mod test {
     #[test]
     fn test_error_verify_seals() {
         let mut header = create_after_checkpoint_headers();
-        let new_validator_set = fill(create_epoch_block()).new_validators;
+        let new_validator_set = create_epoch_block().new_validators;
         header.headers.all[1] = header.headers.all[0].clone();
 
         let mainnet = &mainnet();

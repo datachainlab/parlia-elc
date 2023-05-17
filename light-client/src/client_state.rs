@@ -2,61 +2,53 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use lcp_types::{Any, ClientId, Height};
-use light_client::HostClientReader;
-use parlia_ibc_proto::google::protobuf::Any as IBCAny;
-use patricia_merkle_trie::keccak::keccak_256;
-use patricia_merkle_trie::{keccak, EIP1186Layout};
+use lcp_types::{Any, Height, Time};
 use prost::Message as _;
-use rlp::Rlp;
-use trie_eip1186::VerifyError;
 
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Account, Address, ChainId, Hash, ValidatorReader, Validators};
-use crate::path::Path;
+use crate::misc::{new_height, Address, ChainId};
+use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ClientState {
+    /// Chain parameters
     pub chain_id: ChainId,
+
+    /// IBC Solidity parameters
     pub ibc_store_address: Address,
-    pub latest_height: Height,
+
+    ///Light Client parameters
     pub trust_level: Fraction,
     pub trusting_period: Duration,
+
+    /// State
+    pub latest_height: Height,
     pub frozen: bool,
 }
 
 impl ClientState {
-    pub fn verify_commitment(
-        storage_root: &Hash,
-        storage_proof_rlp: &[u8],
-        path: impl Path,
-        expected_value: &Option<Vec<u8>>,
-    ) -> Result<(), Error> {
-        let storage_proof = Rlp::new(storage_proof_rlp);
-        let storage_proof = storage_proof.as_list().map_err(Error::RLPDecodeError)?;
-        verify_proof(
-            storage_root,
-            &storage_proof,
-            path.storage_key(),
-            expected_value,
-        )
+    /// canonicalize canonicalizes some fields of specified client state
+    /// target fields: latest_height, frozen
+    pub fn canonicalize(mut self) -> Self {
+        self.latest_height = new_height(self.chain_id.version(), 0);
+        self.frozen = false;
+        self
     }
 
     pub fn check_header_and_update_state(
         &self,
-        ctx: &dyn HostClientReader,
+        now: Time,
         trusted_consensus_state: &ConsensusState,
-        client_id: ClientId,
         header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure last consensus state is within the trusting period
-        let now = ctx.host_timestamp();
         trusted_consensus_state.assert_not_expired(now, self.trusting_period)?;
         trusted_consensus_state.assert_not_expired(header.timestamp()?, self.trusting_period)?;
 
@@ -70,7 +62,7 @@ impl ClientState {
         }
 
         // Ensure header is valid
-        header.verify(DefaultValidatorReader::new(ctx, &client_id), &self.chain_id)?;
+        header.verify(&self.chain_id)?;
 
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
@@ -88,7 +80,7 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validator_set: header.validator_set().clone(),
+            validators_hash: header.new_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))
@@ -198,141 +190,15 @@ impl TryFrom<Any> for ClientState {
     }
 }
 
-struct DefaultValidatorReader<'a> {
-    ctx: &'a dyn HostClientReader,
-    client_id: &'a ClientId,
-}
-
-impl<'a> DefaultValidatorReader<'a> {
-    fn new(ctx: &'a dyn HostClientReader, client_id: &'a ClientId) -> Self {
-        Self { ctx, client_id }
-    }
-}
-
-impl<'a> ValidatorReader for DefaultValidatorReader<'a> {
-    fn read(&self, height: Height) -> Result<Validators, Error> {
-        let any = self
-            .ctx
-            .consensus_state(self.client_id, &height)
-            .map_err(Error::LCPError)?;
-        let consensus_state = ConsensusState::try_from(any)?;
-        Ok(consensus_state.validator_set)
-    }
-}
-
-fn resolve_account(
-    state_root: &Hash,
-    account_proof: &[Vec<u8>],
-    address: &Address,
-) -> Result<Account, Error> {
-    match verify_proof(state_root, account_proof, address, &None) {
-        Ok(_) => Err(Error::AccountNotFound(*address)),
-        Err(Error::UnexpectedStateExistingValue(value, _)) => Rlp::new(&value).try_into(),
-        Err(err) => Err(err),
-    }
-}
-
-fn verify_proof(
-    root: &Hash,
-    proof: &[Vec<u8>],
-    key: &[u8],
-    expected_value: &Option<Vec<u8>>,
-) -> Result<(), Error> {
-    let expected_value = expected_value.as_ref().map(|e| rlp::encode(e).to_vec());
-    trie_eip1186::verify_proof::<EIP1186Layout<keccak::KeccakHasher>>(
-        &root.into(),
-        proof,
-        &keccak_256(key),
-        expected_value.as_deref(),
-    )
-    .map_err(|err| match err {
-        VerifyError::ExistingValue(value) => {
-            Error::UnexpectedStateExistingValue(value, key.to_vec())
-        }
-        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(key.to_vec()),
-        VerifyError::DecodeError(_) => Error::UnexpectedStateDecodeError(key.to_vec()),
-        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(key.to_vec()),
-        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(key.to_vec()),
-        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(key.to_vec()),
-        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(key.to_vec()),
-    })
-}
-
 #[cfg(test)]
 mod test {
     use hex_literal::hex;
 
-    use crate::client_state::{resolve_account, verify_proof, ClientState};
-    use crate::header::testdata::to_rlp;
-    use crate::misc::{Account, Hash};
-    use crate::path::YuiIBCPath;
-
-    #[test]
-    fn test_resolve_account() {
-        let address = hex!("a412becfedf8dccb2d56e5a88f5c1b87cc37ceef");
-        let state_root: Hash =
-            hex!("c7095cc31e155302a3ff06970f0df0efa1abf5fe6e4be6cc450cc5f9421c2c9f");
-        let account_proof = vec![
-            hex!("f873a12023b3309d10ca81366908080d27b9f3a46293a38eb039f35393e1af81413e70c8b84ff84d0489020000000000000000a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a0c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470").to_vec(),
-        ];
-        let account = Account {
-            storage_root: hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-                .to_vec(),
-        };
-        let v = resolve_account(&state_root, &account_proof, &address);
-        match v {
-            Ok(actual) => assert_eq!(actual, account),
-            Err(e) => unreachable!("{:?}", e),
-        }
-    }
-
-    #[test]
-    fn test_verify_proof() {
-        let key = hex!("0000000000000000000000000000000000000000000000000000000000000000");
-        let storage_root = hex!("c5bbc7e086abad66f3d4b49cc39c27e4864834ce3d21d91692c513481bf9de1b");
-        let storage_proof = vec![
-            hex!("f8518080a051c7191217d318e27eed8b8f0b2c81df8ad258037ecdb3ee8808ab982623adba8080808080808080a028e886a776e1a5ccaf6819bc26ae7f83616639014e9751eb8d68eaaac54966448080808080").to_vec(),
-            hex!("f7a0390decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5639594ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec(),
-        ];
-        let expected = hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec();
-        if let Err(e) = verify_proof(&storage_root, &storage_proof, &key, &Some(expected)) {
-            unreachable!("{:?}", e);
-        }
-    }
-
-    #[test]
-    fn test_verify_commitment() {
-        let storage_root = hex!("2a76cf6e2521e6a413a912d96a4220479c68283130d6cef6966f4ff1cf437a32");
-        let storage_proof = to_rlp(vec![
-            hex!("f8918080a0f0d0b833ffb94d6962b74e4b1d5bc5a7cceca74616832065750c00ddd9d1b329808080a0044f9d4608bdd7ff7943cee62a73ac4daeff3c495907afd494dce25436b0c534a0dd774c97b7b9a5ff4ba0073aa76d58729ece6e20211ed97ef56b8baea52df39480808080a0b19b826b59a7db662e9af57a595710163588c476f642b97df805705790dee4e680808080").to_vec(),
-            hex!("f843a030ce6503f917cf7d4ecf54b344bf12226dc86adea09aeb7829c0bb8a1eae2c1aa1a03334000000000000000000000000000000000000000000000000000000000000").to_vec(),
-        ]);
-
-        let path = YuiIBCPath::from("clients/client1/clientState".as_bytes());
-
-        let mut expected = [0_u8; 32];
-        expected[0] = 51;
-        expected[1] = 52;
-        if let Err(e) = ClientState::verify_commitment(
-            &storage_root,
-            &storage_proof,
-            path,
-            &Some(expected.to_vec()),
-        ) {
-            unreachable!("{:?}", e);
-        }
-    }
+    use crate::client_state::ClientState;
 
     #[test]
     fn test_try_from_any() {
-        // This is ibc-parlia-relay's unit test data
-        let relayer_client_state_protobuf = vec![
-            10, 39, 47, 105, 98, 99, 46, 108, 105, 103, 104, 116, 99, 108, 105, 101, 110, 116, 115,
-            46, 112, 97, 114, 108, 105, 97, 46, 118, 49, 46, 67, 108, 105, 101, 110, 116, 83, 116,
-            97, 116, 101, 18, 38, 8, 143, 78, 18, 20, 170, 67, 211, 55, 20, 94, 137, 48, 208, 28,
-            180, 230, 10, 191, 101, 149, 198, 146, 146, 30, 26, 3, 16, 200, 1, 34, 4, 8, 1, 16, 3,
-            40, 100,
-        ];
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651226088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a0310c8012204080110032864").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
