@@ -77,6 +77,8 @@ pub enum Error {
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
     ProofRLPError(rlp::DecoderError),
+    InsufficientPreviousValidators(usize, usize),
+    InsufficientCurrentValidators(usize, usize),
 }
 
 impl core::fmt::Display for Error {
@@ -225,6 +227,12 @@ impl core::fmt::Display for Error {
             }
             Error::MissingTrustedValidatorsHeight => {
                 write!(f, "MissingTrustedValidatorsHeight")
+            }
+            Error::InsufficientPreviousValidators(e1, e2) => {
+                write!(f, "InsufficientPreviousValidators : {:?} {:?}", e1, e2)
+            }
+            Error::InsufficientCurrentValidators(e1, e2) => {
+                write!(f, "InsufficientCurrentValidators : {:?} {:?}", e1, e2)
             }
         }
     }
