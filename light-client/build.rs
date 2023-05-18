@@ -7,10 +7,10 @@ fn main() {
         let luban_fork = std::env::var("LUBAN_FORM").unwrap_or("29295050".to_string());
         write!(
             file,
-            "pub const BLOCKS_PER_EPOCH : u64 = {};",
+            "pub const BLOCKS_PER_EPOCH: u64 = {};\n",
             blocks_per_epoch
         )
         .unwrap();
-        write!(file, "pub const LUBAN_FORK : u64 = {};", luban_fork).unwrap();
+        write!(file, "pub const LUBAN_FORK: u64 = {};", luban_fork).unwrap();
     }
 }

@@ -647,6 +647,34 @@ mod test {
             hex!("51daf288b19c1b9bd6565be70c5bfb79c6fc470ce55ca684f6099c01b4ed7494")
         );
         assert_eq!(epoch.new_validators.len(), 7);
+        assert_eq!(
+            epoch.new_validators[0],
+            hex!("1284214b9b9c85549ab3d2b972df0deef66ac2c9")
+        );
+        assert_eq!(
+            epoch.new_validators[1],
+            hex!("35552c16704d214347f29fa77f77da6d75d7c752")
+        );
+        assert_eq!(
+            epoch.new_validators[2],
+            hex!("96c5d20b2a975c050e4220be276ace4892f4b41a")
+        );
+        assert_eq!(
+            epoch.new_validators[3],
+            hex!("980a75ecd1309ea12fa2ed87a8744fbfc9b863d5")
+        );
+        assert_eq!(
+            epoch.new_validators[4],
+            hex!("a2959d3f95eae5dc7d70144ce1b73b403b7eb6e0")
+        );
+        assert_eq!(
+            epoch.new_validators[5],
+            hex!("b71b214cb885500844365e95cd9942c7276e7fd8")
+        );
+        assert_eq!(
+            epoch.new_validators[6],
+            hex!("f474cf03cceff28abc65c9cbae594f725c80e12d")
+        );
         // same validator is used in this test block
         epoch
             .verify_seal(&epoch.new_validators, &ChainId::new(97))
