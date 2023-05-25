@@ -46,58 +46,63 @@ impl ETHHeaders {
         let headers = &self.all;
         let threshold = required_header_count_to_finalize(previous_validators);
         let height_from_epoch = self.target.number % BLOCKS_PER_EPOCH;
-        if height_from_epoch < threshold as u64 {
-            // before checkpoint
-            let header_count_to_verify = if height_from_epoch > 0 {
-                // there are verifying headers between checkpoint.
-                required_header_count_to_verify_between_checkpoint(
-                    height_from_epoch as usize,
-                    threshold,
-                    previous_validators,
-                    current_validators,
-                )?
-            } else {
-                threshold
-            };
-            if headers.len() != header_count_to_verify {
-                return Err(Error::InsufficientHeaderToVerify(
-                    headers.len(),
-                    header_count_to_verify,
-                ));
+        if height_from_epoch == 0 {
+            // epoch
+            if headers.len() != threshold {
+                return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
+            self.verify_finalized(chain_id, headers, previous_validators)?;
+        } else if (height_from_epoch as usize) < threshold {
+            // across checkpoint
 
-            let mut signers_before_checkpoint: BTreeSet<Address> = BTreeSet::default();
-            let mut signers_after_checkpoint: BTreeSet<Address> = BTreeSet::default();
-            for header in headers {
-                if header.number % BLOCKS_PER_EPOCH < threshold as u64 {
-                    // Each validator can sign only one header
-                    let signer = header.verify_seal(previous_validators, chain_id)?;
-                    if !signers_before_checkpoint.insert(signer) {
-                        return Err(Error::UnexpectedDoubleSign(header.number, signer));
-                    }
-                } else {
-                    // Current epoch validators is used after the checkpoint block.
-                    let signer = header.verify_seal(current_validators, chain_id)?;
-                    if !signers_after_checkpoint.insert(signer) {
-                        return Err(Error::UnexpectedDoubleSign(header.number, signer));
-                    }
+            let mut headers_before_checkpoint: Vec<ETHHeader> = vec![];
+            let mut headers_after_checkpoint : Vec<ETHHeader> = vec![];
+            for h in headers.iter() {
+                if h.number % BLOCKS_PER_EPOCH >= threshold as u64 {
+                    headers_after_checkpoint.push(h.clone());
+                }else {
+                    headers_before_checkpoint.push(h.clone());
                 }
             }
+
+            let required_count_before_checkpoint = threshold- height_from_epoch as usize ;
+            if headers_before_checkpoint.len() != required_count_before_checkpoint {
+                return Err(Error::InsufficientHeaderToVerify(headers_before_checkpoint.len(), required_count_before_checkpoint));
+            }
+
+            let mut signers = self.verify_finalized(chain_id, &headers_before_checkpoint, previous_validators)?;
+            let signers_after_checkpoint= self.verify_finalized(chain_id,&headers_after_checkpoint, current_validators)?;
+            let signers_after_checkpoint_size = signers_after_checkpoint.len();
+            for signer in signers_after_checkpoint {
+                signers.insert(signer);
+            }
+            if signers.len() < threshold {
+                return Err(Error::InsufficientHeaderToVerifyAcrossCheckpoint(height_from_epoch, signers.len(), threshold, signers_after_checkpoint_size));
+            }
         } else {
+            // after checkpoint
             let threshold = required_header_count_to_finalize(current_validators);
             if headers.len() != threshold {
                 return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
             }
-            let mut signers: BTreeSet<Address> = BTreeSet::default();
-            for header in headers {
-                let signer = header.verify_seal(current_validators, chain_id)?;
-                if !signers.insert(signer) {
-                    return Err(Error::UnexpectedDoubleSign(header.number, signer));
-                }
+            self.verify_finalized(chain_id, headers, current_validators)?;
+        }
+        Ok(())
+
+    }
+
+    fn verify_finalized(&self,
+                        chain_id: &ChainId,
+                        headers: &[ETHHeader], validators: &Validators) -> Result<BTreeSet<Address>, Error> {
+        // signer must be unique
+        let mut signers: BTreeSet<Address> = BTreeSet::default();
+        for header in headers {
+            let signer = header.verify_seal(validators, chain_id)?;
+            if !signers.insert(signer) {
+                return Err(Error::UnexpectedDoubleSign(header.number, signer));
             }
         }
-
-        Ok(())
+        Ok(signers)
     }
 
     pub fn new(trusted_height: Height, value: &[EthHeader]) -> Result<ETHHeaders, Error> {
@@ -142,64 +147,11 @@ fn required_header_count_to_finalize(validators: &Validators) -> usize {
     validator_size / 2 + 1
 }
 
-fn required_header_count_to_verify_between_checkpoint(
-    height_from_epoch: usize,
-    threshold: usize,
-    previous_epoch_validators: &Validators,
-    current_epoch_validators: &Validators,
-) -> Result<usize, Error> {
-    let before_checkpoint_count = threshold - height_from_epoch;
-    let after_checkpoint_count = height_from_epoch;
-
-    if previous_epoch_validators.len() < before_checkpoint_count {
-        return Err(Error::InsufficientPreviousValidators(
-            previous_epoch_validators.len(),
-            before_checkpoint_count,
-        ));
-    }
-    if current_epoch_validators.len() < after_checkpoint_count {
-        return Err(Error::InsufficientCurrentValidators(
-            current_epoch_validators.len(),
-            after_checkpoint_count,
-        ));
-    }
-
-    // Get duplicated validators between current epoch and previous epoch.
-    let validators_to_verify_before_checkpoint =
-        &previous_epoch_validators[0..before_checkpoint_count];
-    let mut duplicated_validators_count = 0;
-    let validators_to_verify_after_checkpoint =
-        &current_epoch_validators[0..after_checkpoint_count];
-    for a_validator in validators_to_verify_after_checkpoint.iter() {
-        for b_validator in validators_to_verify_before_checkpoint.iter() {
-            // same validator is used
-            if a_validator == b_validator {
-                duplicated_validators_count += 1
-            }
-        }
-    }
-
-    // Increase the number of header to verify by the amount of duplicates
-    let mut increasing = 0;
-    let rest_validators_after_checkpoint = &current_epoch_validators[after_checkpoint_count..];
-    for r_validator in rest_validators_after_checkpoint.iter() {
-        if duplicated_validators_count == 0 {
-            break;
-        }
-        increasing += 1;
-        if !validators_to_verify_after_checkpoint.contains(r_validator) {
-            duplicated_validators_count -= 1;
-        }
-    }
-    return Ok(threshold + increasing);
-}
-
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
     use crate::header::eth_headers::required_header_count_to_finalize;
     use crate::header::testdata::*;
-    use hex_literal::hex;
 
     #[test]
     fn test_success_verify_eth_headers_after_checkpoint() {
@@ -304,21 +256,24 @@ mod test {
 
         let mainnet = &mainnet();
 
-        // insufficient header
+        // insufficient header for after checkpoint
         let mut header = create_across_checkpoint_headers();
         header.headers.all.pop();
         let result = header
             .headers
             .verify(mainnet, &new_validator_set, &previous_validator_set);
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(actual, expected) => {
-                assert_eq!(actual, 11, "actual error");
-                assert_eq!(expected, 12, "expected error");
+            Error::InsufficientHeaderToVerifyAcrossCheckpoint(height_from_epoch, total_signers ,threshold, current_signers) => {
+                assert_eq!(height_from_epoch, 2, "height_from_epoch error");
+                assert_eq!(total_signers, 10, "total_signers error");
+                assert_eq!(threshold, 11, "threshold error");
+                assert_eq!(current_signers, 1, "current_signers error");
             }
             e => unreachable!("{:?}", e),
         }
 
         // last block uses new empty validator set
+        let header = create_across_checkpoint_headers();
         for (i, v) in new_validator_set.iter_mut().enumerate() {
             v[0] = i as u8;
         }

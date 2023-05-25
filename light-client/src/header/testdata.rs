@@ -149,8 +149,6 @@ pub fn create_across_checkpoint_headers() -> Header {
         create_non_epoch_block_after_epoch10().try_into().unwrap(),
         create_non_epoch_block_after_epoch11().try_into().unwrap(), // checkpoint
         create_non_epoch_block_after_epoch12().try_into().unwrap(),
-        // Add header because the current validator set includes previous validator
-        create_non_epoch_block_after_epoch13().try_into().unwrap(),
     ];
     let raw_header = RawHeader {
         headers: raw_eth_headers,

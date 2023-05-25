@@ -57,6 +57,7 @@ pub enum Error {
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     InsufficientHeaderToVerify(usize, usize),
+    InsufficientHeaderToVerifyAcrossCheckpoint(u64, usize, usize, usize),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -220,19 +221,22 @@ impl core::fmt::Display for Error {
                 e1, e2, e3
             ),
             Error::MissingPreviousTrustedValidators(e) => {
-                write!(f, "MissingPreviousTrustedValidators : {:?}", e)
+                write!(f, "MissingPreviousTrustedValidators : {}", e)
             }
             Error::MissingCurrentTrustedValidators(e) => {
-                write!(f, "MissingCurrentTrustedValidators : {:?}", e)
+                write!(f, "MissingCurrentTrustedValidators : {}", e)
             }
             Error::MissingTrustedValidatorsHeight => {
                 write!(f, "MissingTrustedValidatorsHeight")
             }
             Error::InsufficientPreviousValidators(e1, e2) => {
-                write!(f, "InsufficientPreviousValidators : {:?} {:?}", e1, e2)
+                write!(f, "InsufficientPreviousValidators : {} {}", e1, e2)
             }
             Error::InsufficientCurrentValidators(e1, e2) => {
-                write!(f, "InsufficientCurrentValidators : {:?} {:?}", e1, e2)
+                write!(f, "InsufficientCurrentValidators : {} {}", e1, e2)
+            }
+            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1,e2,e3,e4 )=> {
+                write!(f, "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {}", e1, e2, e3, e4)
             }
         }
     }
