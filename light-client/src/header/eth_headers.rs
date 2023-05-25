@@ -49,7 +49,11 @@ impl ETHHeaders {
         if height_from_epoch == 0 {
             // epoch
             if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(self.target.number, headers.len(), threshold));
+                return Err(Error::InsufficientHeaderToVerify(
+                    self.target.number,
+                    headers.len(),
+                    threshold,
+                ));
             }
             self.verify_finalized(chain_id, headers, previous_validators)?;
         } else if (height_from_epoch as usize) < threshold {
@@ -95,7 +99,11 @@ impl ETHHeaders {
             // after checkpoint
             let threshold = required_header_count_to_finalize(current_validators);
             if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(self.target.number, headers.len(), threshold));
+                return Err(Error::InsufficientHeaderToVerify(
+                    self.target.number,
+                    headers.len(),
+                    threshold,
+                ));
             }
             self.verify_finalized(chain_id, headers, current_validators)?;
         }
