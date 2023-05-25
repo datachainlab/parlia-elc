@@ -49,7 +49,7 @@ impl ETHHeaders {
         if height_from_epoch == 0 {
             // epoch
             if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
+                return Err(Error::InsufficientHeaderToVerify(self.target.number, headers.len(), threshold));
             }
             self.verify_finalized(chain_id, headers, previous_validators)?;
         } else if (height_from_epoch as usize) < threshold {
@@ -68,6 +68,7 @@ impl ETHHeaders {
             let required_count_before_checkpoint = threshold - height_from_epoch as usize;
             if headers_before_checkpoint.len() != required_count_before_checkpoint {
                 return Err(Error::InsufficientHeaderToVerify(
+                    self.target.number,
                     headers_before_checkpoint.len(),
                     required_count_before_checkpoint,
                 ));
@@ -83,6 +84,7 @@ impl ETHHeaders {
             }
             if signers.len() < threshold {
                 return Err(Error::InsufficientHeaderToVerifyAcrossCheckpoint(
+                    self.target.number,
                     height_from_epoch,
                     signers.len(),
                     threshold,
@@ -93,7 +95,7 @@ impl ETHHeaders {
             // after checkpoint
             let threshold = required_header_count_to_finalize(current_validators);
             if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(headers.len(), threshold));
+                return Err(Error::InsufficientHeaderToVerify(self.target.number, headers.len(), threshold));
             }
             self.verify_finalized(chain_id, headers, current_validators)?;
         }
@@ -188,7 +190,7 @@ mod test {
         let mainnet = &mainnet();
         let result = header.headers.verify(mainnet, &new_validator_set, &vec![]);
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(actual, expected) => {
+            Error::InsufficientHeaderToVerify(_, actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
                 assert_eq!(
                     expected,
@@ -222,7 +224,7 @@ mod test {
         let mainnet = &mainnet();
         let result = header.headers.verify(mainnet, &vec![], &vec![]);
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(actual, expected) => {
+            Error::InsufficientHeaderToVerify(_, actual, expected) => {
                 assert_eq!(actual, header.headers.all.len(), "actual error");
                 assert_eq!(expected, 1, "expected error");
             }
@@ -276,6 +278,7 @@ mod test {
             .verify(mainnet, &new_validator_set, &previous_validator_set);
         match result.unwrap_err() {
             Error::InsufficientHeaderToVerifyAcrossCheckpoint(
+                _,
                 height_from_epoch,
                 total_signers,
                 threshold,
