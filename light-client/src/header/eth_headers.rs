@@ -56,28 +56,38 @@ impl ETHHeaders {
             // across checkpoint
 
             let mut headers_before_checkpoint: Vec<ETHHeader> = vec![];
-            let mut headers_after_checkpoint : Vec<ETHHeader> = vec![];
+            let mut headers_after_checkpoint: Vec<ETHHeader> = vec![];
             for h in headers.iter() {
                 if h.number % BLOCKS_PER_EPOCH >= threshold as u64 {
                     headers_after_checkpoint.push(h.clone());
-                }else {
+                } else {
                     headers_before_checkpoint.push(h.clone());
                 }
             }
 
-            let required_count_before_checkpoint = threshold- height_from_epoch as usize ;
+            let required_count_before_checkpoint = threshold - height_from_epoch as usize;
             if headers_before_checkpoint.len() != required_count_before_checkpoint {
-                return Err(Error::InsufficientHeaderToVerify(headers_before_checkpoint.len(), required_count_before_checkpoint));
+                return Err(Error::InsufficientHeaderToVerify(
+                    headers_before_checkpoint.len(),
+                    required_count_before_checkpoint,
+                ));
             }
 
-            let mut signers = self.verify_finalized(chain_id, &headers_before_checkpoint, previous_validators)?;
-            let signers_after_checkpoint= self.verify_finalized(chain_id,&headers_after_checkpoint, current_validators)?;
+            let mut signers =
+                self.verify_finalized(chain_id, &headers_before_checkpoint, previous_validators)?;
+            let signers_after_checkpoint =
+                self.verify_finalized(chain_id, &headers_after_checkpoint, current_validators)?;
             let signers_after_checkpoint_size = signers_after_checkpoint.len();
             for signer in signers_after_checkpoint {
                 signers.insert(signer);
             }
             if signers.len() < threshold {
-                return Err(Error::InsufficientHeaderToVerifyAcrossCheckpoint(height_from_epoch, signers.len(), threshold, signers_after_checkpoint_size));
+                return Err(Error::InsufficientHeaderToVerifyAcrossCheckpoint(
+                    height_from_epoch,
+                    signers.len(),
+                    threshold,
+                    signers_after_checkpoint_size,
+                ));
             }
         } else {
             // after checkpoint
@@ -88,12 +98,14 @@ impl ETHHeaders {
             self.verify_finalized(chain_id, headers, current_validators)?;
         }
         Ok(())
-
     }
 
-    fn verify_finalized(&self,
-                        chain_id: &ChainId,
-                        headers: &[ETHHeader], validators: &Validators) -> Result<BTreeSet<Address>, Error> {
+    fn verify_finalized(
+        &self,
+        chain_id: &ChainId,
+        headers: &[ETHHeader],
+        validators: &Validators,
+    ) -> Result<BTreeSet<Address>, Error> {
         // signer must be unique
         let mut signers: BTreeSet<Address> = BTreeSet::default();
         for header in headers {
@@ -263,7 +275,12 @@ mod test {
             .headers
             .verify(mainnet, &new_validator_set, &previous_validator_set);
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(height_from_epoch, total_signers ,threshold, current_signers) => {
+            Error::InsufficientHeaderToVerifyAcrossCheckpoint(
+                height_from_epoch,
+                total_signers,
+                threshold,
+                current_signers,
+            ) => {
                 assert_eq!(height_from_epoch, 2, "height_from_epoch error");
                 assert_eq!(total_signers, 10, "total_signers error");
                 assert_eq!(threshold, 11, "threshold error");

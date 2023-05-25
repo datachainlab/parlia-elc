@@ -90,7 +90,7 @@ impl Header {
         )
     }
 
-    pub fn verify(&self, chain_id: &ChainId, ) -> Result<(), Error> {
+    pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
             self.current_validators.validators(),
@@ -195,7 +195,6 @@ pub(crate) mod testdata;
 
 #[cfg(test)]
 mod test {
-
     use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;

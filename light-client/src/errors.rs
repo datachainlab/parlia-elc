@@ -235,8 +235,12 @@ impl core::fmt::Display for Error {
             Error::InsufficientCurrentValidators(e1, e2) => {
                 write!(f, "InsufficientCurrentValidators : {} {}", e1, e2)
             }
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1,e2,e3,e4 )=> {
-                write!(f, "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {}", e1, e2, e3, e4)
+            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {}",
+                    e1, e2, e3, e4
+                )
             }
         }
     }
