@@ -3,14 +3,19 @@ fn main() {
     {
         use std::io::Write;
         let mut file = std::fs::File::create("src/header/constant.rs").unwrap();
-        let blocks_per_epoch = std::env::var("BLOCKS_PER_EPOCH").unwrap_or("200".to_string());
-        let luban_fork = std::env::var("LUBAN_FORM").unwrap_or("29295050".to_string());
-        write!(
+        let blocks_per_epoch =
+            std::env::var("BSC_BLOCKS_PER_EPOCH").unwrap_or_else(|_| "200".to_string());
+        writeln!(
             file,
-            "pub const BLOCKS_PER_EPOCH: u64 = {};\n",
+            "pub const BLOCKS_PER_EPOCH: u64 = {};",
             blocks_per_epoch
         )
         .unwrap();
-        write!(file, "pub const LUBAN_FORK: u64 = {};", luban_fork).unwrap();
+    }
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create("src/header/config.rs").unwrap();
+        let luban_fork = std::env::var("BSC_LUBAN_FORK").unwrap_or_else(|_| "29295050".to_string());
+        writeln!(file, "pub const LUBAN_FORK: u64 = {};", luban_fork).unwrap();
     }
 }

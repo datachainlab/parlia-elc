@@ -9,7 +9,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::header::constant::LUBAN_FORK;
+use crate::header::config::LUBAN_FORK;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
 use super::BLOCKS_PER_EPOCH;

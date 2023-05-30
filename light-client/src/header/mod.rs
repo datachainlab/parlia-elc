@@ -19,6 +19,7 @@ use self::eth_headers::ETHHeaders;
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
 // inner header is module private
+pub mod config;
 pub mod constant;
 mod eth_header;
 mod eth_headers;
