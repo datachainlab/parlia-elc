@@ -56,7 +56,8 @@ pub enum Error {
     MissingTrustingPeriod,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
-    InsufficientHeaderToVerify(usize, usize),
+    InsufficientHeaderToVerify(BlockNumber, usize, usize),
+    InsufficientHeaderToVerifyAcrossCheckpoint(BlockNumber, u64, usize, usize, usize),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -77,6 +78,8 @@ pub enum Error {
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
     ProofRLPError(rlp::DecoderError),
+    InsufficientPreviousValidators(usize, usize),
+    InsufficientCurrentValidators(usize, usize),
 }
 
 impl core::fmt::Display for Error {
@@ -160,8 +163,8 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
-            Error::InsufficientHeaderToVerify(e1, e2) => {
-                write!(f, "InsufficientHeaderToVerify: {} {}", e1, e2)
+            Error::InsufficientHeaderToVerify(e1, e2, e3) => {
+                write!(f, "InsufficientHeaderToVerify: {} {} {}", e1, e2, e3)
             }
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
@@ -218,13 +221,26 @@ impl core::fmt::Display for Error {
                 e1, e2, e3
             ),
             Error::MissingPreviousTrustedValidators(e) => {
-                write!(f, "MissingPreviousTrustedValidators : {:?}", e)
+                write!(f, "MissingPreviousTrustedValidators : {}", e)
             }
             Error::MissingCurrentTrustedValidators(e) => {
-                write!(f, "MissingCurrentTrustedValidators : {:?}", e)
+                write!(f, "MissingCurrentTrustedValidators : {}", e)
             }
             Error::MissingTrustedValidatorsHeight => {
                 write!(f, "MissingTrustedValidatorsHeight")
+            }
+            Error::InsufficientPreviousValidators(e1, e2) => {
+                write!(f, "InsufficientPreviousValidators : {} {}", e1, e2)
+            }
+            Error::InsufficientCurrentValidators(e1, e2) => {
+                write!(f, "InsufficientCurrentValidators : {} {}", e1, e2)
+            }
+            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1, e2, e3, e4, e5) => {
+                write!(
+                    f,
+                    "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
+                    e1, e2, e3, e4, e5
+                )
             }
         }
     }
