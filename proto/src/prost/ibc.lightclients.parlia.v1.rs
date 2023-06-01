@@ -15,15 +15,17 @@ pub struct ClientState {
     pub chain_id: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub ibc_store_address: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(bytes = "vec", tag = "3")]
+    pub ibc_commitments_slot: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
     pub latest_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag = "5")]
     pub trust_level: ::core::option::Option<Fraction>,
-    #[prost(uint64, tag = "5")]
+    #[prost(uint64, tag = "6")]
     pub trusting_period: u64,
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag = "7")]
     pub frozen: bool,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]

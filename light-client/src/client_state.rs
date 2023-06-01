@@ -8,11 +8,11 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
+use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misc::{new_height, Address, ChainId};
-use crate::proof::resolve_account;
+use crate::misc::{new_height, Address, ChainId, Hash};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
@@ -23,6 +23,7 @@ pub struct ClientState {
 
     /// IBC Solidity parameters
     pub ibc_store_address: Address,
+    pub ibc_commitments_slot: Hash,
 
     ///Light Client parameters
     pub trust_level: Fraction,
@@ -67,6 +68,7 @@ impl ClientState {
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
 
+        // TODO use header account state
         // Ensure world state is valid
         let account = resolve_account(
             header.state_root(),
@@ -108,6 +110,11 @@ impl TryFrom<RawClientState> for ClientState {
             .try_into()
             .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_store_address))?;
 
+        let raw_ibc_commitments_slot = value.ibc_commitments_slot.clone();
+        let ibc_commitments_slot = raw_ibc_commitments_slot
+            .try_into()
+            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
+
         let trust_level = {
             let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
             // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
@@ -125,6 +132,7 @@ impl TryFrom<RawClientState> for ClientState {
         Ok(Self {
             chain_id,
             ibc_store_address,
+            ibc_commitments_slot,
             latest_height,
             trust_level,
             trusting_period,
@@ -138,6 +146,7 @@ impl From<ClientState> for RawClientState {
         Self {
             chain_id: value.chain_id.id(),
             ibc_store_address: value.ibc_store_address.to_vec(),
+            ibc_commitments_slot: value.ibc_commitments_slot.to_vec(),
             latest_height: Some(parlia_ibc_proto::ibc::core::client::v1::Height {
                 revision_number: value.latest_height.revision_number(),
                 revision_height: value.latest_height.revision_height(),

@@ -9,14 +9,15 @@ use trie_eip1186::VerifyError;
 use crate::errors::Error;
 use crate::misc::{Account, Address, Hash};
 
-const IBC_COMMITMENTS_SLOT: [u8; 32] =
-    hex!("0000000000000000000000000000000000000000000000000000000000000000");
+pub fn calculate_account_path(ibc_address: &Address) -> Hash {
+    keccak_256(ibc_address.as_slice()).into()
+}
 
-pub fn calculate_ibc_commitment_storage_key(path: &str) -> Hash {
+pub fn calculate_ibc_commitment_storage_key(ibc_commitments_slot: &Hash, path: &str) -> Hash {
     keccak_256(
         &[
             &keccak_256(path.as_bytes()),
-            IBC_COMMITMENTS_SLOT.as_slice(),
+            ibc_commitments_slot.as_slice(),
         ]
         .concat(),
     )
@@ -109,11 +110,11 @@ mod test {
     use patricia_merkle_trie::keccak::keccak_256;
     use prost::Message;
 
-    use crate::misc::{Account, Hash};
-    use crate::proof::{
+    use crate::commitment::{
         calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, resolve_account,
         verify_proof,
     };
+    use crate::misc::{Account, Hash};
 
     #[test]
     fn test_resolve_account() {
@@ -200,7 +201,10 @@ mod test {
         ];
         let expected_value = keccak_256(&expected_value).to_vec();
 
-        let path = calculate_ibc_commitment_storage_key("connections/connection-0");
+        let path = calculate_ibc_commitment_storage_key(
+            &hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            "connections/connection-0",
+        );
 
         if let Err(e) = verify_proof(
             &storage_root,
@@ -278,7 +282,10 @@ mod test {
         let mut expected_value = alloc::vec::Vec::<u8>::new();
         connection_end.encode(&mut expected_value).unwrap();
 
-        let path = calculate_ibc_commitment_storage_key("connections/connection-0");
+        let path = calculate_ibc_commitment_storage_key(
+            &hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            "connections/connection-0",
+        );
         if let Err(e) = verify_proof(
             &storage_root,
             &storage_proof,
