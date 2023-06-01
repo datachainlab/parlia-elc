@@ -38,7 +38,6 @@ pub enum Error {
     UnexpectedTimestamp(TimeError),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
-    UnexpectedStorageRoot(Vec<u8>),
     UnexpectedConsensusStateRoot(Vec<u8>),
     UnexpectedCommitmentValue(Vec<u8>),
     UnexpectedHeader(usize, alloc::boxed::Box<Error>),
@@ -47,6 +46,8 @@ pub enum Error {
     UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
 
     // Header error
+    MissingAccountUpdate(BlockNumber),
+    UnexpectedStorageRoot(Vec<u8>),
     MissingPreviousTrustedValidators(BlockNumber),
     MissingCurrentTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
@@ -241,6 +242,9 @@ impl core::fmt::Display for Error {
                     "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
                     e1, e2, e3, e4, e5
                 )
+            }
+            Error::MissingAccountUpdate(e1) => {
+                write!(f, "MissingAccountUpdate : {}", e1)
             }
         }
     }

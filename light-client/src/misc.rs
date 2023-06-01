@@ -33,28 +33,6 @@ impl ChainId {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Account {
-    // nonce,
-    // balance
-    /// storage root hash
-    pub storage_root: Vec<u8>,
-    // code_hash
-}
-
-impl<'a> TryFrom<Rlp<'a>> for Account {
-    type Error = Error;
-
-    fn try_from(value: Rlp<'a>) -> Result<Self, Self::Error> {
-        let storage_root = value
-            .at(2)
-            .map_err(Error::RLPDecodeError)?
-            .as_val::<Vec<u8>>()
-            .map_err(Error::RLPDecodeError)?;
-        Ok(Self { storage_root })
-    }
-}
-
 /// RlpIterator returns an error instead of None on next() unlike the rlp::RlpIterator.
 pub(crate) struct RlpIterator<'a> {
     rlp: Rlp<'a>,
