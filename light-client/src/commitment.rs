@@ -8,10 +8,6 @@ use trie_db::{Trie, TrieDBBuilder};
 use crate::errors::Error;
 use crate::misc::{Account, Address, Hash};
 
-pub fn calculate_account_path(ibc_address: &Address) -> Hash {
-    keccak_256(ibc_address.as_slice())
-}
-
 pub fn calculate_ibc_commitment_storage_key(ibc_commitments_slot: &Hash, path: &str) -> Hash {
     keccak_256(
         &[
