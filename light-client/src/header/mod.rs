@@ -8,7 +8,6 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
-use crate::header::account::AccountUpdateInfo;
 use crate::header::validator_set::ValidatorSet;
 use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
 
@@ -20,7 +19,6 @@ use self::eth_headers::ETHHeaders;
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
 // inner header is module private
-pub(crate) mod account;
 pub mod config;
 pub mod constant;
 mod eth_header;
@@ -32,7 +30,6 @@ pub struct Header {
     inner: RawHeader,
     headers: ETHHeaders,
     trusted_height: Height,
-    account_update_info: AccountUpdateInfo,
     previous_validators: ValidatorSet,
     current_validators: ValidatorSet,
 }
@@ -53,8 +50,8 @@ impl Header {
         new_timestamp(self.headers.target.timestamp)
     }
 
-    pub fn storage_root(&self) -> Hash {
-        self.account_update_info.account_storage_root
+    pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
+        decode_eip1184_rlp_proof(&self.inner.account_proof)
     }
 
     pub fn trusted_height(&self) -> Height {
@@ -138,16 +135,10 @@ impl TryFrom<RawHeader> for Header {
             ));
         }
 
-        let account_update_info: AccountUpdateInfo = value
-            .account_update
-            .clone()
-            .ok_or_else(|| Error::MissingAccountUpdate(headers.target.number))?
-            .try_into()?;
         Ok(Self {
             inner: value,
             headers,
             trusted_height,
-            account_update_info,
             previous_validators,
             current_validators,
         })
@@ -208,14 +199,12 @@ mod test {
     use hex_literal::hex;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::AccountUpdateInfo as RawAccountUpdateInfo;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     use crate::errors::Error;
-    use crate::header::account::AccountUpdateInfo;
     use crate::header::testdata::*;
     use crate::header::Header;
-    use crate::misc::{keccak_256_vec, ChainId};
+    use crate::misc::ChainId;
 
     #[test]
     fn test_success_try_from_header() {
@@ -258,10 +247,7 @@ mod test {
         let mut raw_header = RawHeader {
             headers: raw_eth_headers,
             trusted_height: None,
-            account_update: Some(RawAccountUpdateInfo {
-                account_proof: vec![],
-                account_storage_root: vec![],
-            }),
+            account_proof: vec![],
             previous_validators: vec![],
             current_validators: vec![],
         };

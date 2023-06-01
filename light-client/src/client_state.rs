@@ -8,6 +8,7 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
+use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
@@ -67,8 +68,19 @@ impl ClientState {
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
 
+        // TODO use header account state
+        // Ensure world state is valid
+        let account = resolve_account(
+            header.state_root(),
+            &header.account_proof()?,
+            &new_client_state.ibc_store_address,
+        )?;
+
         let new_consensus_state = ConsensusState {
-            state_root: header.storage_root(),
+            state_root: account
+                .storage_root
+                .try_into()
+                .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
             validators_hash: header.new_validators_hash(),
         };

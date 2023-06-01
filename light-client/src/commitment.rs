@@ -7,7 +7,7 @@ use rlp::Rlp;
 use trie_eip1186::VerifyError;
 
 use crate::errors::Error;
-use crate::misc::{Address, Hash};
+use crate::misc::{Account, Address, Hash};
 
 pub fn calculate_account_path(ibc_address: &Address) -> Hash {
     keccak_256(ibc_address.as_slice()).into()
@@ -32,6 +32,18 @@ pub fn decode_eip1184_rlp_proof(proofs: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
         proof_encoded.push(proof)
     }
     Ok(proof_encoded)
+}
+
+pub fn resolve_account(
+    state_root: &Hash,
+    account_proof: &[Vec<u8>],
+    address: &Address,
+) -> Result<Account, Error> {
+    match verify_proof(state_root, account_proof, address, &None) {
+        Ok(_) => Err(Error::AccountNotFound(*address)),
+        Err(Error::UnexpectedStateExistingValue(_, _, value, _)) => Rlp::new(&value).try_into(),
+        Err(err) => Err(err),
+    }
 }
 
 pub fn verify_proof(

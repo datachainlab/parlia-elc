@@ -31,15 +31,6 @@ pub struct ClientState {
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AccountUpdateInfo {
-    #[prost(bytes = "vec", tag = "1")]
-    pub account_proof: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub account_storage_root: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(::serde::Serialize, ::serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EthHeader {
     #[prost(bytes = "vec", tag = "1")]
     pub header: ::prost::alloc::vec::Vec<u8>,
@@ -54,8 +45,8 @@ pub struct Header {
     pub trusted_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(message, optional, tag = "3")]
-    pub account_update: ::core::option::Option<AccountUpdateInfo>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub account_proof: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", repeated, tag = "4")]
     pub previous_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "5")]

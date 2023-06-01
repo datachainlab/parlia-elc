@@ -23,12 +23,6 @@ message ClientState {
   bool frozen = 7;
 }
 
-
-message AccountUpdateInfo {
-  bytes account_proof = 1;
-  bytes account_storage_root = 2;
-}
-
 message ETHHeader {
   bytes header = 1;
 }
@@ -36,7 +30,7 @@ message ETHHeader {
 message Header {
   repeated ETHHeader headers = 1;
   ibc.core.client.v1.Height trusted_height = 2;
-  AccountUpdateInfo account_update = 3;
+  bytes account_proof = 3;
   repeated bytes previous_validators = 4;
   repeated bytes current_validators = 5;
 }
