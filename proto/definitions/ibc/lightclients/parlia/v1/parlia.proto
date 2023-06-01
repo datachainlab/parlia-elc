@@ -1,0 +1,37 @@
+syntax = "proto3";
+package ibc.lightclients.parlia.v1;
+option go_package = "github.com/datachainlab/ibc-parlia-relay/module";
+
+import "ibc/core/client/v1/client.proto";
+
+message Fraction {
+  uint64 numerator = 1;
+  uint64 denominator = 2;
+}
+
+message ClientState {
+  uint64 chain_id = 1;
+  bytes ibc_store_address = 2;
+  ibc.core.client.v1.Height latest_height = 3;
+  Fraction trust_level = 4;
+  uint64 trusting_period = 5;
+  bool frozen = 6;
+}
+
+message ETHHeader {
+  bytes header = 1;
+}
+
+message Header {
+  repeated ETHHeader headers = 1;
+  ibc.core.client.v1.Height trusted_height = 2;
+  bytes account_proof = 3;
+  repeated bytes previous_validators = 4;
+  repeated bytes current_validators = 5;
+}
+
+message ConsensusState {
+  bytes state_root = 1;
+  uint64 timestamp = 2;
+  bytes validators_hash = 3;
+}

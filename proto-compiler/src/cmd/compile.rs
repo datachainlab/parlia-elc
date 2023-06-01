@@ -83,6 +83,7 @@ impl CompileCmd {
             .build_server(false)
             .out_dir(out_dir)
             .extern_path(".tendermint", "::tendermint_proto")
+            .type_attribute(".ibc.lightclients.parlia.v1", attrs_serde)
             .type_attribute(".cosmos.upgrade.v1beta1", attrs_serde)
             .type_attribute(".cosmos.base.v1beta1", attrs_serde)
             .type_attribute(".cosmos.base.query.v1beta1", attrs_serde)
@@ -165,6 +166,7 @@ impl CompileCmd {
             .build_server(false)
             .out_dir(out_dir)
             .extern_path(".tendermint", "::tendermint_proto")
+            .type_attribute(".ibc.lightclients.parlia.v1", attrs_serde)
             .type_attribute(".google.protobuf.Any", attrs_serde)
             .type_attribute(".google.protobuf.Timestamp", attrs_serde)
             .type_attribute(".google.protobuf.Duration", attrs_serde)
@@ -246,8 +248,8 @@ impl CompileCmd {
         );
 
         // Remove old compiled files
-        remove_dir_all(&to_dir).unwrap_or_default();
-        create_dir_all(&to_dir).unwrap();
+        remove_dir_all(to_dir).unwrap_or_default();
+        create_dir_all(to_dir).unwrap();
 
         // Copy new compiled files (prost does not use folder structures)
         // Copy the SDK files first

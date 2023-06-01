@@ -35,9 +35,9 @@ jobs:
         name: clippy check
         with:
           command: clippy
-          args: -- -D warnings -A clippy::result_large_err
+          args: -- -D warnings
       - uses: actions-rs/cargo@v1
         name: unit-test
         with:
           command: test
-          args: --release --all-features --manifest-path light-client/Cargo.toml
+          args: --release --features=std --manifest-path light-client/Cargo.toml
