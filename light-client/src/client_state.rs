@@ -207,7 +207,7 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651226088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a0310c8012204080110032864").to_vec();
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651248088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a200000000000000000000000000000000000000000000000000000000000000000220310c8012a04080110033064").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
@@ -222,6 +222,10 @@ mod test {
         assert_eq!(
             hex!("aa43d337145e8930d01cb4e60abf6595c692921e"),
             cs.ibc_store_address
+        );
+        assert_eq!(
+            hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            cs.ibc_commitments_slot
         );
     }
 }
