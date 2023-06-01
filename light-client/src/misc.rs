@@ -79,11 +79,6 @@ impl<'a> RlpIterator<'a> {
     }
 }
 
-pub(crate) fn required_block_count_to_finalize(validators: &Validators) -> usize {
-    let validator_size = validators.len();
-    validator_size / 2 + 1
-}
-
 pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
     Height::new(revision_number, height)
 }
