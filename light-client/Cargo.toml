@@ -19,8 +19,9 @@ prost = { version = "0.11", default-features = false }
 parlia-ibc-proto = { version = "0.1.0", path = "../proto", default-features = false }
 
 tiny-keccak = { version = "2.0", default-features = false, features = ["keccak"] }
-trie-eip1186 = { git = "https://github.com/kubo39/trie", rev = "1a02eedd7f4ce31a68dc5f876e16c7fe4bb9404e", default-features = false }
-patricia-merkle-trie = { git = "https://github.com/bluele/patricia-merkle-trie", rev = "ea5094383596137c396609d873d2df10d8415f58", default-features = false, features = ["keccak"] }
+trie-db = { version= "0.24.0", default-features = false }
+patricia-merkle-trie = { git = "https://github.com/bluele/patricia-merkle-trie", branch = "no-std-keccak-hasher", default-features = false, features = ["keccak"] }
+primitive-types = { version = "0.12.1", default-features = false }
 
 k256 = { version = "0.12.0-pre.0", default-features = false, features = ["alloc", "ecdsa"] }
 elliptic-curve = { version = "0.12.3", default-features = false, features = ["hazmat", "sec1"] }
@@ -36,6 +37,14 @@ ibc-proto   = { version = "0.26.0", default-features = false }
 
 [features]
 default = ["std"]
-std = ["light-client-registry/std", "lcp-types/std"]
-sgx = ["light-client-registry/sgx", "lcp-types/sgx"]
+std = [
+    "light-client-registry/std",
+    "lcp-types/std",
+    "trie-db/std",
+    "patricia-merkle-trie/std"
+]
+sgx = [
+    "light-client-registry/sgx",
+    "lcp-types/sgx"
+]
 dev = []
