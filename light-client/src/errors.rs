@@ -4,10 +4,9 @@ use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
 use lcp_types::{ClientId, Height, Time, TimeError};
+use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
-
-use trie_db::TrieError;
 
 type BoxedTrieError = alloc::boxed::Box<TrieError<primitive_types::H256, rlp::DecoderError>>;
 

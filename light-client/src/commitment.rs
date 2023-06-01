@@ -1,6 +1,5 @@
 use alloc::vec::Vec;
 
-use hex_literal::hex;
 use patricia_merkle_trie::keccak::keccak_256;
 use patricia_merkle_trie::{keccak, EIP1186Layout, StorageProof};
 use rlp::Rlp;
@@ -10,7 +9,7 @@ use crate::errors::Error;
 use crate::misc::{Account, Address, Hash};
 
 pub fn calculate_account_path(ibc_address: &Address) -> Hash {
-    keccak_256(ibc_address.as_slice()).into()
+    keccak_256(ibc_address.as_slice())
 }
 
 pub fn calculate_ibc_commitment_storage_key(ibc_commitments_slot: &Hash, path: &str) -> Hash {
@@ -56,16 +55,21 @@ pub fn verify_proof(
 
     let expected_value = expected_value.as_ref().map(|e| rlp::encode(e).to_vec());
     if value != expected_value {
-       return Err(Error::UnexpectedStateValue(*root, proof.to_vec(),  expected_value, key.to_vec()))
+        return Err(Error::UnexpectedStateValue(
+            *root,
+            proof.to_vec(),
+            expected_value,
+            key.to_vec(),
+        ));
     }
     Ok(())
 }
 
 fn verify(root: &Hash, proof: &[Vec<u8>], key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
     let db = StorageProof::new(proof.to_vec()).into_memory_db::<keccak::KeccakHasher>();
-    let root : primitive_types::H256 = root.into();
+    let root: primitive_types::H256 = root.into();
     let trie = TrieDBBuilder::<EIP1186Layout<keccak::KeccakHasher>>::new(&db, &root).build();
-    Ok(trie.get(&keccak_256(key)).map_err(Error::TrieError)?)
+    trie.get(&keccak_256(key)).map_err(Error::TrieError)
 }
 
 #[cfg(test)]
