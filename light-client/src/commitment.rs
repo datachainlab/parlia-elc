@@ -19,14 +19,17 @@ pub fn calculate_ibc_commitment_storage_key(ibc_commitments_slot: &Hash, path: &
 }
 
 pub fn decode_eip1184_rlp_proof(proofs: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
-    let mut proof_encoded: Vec<Vec<u8>> = Vec::with_capacity(proofs.len());
-    let proofs = Rlp::new(proofs);
-    for proof in proofs.iter() {
-        let proof: Vec<Vec<u8>> = proof.as_list().map_err(Error::ProofRLPError)?;
-        let proof = rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into();
-        proof_encoded.push(proof)
+    let proofs_rlp = Rlp::new(proofs);
+    if proofs_rlp.is_list() {
+        let mut proof_encoded: Vec<Vec<u8>> = Vec::with_capacity(proofs.len());
+        for proof in proofs_rlp.iter() {
+            let proof: Vec<Vec<u8>> = proof.as_list().map_err(Error::ProofRLPError)?;
+            let proof = rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into();
+            proof_encoded.push(proof)
+        }
+        return Ok(proof_encoded);
     }
-    Ok(proof_encoded)
+    Err(Error::InvalidProofFormatError(proofs.to_vec()))
 }
 
 pub fn resolve_account(

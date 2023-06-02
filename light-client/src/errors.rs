@@ -75,6 +75,7 @@ pub enum Error {
     UnexpectedGasUsed(BlockNumber, u64, u64),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
     ProofRLPError(rlp::DecoderError),
+    InvalidProofFormatError(Vec<u8>),
     InsufficientPreviousValidators(usize, usize),
     InsufficientCurrentValidators(usize, usize),
     TrieError(BoxedTrieError),
@@ -204,6 +205,9 @@ impl core::fmt::Display for Error {
             }
             Error::TrieError(e1) => {
                 write!(f, "TrieError : {:?}", e1)
+            }
+            Error::InvalidProofFormatError(e1) => {
+                write!(f, "InvalidProofFormatError : {:?}", e1)
             }
         }
     }
