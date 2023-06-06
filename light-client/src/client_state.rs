@@ -68,7 +68,6 @@ impl ClientState {
         let mut new_client_state = self.clone();
         new_client_state.latest_height = header.height();
 
-        // TODO use header account state
         // Ensure world state is valid
         let account = resolve_account(
             header.state_root(),
