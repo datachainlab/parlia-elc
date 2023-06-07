@@ -35,3 +35,9 @@ message ConsensusState {
   uint64 timestamp = 2;
   bytes validators_hash = 3;
 }
+
+message Misbehaviour {
+  string client_id = 1;
+  Header header_1 = 2;
+  Header header_2 = 3;
+}

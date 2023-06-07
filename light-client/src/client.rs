@@ -124,6 +124,8 @@ impl LightClient for ParliaLightClient {
             header,
         )?;
 
+        //TODO freeze client_state when misbehavior is detected.
+
         let prev_state_id = gen_state_id(client_state, latest_trusted_consensus_state)?;
         let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 

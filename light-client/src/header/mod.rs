@@ -98,6 +98,10 @@ impl Header {
             self.previous_validators.validators(),
         )
     }
+
+    pub fn block_hash(&self) -> &Hash {
+        &self.headers.target.hash
+    }
 }
 
 impl TryFrom<RawHeader> for Header {

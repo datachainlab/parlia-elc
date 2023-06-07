@@ -61,3 +61,14 @@ pub struct ConsensusState {
     #[prost(bytes = "vec", tag = "3")]
     pub validators_hash: ::prost::alloc::vec::Vec<u8>,
 }
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Misbehaviour {
+    #[prost(string, tag = "1")]
+    pub client_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub header_1: ::core::option::Option<Header>,
+    #[prost(message, optional, tag = "3")]
+    pub header_2: ::core::option::Option<Header>,
+}

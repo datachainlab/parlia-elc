@@ -80,6 +80,13 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InsufficientPreviousValidators(usize, usize),
     InsufficientCurrentValidators(usize, usize),
+
+    // Misbehavior
+    MissingHeader1,
+    MissingHeader2,
+    UnexpectedClientId(String),
+    UnexpectedDifferentHeight(Height, Height),
+    UnexpectedSameBlockHash(Height, Height),
 }
 
 impl core::fmt::Display for Error {
@@ -241,6 +248,15 @@ impl core::fmt::Display for Error {
                     "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
                     e1, e2, e3, e4, e5
                 )
+            }
+            Error::MissingHeader1 => write!(f, "MissingHeader1"),
+            Error::MissingHeader2 => write!(f, "MissingHeader2"),
+            Error::UnexpectedClientId(e1) => write!(f, "UnexpectedClientId : {}", e1),
+            Error::UnexpectedDifferentHeight(e1, e2) => {
+                write!(f, "UnexpectedDifferentHeight : {} {}", e1, e2)
+            }
+            Error::UnexpectedSameBlockHash(e1, e2) => {
+                write!(f, "UnexpectedSameBlockHash : {} {}", e1, e2)
             }
         }
     }
