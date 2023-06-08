@@ -66,10 +66,10 @@ impl TryFrom<Any> for Misbehaviour {
 
 #[cfg(test)]
 mod test {
-    use hex_literal::hex;
     use crate::errors::Error;
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::ChainId;
+    use hex_literal::hex;
 
     #[test]
     fn test_try_from_any() {
@@ -88,7 +88,7 @@ mod test {
         let any: lcp_types::Any = relayer_protobuf_any.try_into().unwrap();
         match Misbehaviour::try_from(any).unwrap_err() {
             Error::UnexpectedSameBlockHash(v) => assert_eq!(v.revision_height(), 28911868),
-            err => unreachable!("unexpected err {:?}", err)
+            err => unreachable!("unexpected err {:?}", err),
         }
     }
 }

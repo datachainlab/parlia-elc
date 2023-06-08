@@ -259,7 +259,7 @@ impl core::fmt::Display for Error {
             Error::UnexpectedSameBlockHash(e1) => {
                 write!(f, "UnexpectedSameBlockHash : {}", e1)
             }
-            Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1)
+            Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1),
         }
     }
 }
