@@ -18,7 +18,7 @@ pub enum Error {
     UnknownHeaderType(String),
     UnknownClientStateType(String),
     UnknownConsensusStateType(String),
-    UnknownMisbehaviorType(String),
+    UnknownMisbehaviourType(String),
 
     // ClientState error
     MissingLatestHeight,
@@ -82,12 +82,12 @@ pub enum Error {
     InsufficientPreviousValidators(usize, usize),
     InsufficientCurrentValidators(usize, usize),
 
-    // Misbehavior
+    // Misbehaviour
     MissingHeader1,
     MissingHeader2,
     UnexpectedClientId(String),
     UnexpectedDifferentHeight(Height, Height),
-    UnexpectedSameBlockHash(Height, Height),
+    UnexpectedSameBlockHash(Height),
 }
 
 impl core::fmt::Display for Error {
@@ -256,10 +256,10 @@ impl core::fmt::Display for Error {
             Error::UnexpectedDifferentHeight(e1, e2) => {
                 write!(f, "UnexpectedDifferentHeight : {} {}", e1, e2)
             }
-            Error::UnexpectedSameBlockHash(e1, e2) => {
-                write!(f, "UnexpectedSameBlockHash : {} {}", e1, e2)
+            Error::UnexpectedSameBlockHash(e1) => {
+                write!(f, "UnexpectedSameBlockHash : {}", e1)
             }
-            Error::UnknownMisbehaviorType(e1) => write!(f, "UnknownMisbehaviorType : {}", e1)
+            Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1)
         }
     }
 }

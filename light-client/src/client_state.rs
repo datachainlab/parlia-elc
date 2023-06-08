@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientSt
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misbehavior::Misbehavior;
+use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId};
 use crate::proof::resolve_account;
 
@@ -84,7 +84,7 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: Misbehavior,
+        misbehaviour: Misbehaviour,
     ) -> Result<ClientState, Error> {
         self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
         self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;

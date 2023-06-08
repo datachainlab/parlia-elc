@@ -16,7 +16,7 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
-use crate::misbehavior::Misbehavior;
+use crate::misbehaviour::Misbehaviour;
 use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
@@ -169,24 +169,24 @@ impl LightClient for ParliaLightClient {
 impl ParliaLightClient {
 
     //TODO impl LightClient
-    pub fn submit_misbehavior(
+    pub fn submit_misbehaviour(
         &self,
         ctx: &dyn HostClientReader,
         client_id: ClientId,
-        any_misbehavior: Any,
+        any_misbehaviour: Any,
     ) -> Result<ClientState, LightClientError> {
-        let misbehavior = Misbehavior::try_from(any_misbehavior)?;
+        let misbehaviour = Misbehaviour::try_from(any_misbehaviour)?;
         let any_client_state = ctx.client_state(&client_id)?;
-        let any_consensus_state1= ctx.consensus_state(&client_id, &misbehavior.header_1.height())?;
-        let any_consensus_state2 = ctx.consensus_state(&client_id, &misbehavior.header_2.height())?;
+        let any_consensus_state1= ctx.consensus_state(&client_id, &misbehaviour.header_1.height())?;
+        let any_consensus_state2 = ctx.consensus_state(&client_id, &misbehaviour.header_2.height())?;
 
         let client_state = ClientState::try_from(any_client_state)?;
         if client_state.frozen {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        self.verify_validator_set(ctx, &client_id, &misbehavior.header_1)?;
-        self.verify_validator_set(ctx, &client_id, &misbehavior.header_2)?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_1)?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_2)?;
 
         let trusted_consensus_state1= ConsensusState::try_from(any_consensus_state1)?;
         let trusted_consensus_state2= ConsensusState::try_from(any_consensus_state2)?;
@@ -195,7 +195,7 @@ impl ParliaLightClient {
             ctx.host_timestamp(),
             &trusted_consensus_state1,
             &trusted_consensus_state2,
-            misbehavior
+            misbehaviour
         )?;
         Ok(new_client_state)
     }
