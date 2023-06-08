@@ -79,7 +79,7 @@ impl ClientState {
         Ok((new_client_state, new_consensus_state))
     }
 
-    fn check_misbehaviour_and_update_state(
+    pub fn check_misbehaviour_and_update_state(
         &self,
         now: Time,
         h1_trusted_cs: &ConsensusState,
@@ -105,7 +105,7 @@ impl ClientState {
             ));
         }
         // Ensure header is valid
-        e.verify(&self.chain_id)
+        header.verify(&self.chain_id)
     }
 }
 

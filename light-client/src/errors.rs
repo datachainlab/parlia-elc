@@ -18,6 +18,7 @@ pub enum Error {
     UnknownHeaderType(String),
     UnknownClientStateType(String),
     UnknownConsensusStateType(String),
+    UnknownMisbehaviorType(String),
 
     // ClientState error
     MissingLatestHeight,
@@ -258,6 +259,7 @@ impl core::fmt::Display for Error {
             Error::UnexpectedSameBlockHash(e1, e2) => {
                 write!(f, "UnexpectedSameBlockHash : {} {}", e1, e2)
             }
+            Error::UnknownMisbehaviorType(e1) => write!(f, "UnknownMisbehaviorType : {}", e1)
         }
     }
 }

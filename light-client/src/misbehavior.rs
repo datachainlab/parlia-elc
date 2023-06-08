@@ -1,9 +1,15 @@
-use crate::consensus_state::ConsensusState;
+use core::str::FromStr;
+
+use lcp_types::{Any, ClientId};
+use prost::Message;
+
+use parlia_ibc_proto::google::protobuf::Any as IBCAny;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehavior;
+
 use crate::errors::Error;
 use crate::header::Header;
-use core::str::FromStr;
-use lcp_types::ClientId;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehavior;
+
+pub const PARLIA_MISBEHAVIOR_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Misbehavior";
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Misbehavior {
@@ -30,10 +36,30 @@ impl TryFrom<RawMisbehavior> for Misbehavior {
         if header_1.block_hash() == header_2.block_hash() {
             return Err(Error::UnexpectedSameBlockHash(h1_height, h2_height));
         }
-        return Ok(Self {
+        Ok(Self {
             client_id,
             header_1,
             header_2,
-        });
+        })
+    }
+}
+
+impl TryFrom<IBCAny> for Misbehavior {
+    type Error = Error;
+
+    fn try_from(any: IBCAny) -> Result<Misbehavior, Self::Error> {
+        if any.type_url != PARLIA_MISBEHAVIOR_TYPE_URL {
+            return Err(Error::UnknownMisbehaviorType(any.type_url));
+        }
+        let raw = RawMisbehavior::decode(any.value.as_slice()).map_err(Error::ProtoDecodeError)?;
+        raw.try_into()
+    }
+}
+
+impl TryFrom<Any> for Misbehavior {
+    type Error = Error;
+
+    fn try_from(any: Any) -> Result<Self, Self::Error> {
+        IBCAny::from(any).try_into()
     }
 }

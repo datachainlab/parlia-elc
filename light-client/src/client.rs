@@ -16,6 +16,7 @@ use crate::client_state::ClientState;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
+use crate::misbehavior::Misbehavior;
 use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
@@ -85,36 +86,8 @@ impl LightClient for ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        // Ensure trusted validator set is valid.
-        // If the submission target is epoch block, the validator set is included in the header and not in the consensus_state.
-        if !header.is_target_epoch() {
-            let (current_epoch_height, current_validators_hash) = header.current_epoch_validators();
-            let current_trusted_validators_hash =
-                ConsensusState::try_from(ctx.consensus_state(&client_id, &current_epoch_height)?)?
-                    .validators_hash;
-            if current_validators_hash != &current_trusted_validators_hash {
-                return Err(Error::UnexpectedCurrentValidatorsHash(
-                    current_epoch_height,
-                    *current_validators_hash,
-                    current_trusted_validators_hash,
-                )
-                .into());
-            }
-        }
-
-        // Ensure previous trusted validator set is valid
-        let (previous_epoch_height, previous_validators_hash) = header.previous_epoch_validators();
-        let previous_trusted_validators_hash =
-            ConsensusState::try_from(ctx.consensus_state(&client_id, &previous_epoch_height)?)?
-                .validators_hash;
-        if previous_validators_hash != &previous_trusted_validators_hash {
-            return Err(Error::UnexpectedPreviousValidatorsHash(
-                previous_epoch_height,
-                *previous_validators_hash,
-                previous_trusted_validators_hash,
-            )
-            .into());
-        }
+        // Ensure valid validator set
+        self.verify_validator_set(ctx, &client_id, &header)?;
 
         // Create new state and ensure header is valid
         let latest_trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
@@ -123,8 +96,6 @@ impl LightClient for ParliaLightClient {
             &latest_trusted_consensus_state,
             header,
         )?;
-
-        //TODO freeze client_state when misbehavior is detected.
 
         let prev_state_id = gen_state_id(client_state, latest_trusted_consensus_state)?;
         let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
@@ -196,6 +167,39 @@ impl LightClient for ParliaLightClient {
 }
 
 impl ParliaLightClient {
+
+    //TODO impl LightClient
+    pub fn submit_misbehavior(
+        &self,
+        ctx: &dyn HostClientReader,
+        client_id: ClientId,
+        any_misbehavior: Any,
+    ) -> Result<ClientState, LightClientError> {
+        let misbehavior = Misbehavior::try_from(any_misbehavior)?;
+        let any_client_state = ctx.client_state(&client_id)?;
+        let any_consensus_state1= ctx.consensus_state(&client_id, &misbehavior.header_1.height())?;
+        let any_consensus_state2 = ctx.consensus_state(&client_id, &misbehavior.header_2.height())?;
+
+        let client_state = ClientState::try_from(any_client_state)?;
+        if client_state.frozen {
+            return Err(Error::ClientFrozen(client_id).into());
+        }
+
+        self.verify_validator_set(ctx, &client_id, &misbehavior.header_1)?;
+        self.verify_validator_set(ctx, &client_id, &misbehavior.header_2)?;
+
+        let trusted_consensus_state1= ConsensusState::try_from(any_consensus_state1)?;
+        let trusted_consensus_state2= ConsensusState::try_from(any_consensus_state2)?;
+
+        let new_client_state = client_state.check_misbehaviour_and_update_state(
+            ctx.host_timestamp(),
+            &trusted_consensus_state1,
+            &trusted_consensus_state2,
+            misbehavior
+        )?;
+        Ok(new_client_state)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn verify_commitment(
         &self,
@@ -230,6 +234,40 @@ impl ParliaLightClient {
         )?;
 
         gen_state_id(client_state, consensus_state)
+    }
+
+    fn verify_validator_set(&self, ctx: &dyn HostClientReader, client_id: &ClientId, header : &Header) -> Result<(), LightClientError> {
+        // Ensure trusted validator set is valid.
+        // If the submission target is epoch block, the validator set is included in the header and not in the consensus_state.
+        if !header.is_target_epoch() {
+            let (current_epoch_height, current_validators_hash) = header.current_epoch_validators();
+            let current_trusted_validators_hash =
+                ConsensusState::try_from(ctx.consensus_state(&client_id, &current_epoch_height)?)?
+                    .validators_hash;
+            if current_validators_hash != &current_trusted_validators_hash {
+                return Err(Error::UnexpectedCurrentValidatorsHash(
+                    current_epoch_height,
+                    *current_validators_hash,
+                    current_trusted_validators_hash,
+                )
+                    .into());
+            }
+        }
+
+        // Ensure previous trusted validator set is valid
+        let (previous_epoch_height, previous_validators_hash) = header.previous_epoch_validators();
+        let previous_trusted_validators_hash =
+            ConsensusState::try_from(ctx.consensus_state(&client_id, &previous_epoch_height)?)?
+                .validators_hash;
+        if previous_validators_hash != &previous_trusted_validators_hash {
+            return Err(Error::UnexpectedPreviousValidatorsHash(
+                previous_epoch_height,
+                *previous_validators_hash,
+                previous_trusted_validators_hash,
+            )
+                .into());
+        }
+        Ok(())
     }
 }
 
