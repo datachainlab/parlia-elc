@@ -1,36 +1,35 @@
 use alloc::vec::Vec;
 
-use hex_literal::hex;
 use patricia_merkle_trie::keccak::keccak_256;
-use patricia_merkle_trie::{keccak, EIP1186Layout};
+use patricia_merkle_trie::{keccak, EIP1186Layout, StorageProof};
 use rlp::Rlp;
-use trie_eip1186::VerifyError;
+use trie_db::{Trie, TrieDBBuilder};
 
 use crate::errors::Error;
 use crate::misc::{Account, Address, Hash};
 
-const IBC_COMMITMENTS_SLOT: [u8; 32] =
-    hex!("0000000000000000000000000000000000000000000000000000000000000000");
-
-pub fn calculate_ibc_commitment_storage_key(path: &str) -> Hash {
+pub fn calculate_ibc_commitment_storage_key(ibc_commitments_slot: &Hash, path: &str) -> Hash {
     keccak_256(
         &[
             &keccak_256(path.as_bytes()),
-            IBC_COMMITMENTS_SLOT.as_slice(),
+            ibc_commitments_slot.as_slice(),
         ]
         .concat(),
     )
 }
 
 pub fn decode_eip1184_rlp_proof(proofs: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
-    let mut proof_encoded: Vec<Vec<u8>> = Vec::with_capacity(proofs.len());
-    let proofs = Rlp::new(proofs);
-    for proof in proofs.iter() {
-        let proof: Vec<Vec<u8>> = proof.as_list().map_err(Error::ProofRLPError)?;
-        let proof = rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into();
-        proof_encoded.push(proof)
+    let proofs_rlp = Rlp::new(proofs);
+    if proofs_rlp.is_list() {
+        let mut proof_encoded: Vec<Vec<u8>> = Vec::with_capacity(proofs.len());
+        for proof in proofs_rlp.iter() {
+            let proof: Vec<Vec<u8>> = proof.as_list().map_err(Error::ProofRLPError)?;
+            let proof = rlp::encode_list::<Vec<u8>, Vec<u8>>(&proof).into();
+            proof_encoded.push(proof)
+        }
+        return Ok(proof_encoded);
     }
-    Ok(proof_encoded)
+    Err(Error::InvalidProofFormatError(proofs.to_vec()))
 }
 
 pub fn resolve_account(
@@ -38,10 +37,10 @@ pub fn resolve_account(
     account_proof: &[Vec<u8>],
     address: &Address,
 ) -> Result<Account, Error> {
-    match verify_proof(state_root, account_proof, address, &None) {
-        Ok(_) => Err(Error::AccountNotFound(*address)),
-        Err(Error::UnexpectedStateExistingValue(_, _, value, _)) => Rlp::new(&value).try_into(),
-        Err(err) => Err(err),
+    if let Some(value) = verify(state_root, account_proof, address)? {
+        Ok(Rlp::new(&value).try_into()?)
+    } else {
+        Err(Error::AccountNotFound(*address))
     }
 }
 
@@ -51,54 +50,25 @@ pub fn verify_proof(
     key: &[u8],
     expected_value: &Option<Vec<u8>>,
 ) -> Result<(), Error> {
-    let log_hash = *root;
-    let log_proof = proof.to_vec();
+    let value = verify(root, proof, key)?;
+
     let expected_value = expected_value.as_ref().map(|e| rlp::encode(e).to_vec());
-    let log_expected_value = expected_value.clone();
-    trie_eip1186::verify_proof::<EIP1186Layout<keccak::KeccakHasher>>(
-        &root.into(),
-        proof,
-        &keccak_256(key),
-        expected_value.as_deref(),
-    )
-    .map_err(|err| match err {
-        VerifyError::ExistingValue(value) => {
-            Error::UnexpectedStateExistingValue(log_hash, log_proof, value, key.to_vec())
-        }
-        VerifyError::NonExistingValue(_) => Error::UnexpectedStateNonExistingValue(
-            log_hash,
-            log_proof,
-            log_expected_value,
+    if value != expected_value {
+        return Err(Error::UnexpectedStateValue(
+            *root,
+            proof.to_vec(),
+            expected_value,
             key.to_vec(),
-        ),
-        VerifyError::DecodeError(_) => {
-            Error::UnexpectedStateDecodeError(log_hash, log_proof, log_expected_value, key.to_vec())
-        }
-        VerifyError::HashDecodeError(_) => Error::UnexpectedStateHashDecodeError(
-            log_hash,
-            log_proof,
-            log_expected_value,
-            key.to_vec(),
-        ),
-        VerifyError::HashMismatch(_) => Error::UnexpectedStateHashMismatch(
-            log_hash,
-            log_proof,
-            log_expected_value,
-            key.to_vec(),
-        ),
-        VerifyError::ValueMismatch(_) => Error::UnexpectedStateValueMismatch(
-            log_hash,
-            log_proof,
-            log_expected_value,
-            key.to_vec(),
-        ),
-        VerifyError::IncompleteProof => Error::UnexpectedStateIncompleteProof(
-            log_hash,
-            log_proof,
-            log_expected_value,
-            key.to_vec(),
-        ),
-    })
+        ));
+    }
+    Ok(())
+}
+
+fn verify(root: &Hash, proof: &[Vec<u8>], key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+    let db = StorageProof::new(proof.to_vec()).into_memory_db::<keccak::KeccakHasher>();
+    let root: primitive_types::H256 = root.into();
+    let trie = TrieDBBuilder::<EIP1186Layout<keccak::KeccakHasher>>::new(&db, &root).build();
+    trie.get(&keccak_256(key)).map_err(Error::TrieError)
 }
 
 #[cfg(test)]
@@ -109,11 +79,11 @@ mod test {
     use patricia_merkle_trie::keccak::keccak_256;
     use prost::Message;
 
-    use crate::misc::{Account, Hash};
-    use crate::proof::{
+    use crate::commitment::{
         calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, resolve_account,
         verify_proof,
     };
+    use crate::misc::{Account, Hash};
 
     #[test]
     fn test_resolve_account() {
@@ -200,7 +170,10 @@ mod test {
         ];
         let expected_value = keccak_256(&expected_value).to_vec();
 
-        let path = calculate_ibc_commitment_storage_key("connections/connection-0");
+        let path = calculate_ibc_commitment_storage_key(
+            &hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            "connections/connection-0",
+        );
 
         if let Err(e) = verify_proof(
             &storage_root,
@@ -278,7 +251,10 @@ mod test {
         let mut expected_value = alloc::vec::Vec::<u8>::new();
         connection_end.encode(&mut expected_value).unwrap();
 
-        let path = calculate_ibc_commitment_storage_key("connections/connection-0");
+        let path = calculate_ibc_commitment_storage_key(
+            &hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            "connections/connection-0",
+        );
         if let Err(e) = verify_proof(
             &storage_root,
             &storage_proof,
