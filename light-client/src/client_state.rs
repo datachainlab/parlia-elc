@@ -66,7 +66,10 @@ impl ClientState {
         header.verify(&self.chain_id)?;
 
         let mut new_client_state = self.clone();
-        new_client_state.latest_height = header.height();
+        let header_height = header.height();
+        if new_client_state.latest_height < header_height {
+            new_client_state.latest_height = header_height;
+        }
 
         // Ensure world state is valid
         let account = resolve_account(
