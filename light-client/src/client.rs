@@ -672,8 +672,11 @@ mod test {
             Err(e) => unreachable!("error {:?}", e),
         };
     }
+
     #[test]
     fn test_submit_behavior_localnet() {
+        // test data is created by ibc-parlia-relay
+        // https://github.com/datachainlab/ibc-parlia-relay/blob/add_misbehavior/tool/cmd/create_misbehavior_testdata.go
         let mut mock_consensus_state = BTreeMap::new();
         let previous_epoch_cs = ConsensusState {
             validators_hash: [
