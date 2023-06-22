@@ -7,9 +7,9 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
+use crate::commitment::decode_eip1184_rlp_proof;
 use crate::header::validator_set::ValidatorSet;
 use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
-use crate::proof::decode_eip1184_rlp_proof;
 
 use super::errors::Error;
 

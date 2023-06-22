@@ -8,11 +8,12 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
 
+use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::misc::{new_height, Address, ChainId};
+use crate::misc::{new_height, Address, ChainId, Hash};
 use crate::proof::resolve_account;
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -24,6 +25,7 @@ pub struct ClientState {
 
     /// IBC Solidity parameters
     pub ibc_store_address: Address,
+    pub ibc_commitments_slot: Hash,
 
     ///Light Client parameters
     pub trust_level: Fraction,
@@ -58,7 +60,10 @@ impl ClientState {
         self.check_header(now, trusted_consensus_state, &header)?;
 
         let mut new_client_state = self.clone();
-        new_client_state.latest_height = header.height();
+        let header_height = header.height();
+        if new_client_state.latest_height < header_height {
+            new_client_state.latest_height = header_height;
+        }
 
         // Ensure world state is valid
         let account = resolve_account(
@@ -130,6 +135,11 @@ impl TryFrom<RawClientState> for ClientState {
             .try_into()
             .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_store_address))?;
 
+        let raw_ibc_commitments_slot = value.ibc_commitments_slot.clone();
+        let ibc_commitments_slot = raw_ibc_commitments_slot
+            .try_into()
+            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
+
         let trust_level = {
             let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
             // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
@@ -147,6 +157,7 @@ impl TryFrom<RawClientState> for ClientState {
         Ok(Self {
             chain_id,
             ibc_store_address,
+            ibc_commitments_slot,
             latest_height,
             trust_level,
             trusting_period,
@@ -160,6 +171,7 @@ impl From<ClientState> for RawClientState {
         Self {
             chain_id: value.chain_id.id(),
             ibc_store_address: value.ibc_store_address.to_vec(),
+            ibc_commitments_slot: value.ibc_commitments_slot.to_vec(),
             latest_height: Some(parlia_ibc_proto::ibc::core::client::v1::Height {
                 revision_number: value.latest_height.revision_number(),
                 revision_height: value.latest_height.revision_height(),
@@ -220,7 +232,7 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651226088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a0310c8012204080110032864").to_vec();
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651248088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a200000000000000000000000000000000000000000000000000000000000000000220310c8012a04080110033064").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
@@ -235,6 +247,10 @@ mod test {
         assert_eq!(
             hex!("aa43d337145e8930d01cb4e60abf6595c692921e"),
             cs.ibc_store_address
+        );
+        assert_eq!(
+            hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            cs.ibc_commitments_slot
         );
     }
 }

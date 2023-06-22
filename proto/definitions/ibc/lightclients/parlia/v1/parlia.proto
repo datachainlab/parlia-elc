@@ -11,11 +11,16 @@ message Fraction {
 
 message ClientState {
   uint64 chain_id = 1;
+
   bytes ibc_store_address = 2;
-  ibc.core.client.v1.Height latest_height = 3;
-  Fraction trust_level = 4;
-  uint64 trusting_period = 5;
-  bool frozen = 6;
+  bytes ibc_commitments_slot = 3;
+
+  ibc.core.client.v1.Height latest_height = 4;
+
+  Fraction trust_level = 5;
+  uint64 trusting_period = 6;
+
+  bool frozen = 7;
 }
 
 message ETHHeader {

@@ -13,6 +13,9 @@ use patricia_merkle_trie::keccak::keccak_256;
 use validation_context::ValidationParams;
 
 use crate::client_state::ClientState;
+use crate::commitment::{
+    calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof,
+};
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
@@ -230,7 +233,8 @@ impl ParliaLightClient {
         verify_proof(
             &storage_root,
             &storage_proof,
-            calculate_ibc_commitment_storage_key(path).as_slice(),
+            calculate_ibc_commitment_storage_key(&client_state.ibc_commitments_slot, path)
+                .as_slice(),
             &value,
         )?;
 
@@ -313,6 +317,9 @@ mod test {
             ClientState {
                 chain_id: ChainId::new(9999),
                 ibc_store_address: [0; 20],
+                ibc_commitments_slot: hex!(
+                    "0000000000000000000000000000000000000000000000000000000000000000"
+                ),
                 trust_level: Fraction {
                     numerator: 1,
                     denominator: 3,

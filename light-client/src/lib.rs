@@ -8,12 +8,12 @@ extern crate std;
 
 pub mod client;
 pub mod client_state;
+mod commitment;
 pub mod consensus_state;
 pub mod errors;
 pub mod header;
 pub mod misbehaviour;
 mod misc;
-mod proof;
 
 pub fn register_implementations(registry: &mut dyn light_client_registry::LightClientRegistry) {
     registry
