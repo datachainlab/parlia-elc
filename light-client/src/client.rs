@@ -20,7 +20,6 @@ use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::proof::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof};
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -299,7 +298,7 @@ mod test {
 
     use hex_literal::hex;
     use lcp_types::{Any, ClientId, Height, Time};
-    use light_client::ErrorDetail::LightClientSpecific;
+    
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
     use patricia_merkle_trie::keccak::keccak_256;
 
@@ -308,7 +307,7 @@ mod test {
     use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
-    use crate::errors::Error;
+    
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId};
 
