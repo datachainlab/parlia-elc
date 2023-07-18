@@ -1,7 +1,9 @@
 syntax = "proto3";
 package ibc.lightclients.parlia.v1;
 option go_package = "github.com/datachainlab/ibc-parlia-relay/module";
+option (gogoproto.goproto_getters_all) = false;
 
+import "gogoproto/gogo.proto";
 import "ibc/core/client/v1/client.proto";
 
 message Fraction {
