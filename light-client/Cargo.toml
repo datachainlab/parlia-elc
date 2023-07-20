@@ -6,32 +6,32 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-light-client = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.1" }
-light-client-registry = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
-lcp-types = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
-commitments = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1" }
-crypto = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
-validation-context = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.1" }
+light-client = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.5" }
+light-client-registry = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.5", default-features = false }
+lcp-types = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.5", default-features = false }
+commitments = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.5" }
+crypto = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.5", default-features = false }
+validation-context = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.5" }
 
-rlp = { version = "0.5.1", default-features = false }
+rlp = { version = "0.5.2", default-features = false }
 prost = { version = "0.11", default-features = false }
 
 parlia-ibc-proto = { version = "0.1.0", path = "../proto", default-features = false }
 
-tiny-keccak = { version = "2.0", default-features = false, features = ["keccak"] }
+tiny-keccak = { version = "2.0.2", default-features = false, features = ["keccak"] }
 trie-db = { version= "0.24.0", default-features = false }
 patricia-merkle-trie = { git = "https://github.com/bluele/patricia-merkle-trie", branch = "no-std-keccak-hasher", default-features = false, features = ["keccak"] }
 primitive-types = { version = "0.12.1", default-features = false }
 
-k256 = { version = "0.12.0-pre.0", default-features = false, features = ["alloc", "ecdsa"] }
-elliptic-curve = { version = "0.12.3", default-features = false, features = ["hazmat", "sec1"] }
+k256 = { version = "0.13.1", default-features = false, features = ["alloc", "ecdsa"] }
+elliptic-curve = { version = "0.13.5", default-features = false, features = ["hazmat", "sec1"] }
 
 hex-literal = "0.3.1"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.1", default-features = false }
+store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.5", default-features = false }
 ibc-proto   = { version = "0.26.0", default-features = false }
 
 
