@@ -28,9 +28,13 @@ pub(crate) mod validator_set;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Header {
     inner: RawHeader,
+    /// target header and headers to finalize target header
     headers: ETHHeaders,
     trusted_height: Height,
+    /// validator set in previous epoch of target header
     previous_validators: ValidatorSet,
+    /// validator set in current epoch of target header
+    /// if the target header is epoch this must be empty because the header's Extra field contains validator set
     current_validators: ValidatorSet,
 }
 

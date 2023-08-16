@@ -13,7 +13,10 @@ use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeaders {
+    /// target header
     pub target: ETHHeader,
+    /// target header and headers to finalize target header
+    /// first element is target header
     pub all: Vec<ETHHeader>,
 }
 
