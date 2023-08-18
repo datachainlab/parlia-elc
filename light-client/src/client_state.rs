@@ -63,7 +63,7 @@ impl ClientState {
         }
 
         // Ensure header is valid
-        header.verify(&self.chain_id)?;
+        header.verify(&self.chain_id, &self.trust_level)?;
 
         let mut new_client_state = self.clone();
         let header_height = header.height();

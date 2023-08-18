@@ -53,8 +53,7 @@ pub enum Error {
     MissingTrustingPeriod,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
-    InsufficientHeaderToVerify(BlockNumber, usize, usize),
-    InsufficientHeaderToVerifyAcrossCheckpoint(BlockNumber, u64, usize, usize, usize),
+    InsufficientHeaderToVerify(BlockNumber, usize, u64, usize),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -117,9 +116,6 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
-            Error::InsufficientHeaderToVerify(e1, e2, e3) => {
-                write!(f, "InsufficientHeaderToVerify: {} {} {}", e1, e2, e3)
-            }
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
             }
@@ -189,11 +185,11 @@ impl core::fmt::Display for Error {
             Error::InsufficientCurrentValidators(e1, e2) => {
                 write!(f, "InsufficientCurrentValidators : {} {}", e1, e2)
             }
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1, e2, e3, e4, e5) => {
+            Error::InsufficientHeaderToVerify(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
-                    e1, e2, e3, e4, e5
+                    "InsufficientHeaderToVerify : {} {} {} {}",
+                    e1, e2, e3, e4
                 )
             }
             Error::UnexpectedStateValue(e1, e2, e3, e4) => {

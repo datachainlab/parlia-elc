@@ -273,7 +273,7 @@ mod test {
                 ),
                 trust_level: Fraction {
                     numerator: 1,
-                    denominator: 3,
+                    denominator: 2,
                 },
                 trusting_period: core::time::Duration::new(86400 * 365 * 100, 0),
                 latest_height: Default::default(),

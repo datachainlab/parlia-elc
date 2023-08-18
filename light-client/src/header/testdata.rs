@@ -3,8 +3,8 @@ use prost::bytes::BytesMut;
 use rlp::RlpStream;
 
 use parlia_ibc_proto::ibc::core::client::v1::Height;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader as RawETHHeader, Fraction};
 
 use crate::header::eth_header::ETHHeader;
 use crate::header::Header;
@@ -918,4 +918,11 @@ fn to_rlp(proof: alloc::vec::Vec<alloc::vec::Vec<u8>>) -> BytesMut {
         rlp.append(&v);
     }
     rlp.out()
+}
+
+pub fn half() -> Fraction {
+    Fraction {
+        numerator: 1,
+        denominator: 2,
+    }
 }

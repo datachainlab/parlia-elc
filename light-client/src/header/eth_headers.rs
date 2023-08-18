@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use lcp_types::Height;
 
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Fraction};
 
 use crate::errors::Error;
 use crate::misc::{Address, ChainId, Validators};
@@ -23,6 +23,7 @@ impl ETHHeaders {
         chain_id: &ChainId,
         current_validators: &Validators,
         previous_validators: &Validators,
+        trust_level: &Fraction,
     ) -> Result<(), Error> {
         let headers = &self.all;
 
@@ -34,7 +35,12 @@ impl ETHHeaders {
             }
         }
 
-        self.verify_seals(chain_id, current_validators, previous_validators)
+        self.verify_seals(
+            chain_id,
+            current_validators,
+            previous_validators,
+            trust_level,
+        )
     }
 
     fn verify_seals(
@@ -42,71 +48,48 @@ impl ETHHeaders {
         chain_id: &ChainId,
         current_validators: &Validators,
         previous_validators: &Validators,
+        trust_level: &Fraction,
     ) -> Result<(), Error> {
         let headers = &self.all;
-        let threshold = required_header_count_to_finalize(previous_validators);
-        let height_from_epoch = self.target.number % BLOCKS_PER_EPOCH;
-        if height_from_epoch == 0 {
-            // epoch
-            if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(
-                    self.target.number,
-                    headers.len(),
-                    threshold,
-                ));
+        let checkpoint = checkpoint(previous_validators);
+        let mut headers_lt_checkpoint: Vec<ETHHeader> = vec![];
+        let mut headers_gteq_checkpoint: Vec<ETHHeader> = vec![];
+        for h in headers.iter() {
+            if h.number % BLOCKS_PER_EPOCH >= checkpoint {
+                headers_gteq_checkpoint.push(h.clone());
+            } else {
+                headers_lt_checkpoint.push(h.clone());
             }
-            self.verify_finalized(chain_id, headers, previous_validators)?;
-        } else if (height_from_epoch as usize) < threshold {
-            // across checkpoint
-
-            let mut headers_before_checkpoint: Vec<ETHHeader> = vec![];
-            let mut headers_after_checkpoint: Vec<ETHHeader> = vec![];
-            for h in headers.iter() {
-                if h.number % BLOCKS_PER_EPOCH >= threshold as u64 {
-                    headers_after_checkpoint.push(h.clone());
-                } else {
-                    headers_before_checkpoint.push(h.clone());
-                }
-            }
-
-            let required_count_before_checkpoint = threshold - height_from_epoch as usize;
-            if headers_before_checkpoint.len() != required_count_before_checkpoint {
-                return Err(Error::InsufficientHeaderToVerify(
-                    self.target.number,
-                    headers_before_checkpoint.len(),
-                    required_count_before_checkpoint,
-                ));
-            }
-
-            let mut signers =
-                self.verify_finalized(chain_id, &headers_before_checkpoint, previous_validators)?;
-            let signers_after_checkpoint =
-                self.verify_finalized(chain_id, &headers_after_checkpoint, current_validators)?;
-            let signers_after_checkpoint_size = signers_after_checkpoint.len();
-            for signer in signers_after_checkpoint {
-                signers.insert(signer);
-            }
-            if signers.len() < threshold {
-                return Err(Error::InsufficientHeaderToVerifyAcrossCheckpoint(
-                    self.target.number,
-                    height_from_epoch,
-                    signers.len(),
-                    threshold,
-                    signers_after_checkpoint_size,
-                ));
-            }
-        } else {
-            // after checkpoint
-            let threshold = required_header_count_to_finalize(current_validators);
-            if headers.len() != threshold {
-                return Err(Error::InsufficientHeaderToVerify(
-                    self.target.number,
-                    headers.len(),
-                    threshold,
-                ));
-            }
-            self.verify_finalized(chain_id, headers, current_validators)?;
         }
+
+        let unique_signers_lt_checkpoint =
+            self.verify_finalized(chain_id, &headers_lt_checkpoint, previous_validators)?;
+        let unique_signers_gteq_checkpoint =
+            self.verify_finalized(chain_id, &headers_gteq_checkpoint, current_validators)?;
+        let unique_signers_gteq_checkpoint_size = unique_signers_gteq_checkpoint.len();
+
+        let mut unique_signers = unique_signers_lt_checkpoint;
+        for signer in unique_signers_gteq_checkpoint {
+            unique_signers.insert(signer);
+        }
+
+        let threshold = if self.target.number % BLOCKS_PER_EPOCH >= checkpoint {
+            // target starts from checkpoint or after
+            required_header_count_to_finalize(trust_level, current_validators.len() as u64)
+        } else {
+            // across checkpoint
+            required_header_count_to_finalize(trust_level, previous_validators.len() as u64)
+        };
+
+        if (unique_signers.len() as u64) < threshold {
+            return Err(Error::InsufficientHeaderToVerify(
+                self.target.number,
+                unique_signers.len(),
+                threshold,
+                unique_signers_gteq_checkpoint_size,
+            ));
+        }
+
         Ok(())
     }
 
@@ -164,8 +147,12 @@ impl ETHHeaders {
     }
 }
 
-fn required_header_count_to_finalize(validators: &Validators) -> usize {
-    let validator_size = validators.len();
+fn required_header_count_to_finalize(trust_level: &Fraction, validator_size: u64) -> u64 {
+    validator_size * trust_level.numerator / trust_level.denominator + 1
+}
+
+fn checkpoint(validators: &Validators) -> u64 {
+    let validator_size = validators.len() as u64;
     validator_size / 2 + 1
 }
 
@@ -182,7 +169,9 @@ mod test {
         let mainnet = &mainnet();
 
         // previous validator is unused
-        let result = header.headers.verify(mainnet, &new_validator_set, &vec![]);
+        let result = header
+            .headers
+            .verify(mainnet, &new_validator_set, &vec![], &half());
         if let Err(e) = result {
             unreachable!("{:?}", e);
         }
@@ -196,14 +185,21 @@ mod test {
         new_validator_set.push(new_validator_set[1].clone());
 
         let mainnet = &mainnet();
-        let result = header.headers.verify(mainnet, &new_validator_set, &vec![]);
+        let result = header
+            .headers
+            .verify(mainnet, &new_validator_set, &vec![], &half());
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(_, actual, expected) => {
-                assert_eq!(actual, header.headers.all.len(), "actual error");
+            Error::InsufficientHeaderToVerify(_, total_signers, threshold, current_signers) => {
                 assert_eq!(
-                    expected,
-                    required_header_count_to_finalize(&new_validator_set),
-                    "expected error"
+                    total_signers,
+                    header.headers.all.len(),
+                    "total signer error"
+                );
+                assert_eq!(current_signers, total_signers, "current signer error");
+                assert_eq!(
+                    threshold,
+                    required_header_count_to_finalize(&half(), new_validator_set.len() as u64),
+                    "threshold error"
                 );
             }
             e => unreachable!("{:?}", e),
@@ -219,7 +215,7 @@ mod test {
         // new validator is unused
         let result = header
             .headers
-            .verify(mainnet, &vec![], &previous_validator_set);
+            .verify(mainnet, &vec![], &previous_validator_set, &half());
         if let Err(e) = result {
             unreachable!("{:?}", e);
         }
@@ -228,13 +224,22 @@ mod test {
     #[test]
     fn test_error_verify_eth_headers_before_checkpoint() {
         let header = create_before_checkpoint_headers();
+        let mut previous_validator_set = create_previous_epoch_block().new_validators;
+        previous_validator_set.push(previous_validator_set[0].clone());
 
         let mainnet = &mainnet();
-        let result = header.headers.verify(mainnet, &vec![], &vec![]);
+        let result = header
+            .headers
+            .verify(mainnet, &vec![], &previous_validator_set, &half());
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(_, actual, expected) => {
-                assert_eq!(actual, header.headers.all.len(), "actual error");
-                assert_eq!(expected, 1, "expected error");
+            Error::InsufficientHeaderToVerify(_, total, threshold, current) => {
+                assert_eq!(total, header.headers.all.len(), "total error");
+                assert_eq!(current, 0, "current error");
+                assert_eq!(
+                    threshold,
+                    required_header_count_to_finalize(&half(), previous_validator_set.len() as u64),
+                    "th error"
+                );
             }
             e => unreachable!("{:?}", e),
         }
@@ -246,7 +251,7 @@ mod test {
         }
         let result = header
             .headers
-            .verify(mainnet, &vec![], &previous_validator_set);
+            .verify(mainnet, &vec![], &previous_validator_set, &half());
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 assert_eq!(number, header.headers.target.number)
@@ -263,9 +268,12 @@ mod test {
         let mainnet = &mainnet();
 
         // new validator is unused
-        let result = header
-            .headers
-            .verify(mainnet, &new_validator_set, &previous_validator_set);
+        let result = header.headers.verify(
+            mainnet,
+            &new_validator_set,
+            &previous_validator_set,
+            &half(),
+        );
         if let Err(e) = result {
             unreachable!("{:?}", e);
         }
@@ -281,18 +289,14 @@ mod test {
         // insufficient header for after checkpoint
         let mut header = create_across_checkpoint_headers();
         header.headers.all.pop();
-        let result = header
-            .headers
-            .verify(mainnet, &new_validator_set, &previous_validator_set);
+        let result = header.headers.verify(
+            mainnet,
+            &new_validator_set,
+            &previous_validator_set,
+            &half(),
+        );
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(
-                _,
-                height_from_epoch,
-                total_signers,
-                threshold,
-                current_signers,
-            ) => {
-                assert_eq!(height_from_epoch, 2, "height_from_epoch error");
+            Error::InsufficientHeaderToVerify(_, total_signers, threshold, current_signers) => {
                 assert_eq!(total_signers, 10, "total_signers error");
                 assert_eq!(threshold, 11, "threshold error");
                 assert_eq!(current_signers, 1, "current_signers error");
@@ -305,9 +309,12 @@ mod test {
         for (i, v) in new_validator_set.iter_mut().enumerate() {
             v[0] = i as u8;
         }
-        let result = header
-            .headers
-            .verify(mainnet, &new_validator_set, &previous_validator_set);
+        let result = header.headers.verify(
+            mainnet,
+            &new_validator_set,
+            &previous_validator_set,
+            &half(),
+        );
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 //25428811 uses next validator
@@ -329,7 +336,7 @@ mod test {
         let mainnet = &mainnet();
         let result = header
             .headers
-            .verify_seals(mainnet, &new_validator_set, &vec![]);
+            .verify_seals(mainnet, &new_validator_set, &vec![], &half());
         match result.unwrap_err() {
             Error::UnexpectedDoubleSign(block, _) => {
                 assert_eq!(block, header.headers.all[1].number, "block error");
