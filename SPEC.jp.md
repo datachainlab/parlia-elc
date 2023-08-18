@@ -136,17 +136,12 @@ fn update_client(
 ### <a name="update_header_validity"></a>Header validity predicate
 * 提出対象Headerが、trusted_heightに対応するConsensusStateのtrusting_period期間内に生成されたものであること
 * 提出対象Headerのheightがtrusted_headerよりも高いこと
-* 提出対象Headerがfinalizedされたとみなすために十分な数の後続Headerが必要である。そのために以下の条件を満たすこと。
-  - 提出対象のHeaderがepochである場合
-    - 全てのHeaderは前epochのvalidator setでsealされており重複がないこと
-    - 提出対象Headerとその後続Headerの合計数は、「前epochのvalidator数 / 2」であること
-  - 提出対象のHeaderがepochより後かつcheckpointより前である場合
-    - チェックポイントより前のHeaderは前epochのvalidator setでsealされており重複がないこと
-    - チェックポイント以降のHeaderは現epochのvalidator setでsealされており重複がないこと
-    - 提出対象Headerとその後続Headerの合計数は、「現epochのvalidatorと前epochの合計validatorから重複を除いたもの / 2」以上であること
-  - 上記以外（提出対象Headerがcheckpoint以降)である場合
-    - 全てのHeaderは現epochのvalidator setでsealされており重複がないこと
-    - 提出対象Headerとその後続Headerの合計数は、「現epochのvalidator数 / 2」であること
+* 提出対象Headerがfinalizedされたとみなすために十分な数のHeaderが必要である。そのため、以下を満たすこと
+  - チェックポイントより前のHeaderは前epochのvalidator setでsealされており重複がないこと
+  - チェックポイント以降のHeaderは現epochのvalidator setでsealされており重複がないこと
+  - sealされたHeader数の合計は、coinbaseの重複を除いて
+    - 提出対象Headerがチェックポイント以降の場合には、現epochのvalidator set数 * 1/2以上であること
+    - 提出対象Headerがチェックポイントより前の場合には、前epochのvalidator set数 * 1/2以上であること
 * 提出対象Headerとその後続Headerの関係は以下を満たすこと
   - 提出対象のHeaderのblock numberが一番小さく、Header間のblock numberが連続していること
   - Header間のblock hashが連続していること
