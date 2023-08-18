@@ -204,7 +204,7 @@ mod test {
 
     use crate::errors::Error;
     use crate::header::testdata::*;
-    use crate::header::{Header};
+    use crate::header::Header;
     use crate::misc::ChainId;
 
     #[test]

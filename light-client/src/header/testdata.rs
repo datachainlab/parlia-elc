@@ -926,3 +926,10 @@ pub fn half() -> Fraction {
         denominator: 2,
     }
 }
+
+pub fn two_of_three() -> Fraction {
+    Fraction {
+        numerator: 2,
+        denominator: 3,
+    }
+}

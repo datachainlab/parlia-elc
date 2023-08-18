@@ -148,9 +148,23 @@ impl ETHHeaders {
 }
 
 fn required_header_count_to_finalize(trust_level: &Fraction, validator_size: u64) -> u64 {
-    validator_size * trust_level.numerator / trust_level.denominator + 1
+    ceil_div(
+        validator_size * trust_level.numerator,
+        trust_level.denominator,
+    )
 }
 
+fn ceil_div(x: u64, y: u64) -> u64 {
+    if y == 0 {
+        0
+    } else {
+        (x + y - 1) / y
+    }
+}
+
+/// for example when the validator count is 21 the checkpoint is 211, 411, 611 ...
+/// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/parlia.go#L607
+/// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/snapshot.go#L191
 fn checkpoint(validators: &Validators) -> u64 {
     let validator_size = validators.len() as u64;
     validator_size / 2 + 1
@@ -174,6 +188,33 @@ mod test {
             .verify(mainnet, &new_validator_set, &vec![], &half());
         if let Err(e) = result {
             unreachable!("{:?}", e);
+        }
+    }
+
+    #[test]
+    fn test_success_verify_eth_headers_after_checkpoint_2_3_trust() {
+        let header = create_after_checkpoint_headers();
+        let new_validator_set = create_epoch_block().new_validators;
+        let mainnet = &mainnet();
+
+        // previous validator is unused
+        let result = header
+            .headers
+            .verify(mainnet, &new_validator_set, &vec![], &two_of_three());
+        match result.unwrap_err() {
+            Error::InsufficientHeaderToVerify(_, total_signed, threshold, current_signed) => {
+                assert_eq!(total_signed, header.headers.all.len(), "total signer error");
+                assert_eq!(current_signed, total_signed, "current signer error");
+                assert_eq!(
+                    threshold,
+                    required_header_count_to_finalize(
+                        &two_of_three(),
+                        new_validator_set.len() as u64
+                    ),
+                    "threshold error"
+                );
+            }
+            e => unreachable!("{:?}", e),
         }
     }
 
@@ -222,10 +263,39 @@ mod test {
     }
 
     #[test]
+    fn test_error_verify_eth_headers_before_checkpoint_2_3_trust() {
+        let header = create_before_checkpoint_headers();
+        let previous_validator_set = create_previous_epoch_block().new_validators;
+        let mainnet = &mainnet();
+
+        // new validator is unused
+        let result =
+            header
+                .headers
+                .verify(mainnet, &vec![], &previous_validator_set, &two_of_three());
+        match result.unwrap_err() {
+            Error::InsufficientHeaderToVerify(_, total, threshold, current) => {
+                assert_eq!(total, header.headers.all.len(), "total error");
+                assert_eq!(current, 0, "current error");
+                assert_eq!(
+                    threshold,
+                    required_header_count_to_finalize(
+                        &two_of_three(),
+                        previous_validator_set.len() as u64
+                    ),
+                    "th error"
+                );
+            }
+            e => unreachable!("{:?}", e),
+        }
+    }
+
+    #[test]
     fn test_error_verify_eth_headers_before_checkpoint() {
         let header = create_before_checkpoint_headers();
         let mut previous_validator_set = create_previous_epoch_block().new_validators;
         previous_validator_set.push(previous_validator_set[0].clone());
+        previous_validator_set.push(previous_validator_set[1].clone());
 
         let mainnet = &mainnet();
         let result = header
@@ -280,6 +350,30 @@ mod test {
     }
 
     #[test]
+    fn test_success_verify_eth_headers_across_checkpoint_2_3_trust() {
+        let header = create_across_checkpoint_headers();
+        let new_validator_set = create_epoch_block().new_validators;
+        let previous_validator_set = create_previous_epoch_block().new_validators;
+        let mainnet = &mainnet();
+
+        // new validator is unused
+        let result = header.headers.verify(
+            mainnet,
+            &new_validator_set,
+            &previous_validator_set,
+            &two_of_three(),
+        );
+        match result.unwrap_err() {
+            Error::InsufficientHeaderToVerify(_, total_signed, threshold, current_signed) => {
+                assert_eq!(total_signed, 11, "total_signers error");
+                assert_eq!(threshold, 14, "threshold error");
+                assert_eq!(current_signed, 2, "current_signers error");
+            }
+            e => unreachable!("{:?}", e),
+        }
+    }
+
+    #[test]
     fn test_error_verify_eth_headers_across_checkpoint() {
         let mut new_validator_set = create_epoch_block().new_validators;
         let previous_validator_set = create_previous_epoch_block().new_validators;
@@ -296,10 +390,10 @@ mod test {
             &half(),
         );
         match result.unwrap_err() {
-            Error::InsufficientHeaderToVerify(_, total_signers, threshold, current_signers) => {
-                assert_eq!(total_signers, 10, "total_signers error");
+            Error::InsufficientHeaderToVerify(_, total_signed, threshold, current_signed) => {
+                assert_eq!(total_signed, 10, "total_signers error");
                 assert_eq!(threshold, 11, "threshold error");
-                assert_eq!(current_signers, 1, "current_signers error");
+                assert_eq!(current_signed, 1, "current_signers error");
             }
             e => unreachable!("{:?}", e),
         }
