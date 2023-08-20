@@ -147,11 +147,6 @@ fn update_client(
   - Header間のblock hashが連続していること
   - Header間のtimestampの大小関係が正しいこと
   - Header間のgas limitの差が上限以下であること
-* 全てのHeaderは以下の条件を満たすこと
-  - mix_digestがemptyであること
-  - nonceがemptyであること
-  - uncle_hashがemptyであること
-  - difficultyが1または2であること
 
 ## Misbehavior predicate
 
