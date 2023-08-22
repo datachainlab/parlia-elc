@@ -140,8 +140,8 @@ fn update_client(
   - チェックポイントより前のHeaderは前epochのvalidator setでsealされており重複がないこと
   - チェックポイント以降のHeaderは現epochのvalidator setでsealされており重複がないこと
   - sealされたHeader数の合計は、coinbaseの重複を除いて
-    - 提出対象Headerがチェックポイント以降の場合には、現epochのvalidator set数 * 1/2以上であること
-    - 提出対象Headerがチェックポイントより前の場合には、前epochのvalidator set数 * 1/2以上であること
+    - 提出対象Headerがチェックポイント以降の場合には、「現epochのvalidator set数 * 1/2 + 1」以上であること
+    - 提出対象Headerがチェックポイントより前の場合には、「前epochのvalidator set数 * 1/2 + 1」以上であること
 * 提出対象Headerとその後続Headerの関係は以下を満たすこと
   - 提出対象のHeaderのblock numberが一番小さく、Header間のblock numberが連続していること
   - Header間のblock hashが連続していること
