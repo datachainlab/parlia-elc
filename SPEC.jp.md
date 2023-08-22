@@ -104,7 +104,7 @@ fn create_client(
   client_id: ClientId, 
   client_state: ClientSate, 
   consensus_state: ConsensusState
-) -> Result<CreateClientResult, Error>
+)
 ```
 
 ClientStateとConsensusStateを作成します。
@@ -115,7 +115,7 @@ ClientStateとConsensusStateを作成します。
 fn update_client(
   client_id: ClientId, 
   header: Header
-) -> Result<UpdateClientResult, Error>
+) 
 ```
 
 検証処理成功後
@@ -154,7 +154,7 @@ fn update_client(
 pub fn submit_misbehaviour(
     client_id: ClientId,
     misbehaviour: Misbehavior,
-) -> Result<ClientState, Error> 
+) 
 ```
 
 下記全ての検証成功後、ClientStateをフリーズします。
@@ -181,7 +181,7 @@ fn verify_membership(
     value: Vec<u8>,
     proof_height: Height,
     proof: Vec<u8>,
-) -> Result<StateVerificationResult, Error> 
+)
 ```
 
 以下の検証を行います。
