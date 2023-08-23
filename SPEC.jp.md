@@ -16,6 +16,8 @@ BSC は、コンセンサスのために DPoS と PoA を組み合わせるこ�
 
 ## ClientState
 
+ClientStateは、現在のリビジョン、信頼期間、最新の高さ、およびフリーズの有無を追跡します。
+
 ```rust
 pub struct ClientState {
     pub chain_id: ChainId,
@@ -29,11 +31,13 @@ pub struct ClientState {
 
 ## ConsensusState
 
+クライアントは、タイムスタンプ (ブロック時間)、次のバリデータセットのハッシュ、および以前に検証されたすべてのコンセンサス状態のコミットメントルートを追跡します。
+
 ```rust
 pub struct ConsensusState {
-    /// the storage root of the IBC contract
+    /// the storage root(commitment root) of the IBC contract
     pub state_root: Hash,
-    /// timestamp from execution payload
+    /// timestamp of the Header
     pub timestamp: Time,
     /// finalized header's validator set
     /// only epoch headers contain validator set
@@ -42,6 +46,8 @@ pub struct ConsensusState {
 ```
 
 ## Headers
+
+Headerには、提出対象のHeader、信頼できる高さ、提出対象ヘッダの前Epochのバリデータセット、提出対象ヘッダの現Epochのバリデータセットが含まれます。  
 
 ```rust
 pub struct Header {
@@ -54,7 +60,10 @@ pub struct Header {
     /// if the target header is epoch this must be empty because the header's Extra field contains validator set
     current_validators: ValidatorSet,
 }
+```
+ETHHeadersには、提出対象のHeaderと、そのFinalizeに必要な後続Headerが含まれます。
 
+```rust
 pub struct ETHHeaders {
     /// target header
     pub target: ETHHeader,
@@ -62,7 +71,11 @@ pub struct ETHHeaders {
     /// first element is target header
     pub all: Vec<ETHHeader>,
 }
+```
 
+ETHHeaderはBSCオンチェーンで生成したブロックの情報が含まれます。
+
+```rust
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
     pub uncle_hash: Vec<u8>,
@@ -79,15 +92,13 @@ pub struct ETHHeader {
     pub extra_data: Vec<u8>,
     pub mix_digest: Vec<u8>,
     pub nonce: Vec<u8>,
-    pub hash: Hash,
-    /// true: if the block is epoch 
-    pub is_epoch: bool,
-    /// not empty only when the block is epoch
-    pub new_validators: Validators,
 }
 ```
 
 ## Misbehavior
+
+Misbehaviorは、該当する場合、不正動作を検出し、クライアントをフリーズしてさらなるパケットフローを防ぐために使用されます。  
+Misbehaviorは、同じ高さの2つのヘッダーで構成されており、ライトクライアントはどちらも有効であるとみなします。
 
 ```rust
 pub struct Misbehaviour {
@@ -119,7 +130,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Headerのstorage root、timestamp、現epochのvalidator setをConsensusStateとして登録します。
+* 提出対象Header(ETHHeader.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象ヘッダのtimestampとstorage rootを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
@@ -187,5 +198,20 @@ fn verify_membership(
 以下の検証を行います。
 * ClientIdに対応するClientStateが存在すること
 * ClientStateがフリーズされていないこと
-* ClientStateのlatest_heightがproof_heightと一致すること
+* ClientStateのlatest_height >= proof_heightであること
 * proof_heightに対応するConsensusStateのstorage_rootとproofで、pathに対してvalueが存在すること
+
+```rust
+fn verify_non_membership(
+    client_id: ClientId,
+    path: String,
+    proof_height: Height,
+    proof: Vec<u8>,
+)
+```
+
+以下の検証を行います。
+* ClientIdに対応するClientStateが存在すること
+* ClientStateがフリーズされていないこと
+* ClientStateのlatest_height >= proof_heightであること
+* proof_heightに対応するConsensusStateのstorage_rootとproofで、pathに対して値が存在しないこと
