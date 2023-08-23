@@ -130,7 +130,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(ETHHeader.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象ヘッダのtimestampとstorage rootを登録します。
+* 提出対象Header(ETHHeaders.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象Headerのtimestampとstorage rootを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
