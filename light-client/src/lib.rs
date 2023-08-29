@@ -12,6 +12,7 @@ mod commitment;
 pub mod consensus_state;
 pub mod errors;
 pub mod header;
+pub mod misbehaviour;
 mod misc;
 
 pub fn register_implementations(registry: &mut dyn light_client_registry::LightClientRegistry) {

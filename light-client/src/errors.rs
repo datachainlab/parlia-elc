@@ -21,6 +21,7 @@ pub enum Error {
     UnknownHeaderType(String),
     UnknownClientStateType(String),
     UnknownConsensusStateType(String),
+    UnknownMisbehaviourType(String),
 
     // ClientState error
     MissingLatestHeight,
@@ -78,6 +79,13 @@ pub enum Error {
     InvalidProofFormatError(Vec<u8>),
     InsufficientPreviousValidators(usize, usize),
     InsufficientCurrentValidators(usize, usize),
+
+    // Misbehaviour
+    MissingHeader1,
+    MissingHeader2,
+    UnexpectedClientId(String),
+    UnexpectedDifferentHeight(Height, Height),
+    UnexpectedSameBlockHash(Height),
     TrieError(BoxedTrieError),
 }
 
@@ -196,6 +204,16 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4, e5
                 )
             }
+            Error::MissingHeader1 => write!(f, "MissingHeader1"),
+            Error::MissingHeader2 => write!(f, "MissingHeader2"),
+            Error::UnexpectedClientId(e1) => write!(f, "UnexpectedClientId : {}", e1),
+            Error::UnexpectedDifferentHeight(e1, e2) => {
+                write!(f, "UnexpectedDifferentHeight : {} {}", e1, e2)
+            }
+            Error::UnexpectedSameBlockHash(e1) => {
+                write!(f, "UnexpectedSameBlockHash : {}", e1)
+            }
+            Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1),
             Error::UnexpectedStateValue(e1, e2, e3, e4) => {
                 write!(
                     f,

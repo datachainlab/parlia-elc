@@ -12,6 +12,7 @@ use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
+use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
@@ -43,27 +44,19 @@ impl ClientState {
         self
     }
 
+    pub fn freeze(mut self) -> Self {
+        self.frozen = true;
+        self
+    }
+
     pub fn check_header_and_update_state(
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
         header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
-        // Ensure last consensus state is within the trusting period
-        trusted_consensus_state.assert_not_expired(now, self.trusting_period)?;
-        trusted_consensus_state.assert_not_expired(header.timestamp()?, self.trusting_period)?;
-
-        // Ensure header revision is same as chain revision
-        let header_height = header.height();
-        if header_height.revision_number() != self.chain_id.version() {
-            return Err(Error::UnexpectedHeaderRevision(
-                self.chain_id.version(),
-                header_height.revision_number(),
-            ));
-        }
-
         // Ensure header is valid
-        header.verify(&self.chain_id)?;
+        self.check_header(now, trusted_consensus_state, &header)?;
 
         let mut new_client_state = self.clone();
         let header_height = header.height();
@@ -88,6 +81,35 @@ impl ClientState {
         };
 
         Ok((new_client_state, new_consensus_state))
+    }
+
+    pub fn check_misbehaviour_and_update_state(
+        &self,
+        now: Time,
+        h1_trusted_cs: &ConsensusState,
+        h2_trusted_cs: &ConsensusState,
+        misbehaviour: Misbehaviour,
+    ) -> Result<ClientState, Error> {
+        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        Ok(self.clone().freeze())
+    }
+
+    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+        // Ensure last consensus state is within the trusting period
+        cs.assert_not_expired(now, self.trusting_period)?;
+        cs.assert_not_expired(header.timestamp()?, self.trusting_period)?;
+
+        // Ensure header revision is same as chain revision
+        let header_height = header.height();
+        if header_height.revision_number() != self.chain_id.version() {
+            return Err(Error::UnexpectedHeaderRevision(
+                self.chain_id.version(),
+                header_height.revision_number(),
+            ));
+        }
+        // Ensure header is valid
+        header.verify(&self.chain_id)
     }
 }
 
