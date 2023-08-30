@@ -23,6 +23,7 @@ pub struct ConsensusState {
     pub timestamp: Time,
     /// finalized header's validator set.Only epoch headers contain validator set
     pub validators_hash: Hash,
+    pub validators_size: u64,
 }
 
 impl ConsensusState {
@@ -60,11 +61,12 @@ impl TryFrom<RawConsensusState> for ConsensusState {
         let validators_hash: Hash = value
             .validators_hash
             .try_into()
-            .map_err(Error::UnexpectedValidatorsHash)?;
+            .map_err(Error::UnexpectedValidatorsHashSize)?;
         Ok(Self {
             state_root,
             timestamp,
             validators_hash,
+            validators_size: value.validator_size,
         })
     }
 }
@@ -75,6 +77,7 @@ impl From<ConsensusState> for RawConsensusState {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
             validators_hash: value.validators_hash.into(),
+            validator_size: value.validators_size,
         }
     }
 }
@@ -137,6 +140,7 @@ mod test {
             state_root: [0u8; 32],
             timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
             validators_hash: [0u8; 32],
+            validators_size: 0,
         };
 
         // now is after trusting period

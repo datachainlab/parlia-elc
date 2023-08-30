@@ -1,27 +1,21 @@
+use crate::errors::Error;
+use alloc::vec::Vec;
+
 use crate::misc::{keccak_256_vec, Hash, Validators};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValidatorSet {
-    validators: Validators,
-    hash: Hash,
+    pub validators: Validators,
+    pub hash: Hash,
 }
 
-impl ValidatorSet {
-    pub fn validators(&self) -> &Validators {
-        &self.validators
-    }
-
-    pub fn hash(&self) -> &Hash {
-        &self.hash
-    }
-}
-
-impl From<Validators> for ValidatorSet {
-    fn from(value: Validators) -> Self {
+impl TryFrom<Vec<Vec<u8>>> for ValidatorSet {
+    type Error = Error;
+    fn try_from(value: Vec<Vec<u8>>) -> Result<Self, Self::Error> {
         let hash = keccak_256_vec(&value);
-        Self {
-            validators: value,
+        Ok(Self {
+            validators: value as Validators,
             hash,
-        }
+        })
     }
 }

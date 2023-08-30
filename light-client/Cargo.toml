@@ -30,6 +30,8 @@ hex-literal = "0.3.1"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
+milagro_bls = { git = "https://github.com/datachainlab/milagro_bls", rev = "bc2b5b5e8d48b7e2e1bfaa56dc2d93e13cb32095", default-features = false }
+
 [dev-dependencies]
 store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6", default-features = false }
 ibc-proto   = { version = "0.26.0", default-features = false }
