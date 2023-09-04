@@ -54,11 +54,10 @@ pub struct Header {
     /// target header and headers to finalize target header
     headers: ETHHeaders,
     trusted_height: Height,
-    /// validator set in previous epoch of target header 
-    previous_validators: ValidatorSet,
-    /// validator set in current epoch of target header 
-    /// if the target header is epoch this must be empty because the header's Extra field contains validator set
-    current_validators: ValidatorSet,
+    /// validator set for ETHHeaders.target 
+    target_validators: ValidatorSet,
+    /// validator set for ETHHeaders.parent
+    parent_validators: ValidatorSet,
 }
 ```
 ETHHeadersには、提出対象のHeaderと、そのFinalizeに必要な後続Headerが含まれます。
@@ -67,9 +66,8 @@ ETHHeadersには、提出対象のHeaderと、そのFinalizeに必要な後続He
 pub struct ETHHeaders {
     /// target header
     pub target: ETHHeader,
-    /// target header and headers to finalize target header
-    /// first element is target header
-    pub all: Vec<ETHHeader>,
+    /// parent header of the target header
+    pub parent: ETHHeader,
 }
 ```
 
@@ -140,24 +138,19 @@ fn update_client(
 
 ### <a name="update_consensus_state_validity"></a>ConsensusState validity predicate
 * ClientIdとHeaderのtrusted_heightに対応するConsensusStateが存在すること
-* 提出対象Headerの現epochのvalidatorSetがConsensusStateに保存されていること
-* 提出対象Headerの前epochのvalidatorSetがConsensusStateに保存されていること
+* 提出対象Headerの検証用のvalidatorSetがConsensusStateに保存されていること
+* 親Header(ETHHeaders.parent)の検証用のvalidatorSetがConsensusStateに保存されていること
 * trusted_heightに対応するConsensusStateがtrusting_period期間内に作成されていること
 
 ### <a name="update_header_validity"></a>Header validity predicate
 * 提出対象Headerが、trusted_heightに対応するConsensusStateのtrusting_period期間内に生成されたものであること
 * 提出対象Headerのheightがtrusted_headerよりも高いこと
-* 提出対象Headerがfinalizedされたとみなすために十分な数のHeaderが必要である。そのため、以下を満たすこと
-  - チェックポイントより前のHeaderは前epochのvalidator setでsealされており重複がないこと
-  - チェックポイント以降のHeaderは現epochのvalidator setでsealされており重複がないこと
-  - sealされたHeader数の合計は、coinbaseの重複を除いて
-    - 提出対象Headerがチェックポイント以降の場合には、「現epochのvalidator set数 * 1/2 + 1」以上であること
-    - 提出対象Headerがチェックポイントより前の場合には、「前epochのvalidator set数 * 1/2 + 1」以上であること
-* 提出対象Headerとその後続Headerの関係は以下を満たすこと
-  - 提出対象のHeaderのblock numberが一番小さく、Header間のblock numberが連続していること
-  - Header間のblock hashが連続していること
-  - Header間のtimestampの大小関係が正しいこと
-  - Header間のgas limitの差が上限以下であること
+* 提出対象Headerと親Headerの関係は以下を満たすこと
+  - numberとblock hashが連続していること
+  - timestampの大小関係が正しいこと
+  - gas limitの差が上限以下であること
+  - VoteAttesationの関連が正しいこと
+* 提出対象Headerと親Headerの署名とBLS署名が正しいこと
 
 ## Misbehavior predicate
 
