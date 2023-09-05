@@ -120,7 +120,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象Headerのtimestampとstorage rootを登録します。
+* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、次のHeaderの検証に使うvalidatorSetのhash、提出対象Headerのtimestampとstorage rootを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
@@ -137,11 +137,11 @@ fn update_client(
 ### <a name="update_header_validity"></a>Header validity predicate
 * 提出対象Headerが、trusted_heightに対応するConsensusStateのtrusting_period期間内に生成されたものであること
 * 提出対象Headerのheightがtrusted_headerよりも高いこと
-* 提出対象Headerと親Headerの関係は以下を満たすこと
+* 提出対象Headerと親Headerの関係が正しいこと
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
-  - extra_dataから抽出したVoteAttesationの関連が正しいこと
+  - extra_dataから抽出したVoteAttesationの関係が正しいこと
 * 提出対象Headerと親Headerの署名とBLS署名が正しいこと
 
 ## Misbehavior predicate
