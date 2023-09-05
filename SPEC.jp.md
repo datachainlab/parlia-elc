@@ -130,7 +130,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、次のHeaderの検証に使うvalidatorSetのhash、提出対象Headerのtimestampとstorage rootを登録します。
+* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、提出対象Headerのtimestampとstorage rootと、epochの場合にはvalidatorSetのhashを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
