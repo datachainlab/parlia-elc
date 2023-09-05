@@ -149,7 +149,7 @@ fn update_client(
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
-  - VoteAttesationの関連が正しいこと
+  - extra_dataから抽出したVoteAttesationの関連が正しいこと
 * 提出対象Headerと親Headerの署名とBLS署名が正しいこと
 
 ## Misbehavior predicate
