@@ -47,7 +47,7 @@ pub struct ConsensusState {
 
 ## Headers
 
-Headerには、提出対象のHeaderとその親のHeader、信頼できる高さ、検証に使うバリデータセットが含まれます。  
+Headerには、提出対象のHeaderとその親のHeader、アカウント証明、信頼できる高さ、検証に使うバリデータセットが含まれます。  
 
 ```rust
 pub struct Header {
@@ -55,6 +55,8 @@ pub struct Header {
     target: ETHHeader,
     /// parent of the target header
     parent: ETHHeader,
+    /// account proof for the ibc handler
+    account_proof: Vec<u8>,
     trusted_height: Height,
     /// validator set for target 
     target_validators: ValidatorSet,
