@@ -68,8 +68,8 @@ pub struct Header {
 ```rust
 pub struct ValidatorSet {
     /// epoch block height
-    height: u64;
-    validators: Vec<Vec<u8>>;
+    height: u64,
+    validators: Vec<Vec<u8>>,
 }
 ```
 
