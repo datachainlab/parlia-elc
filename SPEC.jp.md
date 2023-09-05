@@ -47,27 +47,19 @@ pub struct ConsensusState {
 
 ## Headers
 
-Headerには、提出対象のHeader、信頼できる高さ、提出対象ヘッダの前Epochのバリデータセット、提出対象ヘッダの現Epochのバリデータセットが含まれます。  
+Headerには、提出対象のHeaderとその親のHeader、信頼できる高さ、検証に使うバリデータセットが含まれます。  
 
 ```rust
 pub struct Header {
-    /// target header and headers to finalize target header
-    headers: ETHHeaders,
-    trusted_height: Height,
-    /// validator set for ETHHeaders.target 
-    target_validators: ValidatorSet,
-    /// validator set for ETHHeaders.parent
-    parent_validators: ValidatorSet,
-}
-```
-ETHHeadersには、提出対象のHeaderと、そのFinalizeに必要な後続Headerが含まれます。
-
-```rust
-pub struct ETHHeaders {
     /// target header
-    pub target: ETHHeader,
-    /// parent header of the target header
-    pub parent: ETHHeader,
+    target: ETHHeader,
+    /// parent of the target header
+    parent: ETHHeader,
+    trusted_height: Height,
+    /// validator set for target 
+    target_validators: ValidatorSet,
+    /// validator set for parent
+    parent_validators: ValidatorSet,
 }
 ```
 
@@ -128,7 +120,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(ETHHeaders.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象Headerのtimestampとstorage rootを登録します。
+* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、現Epochのバリデータセット、提出対象Headerのtimestampとstorage rootを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
@@ -139,7 +131,7 @@ fn update_client(
 ### <a name="update_consensus_state_validity"></a>ConsensusState validity predicate
 * ClientIdとHeaderのtrusted_heightに対応するConsensusStateが存在すること
 * 提出対象Headerの検証用のvalidatorSetがConsensusStateに保存されていること
-* 親Header(ETHHeaders.parent)の検証用のvalidatorSetがConsensusStateに保存されていること
+* 親Header(Header.parent)の検証用のvalidatorSetがConsensusStateに保存されていること
 * trusted_heightに対応するConsensusStateがtrusting_period期間内に作成されていること
 
 ### <a name="update_header_validity"></a>Header validity predicate
