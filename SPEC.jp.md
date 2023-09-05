@@ -65,6 +65,14 @@ pub struct Header {
 }
 ```
 
+```rust
+pub struct ValidatorSet {
+    /// epoch block height
+    height: u64;
+    validators: Vec<Vec<u8>>;
+}
+```
+
 ETHHeaderはBSCオンチェーンで生成したブロックの情報が含まれます。
 
 ```rust
