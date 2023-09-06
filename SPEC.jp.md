@@ -42,6 +42,7 @@ pub struct ConsensusState {
     /// finalized header's validator set
     /// only epoch headers contain validator set
     pub validators_hash: Hash,
+    pub validators_size: u64,
 }
 ```
 
@@ -59,17 +60,9 @@ pub struct Header {
     account_proof: Vec<u8>,
     trusted_height: Height,
     /// validator set for target 
-    target_validators: ValidatorSet,
+    target_validators: Vec<Vec<u8>>,
     /// validator set for parent
-    parent_validators: ValidatorSet,
-}
-```
-
-```rust
-pub struct ValidatorSet {
-    /// epoch block height
-    height: u64,
-    validators: Vec<Vec<u8>>,
+    parent_validators: Vec<Vec<u8>>,
 }
 ```
 
