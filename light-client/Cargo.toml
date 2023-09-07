@@ -6,12 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-light-client = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.6" }
-light-client-registry = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6", default-features = false }
-lcp-types = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6", default-features = false }
-commitments = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6" }
-crypto = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6", default-features = false }
-validation-context = { git = "https://github.com/datachainlab/lcp.git",rev = "v0.1.6" }
+light-client = { git = "https://github.com/datachainlab/lcp", rev = "v0.2.2", default-features = false, features=["ibc"] }
 
 rlp = { version = "0.5.2", default-features = false }
 prost = { version = "0.11", default-features = false }
@@ -26,27 +21,21 @@ primitive-types = { version = "0.12.1", default-features = false }
 k256 = { version = "0.13.1", default-features = false, features = ["alloc", "ecdsa"] }
 elliptic-curve = { version = "0.13.5", default-features = false, features = ["hazmat", "sec1"] }
 
-hex-literal = "0.3.1"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 milagro_bls = { git = "https://github.com/datachainlab/milagro_bls", rev = "bc2b5b5e8d48b7e2e1bfaa56dc2d93e13cb32095", default-features = false }
+hex-literal = "0.4.1"
 
 [dev-dependencies]
-store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.1.6", default-features = false }
+store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.2.2", default-features = false }
 ibc-proto   = { version = "0.26.0", default-features = false }
-
 
 [features]
 default = ["std"]
 std = [
-    "light-client-registry/std",
-    "lcp-types/std",
+    "light-client/std",
     "trie-db/std",
     "patricia-merkle-trie/std"
-]
-sgx = [
-    "light-client-registry/sgx",
-    "lcp-types/sgx"
 ]
 dev = []

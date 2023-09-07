@@ -1,16 +1,16 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use commitments::{
-    gen_state_id_from_any, CommitmentPrefix, StateCommitment, StateID, UpdateClientCommitment,
-};
-use lcp_types::{Any, ClientId, Height};
 use light_client::{
+    commitments::{
+        gen_state_id_from_any, CommitmentContext, CommitmentPrefix, StateCommitment, StateID,
+        UpdateClientCommitment,
+    },
+    types::{Any, ClientId, Height},
     CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
     StateVerificationResult, UpdateClientResult,
 };
 use patricia_merkle_trie::keccak::keccak_256;
-use validation_context::ValidationParams;
 
 use crate::client_state::ClientState;
 use crate::commitment::{
@@ -64,8 +64,9 @@ impl LightClient for ParliaLightClient {
                 prev_height: None,
                 new_height: height,
                 timestamp,
-                validation_params: ValidationParams::Empty,
-            },
+                context: CommitmentContext::Empty,
+            }
+            .into(),
             prove: false,
         })
     }
@@ -121,8 +122,9 @@ impl LightClient for ParliaLightClient {
                 prev_height: Some(trusted_height),
                 new_height: height,
                 timestamp,
-                validation_params: ValidationParams::Empty,
-            },
+                context: CommitmentContext::Empty,
+            }
+            .into(),
             prove: true,
         })
     }
@@ -155,7 +157,8 @@ impl LightClient for ParliaLightClient {
                 Some(value),
                 proof_height,
                 state_id,
-            ),
+            )
+            .into(),
         })
     }
 
@@ -171,7 +174,8 @@ impl LightClient for ParliaLightClient {
         let state_id =
             self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
         Ok(StateVerificationResult {
-            state_commitment: StateCommitment::new(prefix, path, None, proof_height, state_id),
+            state_commitment: StateCommitment::new(prefix, path, None, proof_height, state_id)
+                .into(),
         })
     }
 }
@@ -339,8 +343,9 @@ mod test {
     use std::collections::BTreeMap;
 
     use hex_literal::hex;
-    use lcp_types::{Any, ClientId, Height, Time};
+    use light_client::types::{Any, ClientId, Height, Time};
 
+    use light_client::commitments::Commitment;
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
 
     use patricia_merkle_trie::keccak::keccak_256;
@@ -523,15 +528,20 @@ mod test {
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
                 assert_eq!(new_consensus_state.validators_hash, new_validators_hash);
                 assert_eq!(new_consensus_state.validators_size, new_validators_size);
-                assert_eq!(data.commitment.new_height, header.height());
-                assert_eq!(data.commitment.new_state, None);
-                assert!(!data.commitment.new_state_id.to_vec().is_empty());
-                assert_eq!(
-                    data.commitment.prev_height,
-                    Some(new_height(0, header.trusted_height().revision_height()))
-                );
-                assert!(data.commitment.prev_state_id.is_some());
-                assert_eq!(data.commitment.timestamp, header.timestamp().unwrap());
+                match &data.commitment {
+                    Commitment::UpdateClient(data) => {
+                        assert_eq!(data.new_height, header.height());
+                        assert_eq!(data.new_state, None);
+                        assert!(!data.new_state_id.to_vec().is_empty());
+                        assert_eq!(
+                            data.prev_height,
+                            Some(new_height(0, header.trusted_height().revision_height()))
+                        );
+                        assert!(data.prev_state_id.is_some());
+                        assert_eq!(data.timestamp, header.timestamp().unwrap());
+                    }
+                    _ => unreachable!("invalid commitment {:?}", data.commitment),
+                }
             }
             Err(e) => unreachable!("error {:?}", e),
         };
@@ -567,7 +577,7 @@ mod test {
         };
         let err = client.update_client(&ctx, client_id, any).unwrap_err();
         assert!(
-            format!("{:?}", err).ends_with("UnexpectedCoinbase: 31501907"),
+            format!("{}", err).contains("UnexpectedCoinbase: 31501907"),
             "{}",
             err
         );
@@ -655,14 +665,14 @@ mod test {
             proof_height,
             storage_proof_rlp.to_vec(),
         ) {
-            Ok(data) => {
-                assert_eq!(data.state_commitment.path, path);
-                assert_eq!(data.state_commitment.height, proof_height);
-                assert_eq!(
-                    data.state_commitment.value,
-                    Some(keccak_256(expected_value.as_slice()))
-                );
-            }
+            Ok(data) => match &data.state_commitment {
+                Commitment::State(data) => {
+                    assert_eq!(data.path, path);
+                    assert_eq!(data.height, proof_height);
+                    assert_eq!(data.value, Some(keccak_256(expected_value.as_slice())));
+                }
+                _ => unreachable!("invalid state commitment {:?}", data.state_commitment),
+            },
             Err(e) => unreachable!("error {:?}", e),
         };
     }
@@ -717,7 +727,7 @@ mod test {
             .submit_misbehaviour(&ctx, client_id.clone(), any)
             .unwrap_err();
         assert!(
-            format!("{:?}", err).ends_with("UnexpectedSameBlockHash : 0-31500440"),
+            format!("{:?}", err).contains("UnexpectedSameBlockHash : 0-31500440"),
             "{}",
             err
         );
@@ -748,7 +758,7 @@ mod test {
             .submit_misbehaviour(&ctx, client_id, any)
             .unwrap_err();
         assert!(
-            format!("{:?}", err).ends_with("UnexpectedCoinbase: 31500568"),
+            format!("{:?}", err).contains("UnexpectedCoinbase: 31500568"),
             "{}",
             err
         );

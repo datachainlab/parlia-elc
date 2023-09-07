@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use lcp_types::{Any, Height, Time};
+use light_client::types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -216,11 +216,12 @@ mod test {
     use hex_literal::hex;
 
     use crate::client_state::ClientState;
+    use light_client::types::Any;
 
     #[test]
     fn test_try_from_any() {
         let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651248088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a200000000000000000000000000000000000000000000000000000000000000000220310c8012a04080110033064").to_vec();
-        let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
+        let any: Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
         // Check if the result are same as relayer's one

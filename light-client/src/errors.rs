@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
-use lcp_types::{ClientId, Height, Time, TimeError};
+use light_client::types::{ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
@@ -15,6 +15,7 @@ pub enum Error {
     LCPError(light_client::Error),
 
     // data conversion error
+    TimestampOverflowError(u128),
     TimeError(TimeError),
     RLPDecodeError(rlp::DecoderError),
     ProtoDecodeError(prost::DecodeError),
@@ -103,6 +104,7 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Error::LCPError(e) => write!(f, "LCPError: {}", e),
+            Error::TimestampOverflowError(e) => write!(f, "TimestampOverflowError: {}", e),
             Error::TimeError(e) => write!(f, "TimeError: {}", e),
             Error::RLPDecodeError(e) => write!(f, "RLPDecodeError : {}", e),
             Error::ProtoDecodeError(e) => write!(f, "ProtoDecodeError: {}", e),

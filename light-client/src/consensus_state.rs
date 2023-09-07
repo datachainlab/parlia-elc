@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::ops::Add;
 use core::time::Duration;
 
-use lcp_types::{Any, Time};
+use light_client::types::{Any, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -129,7 +129,7 @@ mod test {
     use std::ops::{Add, Sub};
 
     use hex_literal::hex;
-    use lcp_types::Time;
+    use light_client::types::{Any, Time};
 
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
@@ -138,7 +138,7 @@ mod test {
     fn test_assert_not_expired() {
         let consensus_state = ConsensusState {
             state_root: [0u8; 32],
-            timestamp: Time::from_unix_timestamp_secs(1560000000).unwrap(),
+            timestamp: Time::from_unix_timestamp_nanos(1_560_000_000_000_000_000).unwrap(),
             validators_hash: [0u8; 32],
             validators_size: 0,
         };
@@ -182,7 +182,7 @@ mod test {
     fn test_try_from_any() {
         // This is ibc-parlia-relay's unit test data
         let relayer_consensus_state_protobuf = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e737573537461746512440a20c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4701a2073b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c").to_vec();
-        let any: lcp_types::Any = relayer_consensus_state_protobuf.try_into().unwrap();
+        let any: Any = relayer_consensus_state_protobuf.try_into().unwrap();
         let cs: ConsensusState = any.try_into().unwrap();
 
         // Check if the result are same as relayer's one
