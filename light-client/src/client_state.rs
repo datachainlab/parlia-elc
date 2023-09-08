@@ -28,6 +28,7 @@ pub struct ClientState {
 
     ///Light Client parameters
     pub trusting_period: Duration,
+    pub max_clock_drift: Duration,
 
     /// State
     pub latest_height: Height,
@@ -140,7 +141,18 @@ impl TryFrom<RawClientState> for ClientState {
             .try_into()
             .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
 
-        let trusting_period = Duration::from_secs(value.trusting_period);
+        let trusting_period = value
+            .trusting_period
+            .ok_or(Error::MissingTrustingPeriod)?
+            .try_into()
+            .map_err(|_| Error::MissingTrustingPeriod)?;
+
+        let max_clock_drift = value
+            .max_clock_drift
+            .ok_or(Error::NegativeMaxClockDrift)?
+            .try_into()
+            .map_err(|_| Error::NegativeMaxClockDrift)?;
+
         let frozen = value.frozen;
 
         Ok(Self {
@@ -149,6 +161,7 @@ impl TryFrom<RawClientState> for ClientState {
             ibc_commitments_slot,
             latest_height,
             trusting_period,
+            max_clock_drift,
             frozen,
         })
     }
@@ -164,7 +177,8 @@ impl From<ClientState> for RawClientState {
                 revision_number: value.latest_height.revision_number(),
                 revision_height: value.latest_height.revision_height(),
             }),
-            trusting_period: value.trusting_period.as_secs(),
+            trusting_period: Some(value.trusting_period.into()),
+            max_clock_drift: Some(value.max_clock_drift.into()),
             frozen: value.frozen.to_owned(),
         }
     }

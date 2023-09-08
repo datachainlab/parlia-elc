@@ -51,6 +51,7 @@ pub enum Error {
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
     MissingTrustingPeriod,
+    NegativeMaxClockDrift,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     InsufficientHeaderToVerify(BlockNumber, usize, usize),
@@ -191,6 +192,7 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedHeaderRelation: {} {}", e1, e2)
             }
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
+            Error::NegativeMaxClockDrift => write!(f, "NegativeMaxClockDrift"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),

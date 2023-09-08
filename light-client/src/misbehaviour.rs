@@ -11,7 +11,7 @@ use crate::header::Header;
 
 pub const PARLIA_MISBEHAVIOUR_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Misbehaviour";
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Misbehaviour {
     pub client_id: ClientId,
     pub header_1: Header,

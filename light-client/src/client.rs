@@ -368,6 +368,7 @@ mod test {
                     "0000000000000000000000000000000000000000000000000000000000000000"
                 ),
                 trusting_period: core::time::Duration::new(86400 * 365 * 100, 0),
+                max_clock_drift: core::time::Duration::new(1, 0),
                 latest_height: Default::default(),
                 frozen: false,
             }
