@@ -1,6 +1,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use light_client::commitments::TrustingPeriodContext;
 use light_client::{
     commitments::{
         gen_state_id_from_any, CommitmentContext, CommitmentPrefix, StateCommitment, StateID,
@@ -108,6 +109,9 @@ impl LightClient for ParliaLightClient {
             header,
         )?;
 
+        let trusted_state_timestamp = latest_trusted_consensus_state.timestamp;
+        let trusting_period = client_state.trusting_period;
+        let max_clock_drift = client_state.max_clock_drift;
         let prev_state_id = gen_state_id(client_state, latest_trusted_consensus_state)?;
         let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
@@ -121,8 +125,13 @@ impl LightClient for ParliaLightClient {
                 new_state: None,
                 prev_height: Some(trusted_height),
                 new_height: height,
-                timestamp,
-                context: CommitmentContext::Empty,
+                timestamp: timestamp.clone(),
+                context: CommitmentContext::TrustingPeriod(TrustingPeriodContext::new(
+                    trusting_period,
+                    max_clock_drift,
+                    timestamp,
+                    trusted_state_timestamp,
+                )),
             }
             .into(),
             prove: true,
@@ -345,7 +354,7 @@ mod test {
     use hex_literal::hex;
     use light_client::types::{Any, ClientId, Height, Time};
 
-    use light_client::commitments::Commitment;
+    use light_client::commitments::{Commitment, CommitmentContext, TrustingPeriodContext};
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
 
     use patricia_merkle_trie::keccak::keccak_256;
@@ -498,7 +507,8 @@ mod test {
         let client = ParliaLightClient::default();
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
-        mock_consensus_state.insert(Height::new(0, trusted_height), ConsensusState::default());
+        let trusted_cs = ConsensusState::default();
+        mock_consensus_state.insert(Height::new(0, trusted_height), trusted_cs.clone());
         let epoch_cs = ConsensusState {
             validators_hash: target_validator_hash,
             validators_size: target_validator_size,
@@ -506,13 +516,14 @@ mod test {
         };
         mock_consensus_state.insert(Height::new(0, c_epoch_height), epoch_cs.clone());
         mock_consensus_state.insert(Height::new(0, c_epoch_height - BLOCKS_PER_EPOCH), epoch_cs);
+        let cs = ClientState {
+            chain_id: ChainId::new(56),
+            ibc_store_address: hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
+            latest_height: Height::new(0, height),
+            ..Default::default()
+        };
         let ctx = MockClientReader {
-            client_state: Some(ClientState {
-                chain_id: ChainId::new(56),
-                ibc_store_address: hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
-                latest_height: Height::new(0, height),
-                ..Default::default()
-            }),
+            client_state: Some(cs.clone()),
             consensus_state: mock_consensus_state,
         };
         match client.update_client(&ctx, client_id, any) {
@@ -540,6 +551,18 @@ mod test {
                         );
                         assert!(data.prev_state_id.is_some());
                         assert_eq!(data.timestamp, header.timestamp().unwrap());
+                        match &data.context {
+                            CommitmentContext::TrustingPeriod(actual) => {
+                                let expected = TrustingPeriodContext::new(
+                                    cs.trusting_period,
+                                    cs.max_clock_drift,
+                                    header.timestamp().unwrap(),
+                                    trusted_cs.timestamp,
+                                );
+                                assert_eq!(format!("{}", actual), format!("{}", expected));
+                            }
+                            _ => unreachable!("invalid commitment context {:?}", data.context),
+                        }
                     }
                     _ => unreachable!("invalid commitment {:?}", data.commitment),
                 }
