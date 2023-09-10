@@ -125,7 +125,7 @@ impl LightClient for ParliaLightClient {
                 new_state: None,
                 prev_height: Some(trusted_height),
                 new_height: height,
-                timestamp: timestamp.clone(),
+                timestamp,
                 context: CommitmentContext::TrustingPeriod(TrustingPeriodContext::new(
                     trusting_period,
                     max_clock_drift,
