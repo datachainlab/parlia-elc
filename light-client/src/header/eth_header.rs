@@ -271,8 +271,14 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
             return Err(Error::UnexpectedNonce(number));
         }
 
+        let base_fee_per_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+
         // create block hash
-        let mut stream = RlpStream::new_list(15);
+        let mut size = 15;
+        if base_fee_per_gas.is_some() {
+            size += 1;
+        }
+        let mut stream = RlpStream::new_list(size);
         stream.append(&parent_hash);
         stream.append(&uncle_hash);
         stream.append(&coinbase);
@@ -288,6 +294,9 @@ impl TryFrom<&RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
+        if let Some(v) = base_fee_per_gas {
+            stream.append(&v);
+        }
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
