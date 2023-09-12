@@ -1,7 +1,5 @@
 use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
-use core::ops::Add;
-use core::time::Duration;
 
 use light_client::types::{Any, Time};
 use prost::Message as _;
@@ -31,21 +29,6 @@ impl ConsensusState {
     /// target fields: nothing
     pub fn canonicalize(self) -> Self {
         self
-    }
-
-    pub fn assert_not_expired(&self, now: Time, trusting_period: Duration) -> Result<(), Error> {
-        if self.timestamp > now {
-            return Err(Error::IllegalTimestamp(self.timestamp, now));
-        }
-        let deadline = self
-            .timestamp
-            .add(trusting_period)
-            .map_err(Error::UnexpectedTimestamp)?;
-        if deadline < now {
-            Err(Error::HeaderNotWithinTrustingPeriod(deadline, now))
-        } else {
-            Ok(())
-        }
     }
 }
 
@@ -125,58 +108,11 @@ impl TryFrom<Any> for ConsensusState {
 
 #[cfg(test)]
 mod test {
-    use core::time::Duration;
-    use std::ops::{Add, Sub};
 
     use hex_literal::hex;
-    use light_client::types::{Any, Time};
+    use light_client::types::Any;
 
     use crate::consensus_state::ConsensusState;
-    use crate::errors::Error;
-
-    #[test]
-    fn test_assert_not_expired() {
-        let consensus_state = ConsensusState {
-            state_root: [0u8; 32],
-            timestamp: Time::from_unix_timestamp_nanos(1_560_000_000_000_000_000).unwrap(),
-            validators_hash: [0u8; 32],
-            validators_size: 0,
-        };
-
-        // now is after trusting period
-        let now = consensus_state.timestamp.add(Duration::new(1, 1)).unwrap();
-        match consensus_state
-            .assert_not_expired(now, Duration::new(1, 0))
-            .unwrap_err()
-        {
-            Error::HeaderNotWithinTrustingPeriod(a, b) => {
-                assert_eq!(
-                    a,
-                    consensus_state.timestamp.add(Duration::new(1, 0)).unwrap()
-                );
-                assert_eq!(b, now);
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // now is within trusting period
-        assert!(consensus_state
-            .assert_not_expired(now, Duration::new(1, 1))
-            .is_ok());
-
-        // illegal timestamp
-        let now = consensus_state.timestamp.sub(Duration::new(1, 0)).unwrap();
-        match consensus_state
-            .assert_not_expired(now, Duration::new(0, 0))
-            .unwrap_err()
-        {
-            Error::IllegalTimestamp(t1, t2) => {
-                assert_eq!(t1, consensus_state.timestamp);
-                assert_eq!(t2, now);
-            }
-            e => unreachable!("{:?}", e),
-        }
-    }
 
     #[test]
     fn test_try_from_any() {

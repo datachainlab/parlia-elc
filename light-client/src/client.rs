@@ -358,6 +358,7 @@ mod test {
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
 
     use patricia_merkle_trie::keccak::keccak_256;
+    use time::macros::datetime;
 
     use crate::client::ParliaLightClient;
     use crate::client_state::ClientState;
@@ -366,7 +367,7 @@ mod test {
 
     use crate::header::testdata::mainnet;
     use crate::header::Header;
-    use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
+    use crate::misc::{keccak_256_vec, new_height, ChainId, Hash};
 
     impl Default for ClientState {
         fn default() -> Self {
@@ -376,7 +377,7 @@ mod test {
                 ibc_commitments_slot: hex!(
                     "0000000000000000000000000000000000000000000000000000000000000000"
                 ),
-                trusting_period: core::time::Duration::new(86400 * 365 * 100, 0),
+                trusting_period: core::time::Duration::new(86400 * 365, 0),
                 max_clock_drift: core::time::Duration::new(1, 0),
                 latest_height: Default::default(),
                 frozen: false,
@@ -388,7 +389,10 @@ mod test {
         fn default() -> Self {
             ConsensusState {
                 state_root: [0_u8; 32],
-                timestamp: new_timestamp(1677130449).unwrap(),
+                timestamp: Time::from_unix_timestamp_nanos(
+                    datetime!(2023-09-05 9:00 UTC).unix_timestamp_nanos() as u128,
+                )
+                .unwrap(),
                 validators_hash: [0_u8; 32],
                 validators_size: 0,
             }
@@ -402,7 +406,10 @@ mod test {
 
     impl HostContext for MockClientReader {
         fn host_timestamp(&self) -> Time {
-            new_timestamp(1677130449).unwrap()
+            Time::from_unix_timestamp_nanos(
+                datetime!(2023-09-10 9:00 UTC).unix_timestamp_nanos() as u128
+            )
+            .unwrap()
         }
     }
 

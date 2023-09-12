@@ -47,7 +47,8 @@ pub enum Error {
     MissingParentTrustedValidators(BlockNumber),
     MissingTargetTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
-    HeaderNotWithinTrustingPeriod(Time, Time),
+    OutOfTrustingPeriod(Time, Time),
+    HeaderFromFuture(Time, core::time::Duration, Time),
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
     MissingTrustingPeriod,
@@ -127,8 +128,11 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedStorageRoot(e) => write!(f, "UnexpectedStorageRoot: {:?}", e),
             Error::UnexpectedCommitmentValue(e) => write!(f, "UnexpectedCommitmentValue: {:?}", e),
-            Error::HeaderNotWithinTrustingPeriod(e1, e2) => {
-                write!(f, "HeaderNotWithinTrustingPeriod: {} {}", e1, e2)
+            Error::OutOfTrustingPeriod(e1, e2) => {
+                write!(f, "OutOfTrustingPeriod: {} {}", e1, e2)
+            }
+            Error::HeaderFromFuture(e1, e2, e3) => {
+                write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
             }
             Error::InvalidTrustThreshold(e1, e2) => {
                 write!(f, "InvalidTrustThreshold: {} {}", e1, e2)
