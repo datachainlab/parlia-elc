@@ -19,7 +19,6 @@ use self::constant::BLOCKS_PER_EPOCH;
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
 // inner header is module private
-pub mod config;
 pub mod constant;
 mod eth_header;
 pub(crate) mod validator_set;
@@ -34,6 +33,7 @@ pub struct Header {
     trusted_height: Height,
     parent_validators: ValidatorSet,
     target_validators: ValidatorSet,
+    previous_target_validators: ValidatorSet,
 }
 
 impl Header {
@@ -72,6 +72,10 @@ impl Header {
 
     pub fn parent_validators(&self) -> &ValidatorSet {
         &self.parent_validators
+    }
+
+    pub fn previous_target_validators(&self) -> &ValidatorSet {
+        &self.previous_target_validators
     }
 
     pub fn target_validators(&self) -> &ValidatorSet {
@@ -135,6 +139,12 @@ impl TryFrom<RawHeader> for Header {
             return Err(Error::MissingTargetTrustedValidators(target.number));
         }
 
+        let previous_target_validators: ValidatorSet =
+            value.previous_target_validators.clone().try_into()?;
+        if previous_target_validators.validators.is_empty() {
+            return Err(Error::MissingPreviousTargetTrustedValidators(target.number));
+        }
+
         let account_proof = inner.account_proof.clone();
 
         Ok(Self {
@@ -145,6 +155,7 @@ impl TryFrom<RawHeader> for Header {
             trusted_height,
             parent_validators,
             target_validators,
+            previous_target_validators,
         })
     }
 }

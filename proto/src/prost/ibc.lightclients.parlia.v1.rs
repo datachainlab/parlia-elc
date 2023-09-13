@@ -12,9 +12,9 @@ pub struct ClientState {
     pub latest_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(uint64, tag = "6")]
+    #[prost(uint64, tag = "5")]
     pub trusting_period: u64,
-    #[prost(bool, tag = "7")]
+    #[prost(bool, tag = "6")]
     pub frozen: bool,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -42,6 +42,10 @@ pub struct Header {
     pub parent_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "6")]
     pub target_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", repeated, tag = "7")]
+    pub previous_target_validators: ::prost::alloc::vec::Vec<
+        ::prost::alloc::vec::Vec<u8>,
+    >,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -53,8 +57,6 @@ pub struct ConsensusState {
     pub timestamp: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub validators_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "4")]
-    pub validator_size: u64,
 }
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

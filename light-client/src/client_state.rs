@@ -78,7 +78,6 @@ impl ClientState {
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
             validators_hash: keccak_256_vec(&new_validators),
-            validators_size: new_validators.len() as u64,
         };
 
         Ok((new_client_state, new_consensus_state))
@@ -219,18 +218,17 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651248088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a200000000000000000000000000000000000000000000000000000000000000000220310c8012a04080110033064").to_vec();
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124308381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510c09b8f0f2864").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
-        // Check if the result are same as relayer's one
         assert_eq!(0, cs.latest_height.revision_number());
-        assert_eq!(200, cs.latest_height.revision_height());
-        assert_eq!(9999, cs.chain_id.id());
+        assert_eq!(31706560, cs.latest_height.revision_height());
+        assert_eq!(56, cs.chain_id.id());
         assert_eq!(0, cs.chain_id.version());
         assert_eq!(100, cs.trusting_period.as_secs());
         assert_eq!(
-            hex!("aa43d337145e8930d01cb4e60abf6595c692921e"),
+            hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
             cs.ibc_store_address
         );
         assert_eq!(

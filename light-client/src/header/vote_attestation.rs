@@ -62,6 +62,14 @@ impl VoteAttestation {
             voted_addr.push(bls_pub_key);
         }
 
+        let required = Self::ceil_div(validators.len() * 2, 3);
+        if voted_addr.len() < required {
+            return Err(Error::InsufficientValidatorCount(
+                voted_addr.len(),
+                required,
+            ));
+        }
+
         let app_sig = milagro_bls::AggregateSignature::from_bytes(&self.app_signature)
             .map_err(Error::UnexpectedBLSSignature)?;
         let pub_keys_ref: Vec<&PublicKey> = voted_addr.iter().collect();
@@ -69,6 +77,13 @@ impl VoteAttestation {
             return Err(Error::FailedToVerifyBLSSignature(pub_keys_ref.len()));
         }
         Ok(())
+    }
+
+    fn ceil_div(x: usize, y: usize) -> usize {
+        if y == 0 {
+            return 0;
+        }
+        (x + y - 1) / y
     }
 }
 
@@ -132,6 +147,7 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 }
 #[cfg(test)]
 mod test {
+    use crate::errors::Error;
     use crate::header::testdata::{
         header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
     };
@@ -149,7 +165,7 @@ mod test {
             header_31297202(),
         ];
         for block in blocks.iter() {
-            if let Err(e) = block.vote_attestation().unwrap().verify(&validators) {
+            if let Err(e) = block.get_vote_attestation().unwrap().verify(&validators) {
                 unreachable!("{} {:?}", block.number, e);
             }
         }
@@ -223,5 +239,21 @@ mod test {
             data.hash(),
             hex!("89808e1d31999d5165e870f772099951da583776730f5dae0754e277a5ff3f80")
         );
+    }
+
+    #[test]
+    fn test_error_verify() {
+        let mut validators = validators_in_31297000();
+        validators.extend(validators.clone());
+        let header = header_31297199();
+        let vote = header.get_vote_attestation().unwrap();
+        let err = vote.verify(&validators).unwrap_err();
+        match err {
+            Error::InsufficientValidatorCount(actual, required) => {
+                assert_eq!(actual, 17);
+                assert_eq!(required, 28); //42 * 2 / 3
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
     }
 }
