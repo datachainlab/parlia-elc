@@ -273,10 +273,9 @@ impl ParliaLightClient {
         previous_target_validators: &ValidatorSet,
     ) -> Result<(), LightClientError> {
         let epoch_count = target.revision_height() / BLOCKS_PER_EPOCH;
-        let previous_epoch = Height::new(
-            target.revision_number(),
-            u64::max(epoch_count - 1, 0) * BLOCKS_PER_EPOCH,
-        );
+        let previous_epoch = if epoch_count == 0 { 0 } else { epoch_count - 1 };
+        let previous_epoch =
+            Height::new(target.revision_number(), previous_epoch * BLOCKS_PER_EPOCH);
         let current_epoch = Height::new(target.revision_number(), epoch_count * BLOCKS_PER_EPOCH);
         let previous_cs: ConsensusState = ctx
             .consensus_state(client_id, &previous_epoch)?
