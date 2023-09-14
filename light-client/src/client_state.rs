@@ -6,14 +6,14 @@ use lcp_types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
-use parlia_ibc_proto::ibc::lightclients::parlia::v1::{ClientState as RawClientState, Fraction};
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
 
 use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::misc::{new_height, Address, ChainId, Hash};
+use crate::misc::{keccak_256_vec, new_height, Address, ChainId, Hash};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
@@ -27,7 +27,6 @@ pub struct ClientState {
     pub ibc_commitments_slot: Hash,
 
     ///Light Client parameters
-    pub trust_level: Fraction,
     pub trusting_period: Duration,
 
     /// State
@@ -71,13 +70,14 @@ impl ClientState {
             &new_client_state.ibc_store_address,
         )?;
 
+        let new_validators = header.new_validators()?;
         let new_consensus_state = ConsensusState {
             state_root: account
                 .storage_root
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validators_hash: header.new_validators_hash(),
+            validators_hash: keccak_256_vec(&new_validators),
         };
 
         Ok((new_client_state, new_consensus_state))
@@ -139,17 +139,6 @@ impl TryFrom<RawClientState> for ClientState {
             .try_into()
             .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
 
-        let trust_level = {
-            let trust_level: Fraction = value.trust_level.ok_or(Error::MissingTrustLevel)?;
-            // see https://github.com/tendermint/tendermint/blob/main/light/verifier.go#L197
-            let numerator = trust_level.numerator;
-            let denominator = trust_level.denominator;
-            if numerator * 3 < denominator || numerator > denominator || denominator == 0 {
-                return Err(Error::InvalidTrustThreshold(numerator, denominator));
-            }
-            trust_level
-        };
-
         let trusting_period = Duration::from_secs(value.trusting_period);
         let frozen = value.frozen;
 
@@ -158,7 +147,6 @@ impl TryFrom<RawClientState> for ClientState {
             ibc_store_address,
             ibc_commitments_slot,
             latest_height,
-            trust_level,
             trusting_period,
             frozen,
         })
@@ -175,7 +163,6 @@ impl From<ClientState> for RawClientState {
                 revision_number: value.latest_height.revision_number(),
                 revision_height: value.latest_height.revision_height(),
             }),
-            trust_level: Some(value.trust_level),
             trusting_period: value.trusting_period.as_secs(),
             frozen: value.frozen.to_owned(),
         }
@@ -231,20 +218,17 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651248088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a200000000000000000000000000000000000000000000000000000000000000000220310c8012a04080110033064").to_vec();
+        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124308381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510c09b8f0f2864").to_vec();
         let any: lcp_types::Any = relayer_client_state_protobuf.try_into().unwrap();
         let cs: ClientState = any.try_into().unwrap();
 
-        // Check if the result are same as relayer's one
         assert_eq!(0, cs.latest_height.revision_number());
-        assert_eq!(200, cs.latest_height.revision_height());
-        assert_eq!(9999, cs.chain_id.id());
+        assert_eq!(31706560, cs.latest_height.revision_height());
+        assert_eq!(56, cs.chain_id.id());
         assert_eq!(0, cs.chain_id.version());
         assert_eq!(100, cs.trusting_period.as_secs());
-        assert_eq!(1, cs.trust_level.numerator);
-        assert_eq!(3, cs.trust_level.denominator);
         assert_eq!(
-            hex!("aa43d337145e8930d01cb4e60abf6595c692921e"),
+            hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
             cs.ibc_store_address
         );
         assert_eq!(

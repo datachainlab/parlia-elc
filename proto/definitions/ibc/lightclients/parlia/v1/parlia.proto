@@ -6,11 +6,6 @@ option (gogoproto.goproto_getters_all) = false;
 import "gogoproto/gogo.proto";
 import "ibc/core/client/v1/client.proto";
 
-message Fraction {
-  uint64 numerator = 1;
-  uint64 denominator = 2;
-}
-
 message ClientState {
   uint64 chain_id = 1;
 
@@ -19,10 +14,9 @@ message ClientState {
 
   ibc.core.client.v1.Height latest_height = 4;
 
-  Fraction trust_level = 5;
-  uint64 trusting_period = 6;
+  uint64 trusting_period = 5;
 
-  bool frozen = 7;
+  bool frozen = 6;
 }
 
 message ETHHeader {
@@ -30,11 +24,13 @@ message ETHHeader {
 }
 
 message Header {
-  repeated ETHHeader headers = 1;
-  ibc.core.client.v1.Height trusted_height = 2;
-  bytes account_proof = 3;
-  repeated bytes previous_validators = 4;
-  repeated bytes current_validators = 5;
+  ETHHeader target = 1;
+  ETHHeader parent = 2;
+  ibc.core.client.v1.Height trusted_height = 3;
+  bytes account_proof = 4;
+  repeated bytes parent_validators = 5;
+  repeated bytes target_validators = 6;
+  repeated bytes previous_target_validators = 7;
 }
 
 message ConsensusState {

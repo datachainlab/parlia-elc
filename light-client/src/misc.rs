@@ -55,6 +55,13 @@ impl<'a> TryFrom<Rlp<'a>> for Account {
     }
 }
 
+pub fn rlp_as_val<T: Decodable>(rlp: &Rlp, index: usize) -> Result<T, Error> {
+    rlp.at(index)
+        .map_err(Error::RLPDecodeError)?
+        .as_val()
+        .map_err(Error::RLPDecodeError)
+}
+
 /// RlpIterator returns an error instead of None on next() unlike the rlp::RlpIterator.
 pub(crate) struct RlpIterator<'a> {
     rlp: Rlp<'a>,
