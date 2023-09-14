@@ -24,7 +24,7 @@ impl VoteAddressBitSet {
                 .collect(),
         }
     }
-    pub fn test(&self, index: usize) -> bool {
+    pub fn get(&self, index: usize) -> bool {
         if index >= self.vote_address_set.len() {
             return false;
         }
@@ -53,7 +53,7 @@ impl VoteAttestation {
         }
         let mut voted_addr = Vec::new();
         for (i, val) in validators.iter().enumerate() {
-            if !self.vote_address_set.test(i) {
+            if !self.vote_address_set.get(i) {
                 continue;
             }
             let bls_pub_key_bytes = &val[val.len() - BLS_PUBKEY_LENGTH..];
