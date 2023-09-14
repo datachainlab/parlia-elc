@@ -46,6 +46,7 @@ pub enum Error {
     // Header error
     MissingParentTrustedValidators(BlockNumber),
     MissingTargetTrustedValidators(BlockNumber),
+    MissingPreviousTargetTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
     OutOfTrustingPeriod(Time, Time),
     HeaderFromFuture(Time, core::time::Duration, Time),
@@ -79,8 +80,9 @@ pub enum Error {
     InvalidProofFormatError(Vec<u8>),
     InsufficientParentValidators(usize, usize),
     InsufficientTargetValidators(usize, usize),
-    UnexpectedTargetValidatorsHash(Height, u64, Hash, Hash),
-    UnexpectedParentValidatorsHash(Height, u64, Hash, Hash),
+    UnexpectedTargetValidatorsHash(Height, usize, Hash, Hash),
+    UnexpectedParentValidatorsHash(Height, usize, Hash, Hash),
+    UnexpectedPreviousTargetValidatorsHash(Height, usize, Hash, Hash),
     MissingValidatorInEpochBlock(BlockNumber),
 
     // Vote attestation
@@ -90,6 +92,7 @@ pub enum Error {
     UnexpectedBLSSignature(milagro_bls::AmclError),
     UnexpectedBLSPubkey(milagro_bls::AmclError),
     FailedToVerifyBLSSignature(usize),
+    InsufficientValidatorCount(usize, usize),
     UnexpectedVoteAddressCount(usize, usize),
     UnexpectedBLSSignatureLength(Vec<u8>),
 
@@ -172,6 +175,13 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4
                 )
             }
+            Error::UnexpectedPreviousTargetValidatorsHash(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedPreviousTargetValidatorsHash: {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
             Error::UnexpectedMixHash(e) => write!(f, "UnexpectedMixHash: {}", e),
             Error::UnexpectedUncleHash(e) => write!(f, "UnexpectedUncleHash: {}", e),
             Error::UnexpectedDifficulty(e1, e2) => write!(f, "UnexpectedDifficulty: {} {}", e1, e2),
@@ -205,6 +215,9 @@ impl core::fmt::Display for Error {
             }
             Error::MissingTargetTrustedValidators(e) => {
                 write!(f, "MissingTargetTrustedValidators : {}", e)
+            }
+            Error::MissingPreviousTargetTrustedValidators(e) => {
+                write!(f, "MissingPreviousTargetTrustedValidators : {}", e)
             }
             Error::MissingTrustedValidatorsHeight => {
                 write!(f, "MissingTrustedValidatorsHeight")
@@ -266,6 +279,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedVoteAddressCount(e1, e2) => {
                 write!(f, "UnexpectedVoteAddressCount : {:?} {:?}", e1, e2,)
+            }
+            Error::InsufficientValidatorCount(e1, e2) => {
+                write!(f, "InsufficientValidatorCount : {:?} {:?}", e1, e2)
             }
             Error::UnexpectedBLSSignatureLength(e1) => {
                 write!(f, "UnexpectedBLSSignatureLength : {:?}", e1)

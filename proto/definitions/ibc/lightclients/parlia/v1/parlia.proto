@@ -32,13 +32,13 @@ message Header {
   bytes account_proof = 4;
   repeated bytes parent_validators = 5;
   repeated bytes target_validators = 6;
+  repeated bytes previous_target_validators = 7;
 }
 
 message ConsensusState {
   bytes state_root = 1;
   uint64 timestamp = 2;
   bytes validators_hash = 3;
-  uint64 validator_size = 4;
 }
 
 message Misbehaviour {

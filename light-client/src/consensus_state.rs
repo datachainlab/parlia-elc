@@ -21,7 +21,6 @@ pub struct ConsensusState {
     pub timestamp: Time,
     /// finalized header's validator set.Only epoch headers contain validator set
     pub validators_hash: Hash,
-    pub validators_size: u64,
 }
 
 impl ConsensusState {
@@ -49,7 +48,6 @@ impl TryFrom<RawConsensusState> for ConsensusState {
             state_root,
             timestamp,
             validators_hash,
-            validators_size: value.validator_size,
         })
     }
 }
@@ -60,7 +58,6 @@ impl From<ConsensusState> for RawConsensusState {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
             validators_hash: value.validators_hash.into(),
-            validator_size: value.validators_size,
         }
     }
 }

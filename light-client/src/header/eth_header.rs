@@ -183,7 +183,7 @@ impl ETHHeader {
         &self,
         parent: &ETHHeader,
     ) -> Result<(VoteAttestation, VoteAttestation), Error> {
-        let target_vote_attestation = self.vote_attestation()?;
+        let target_vote_attestation = self.get_vote_attestation()?;
         let target_data = &target_vote_attestation.data;
 
         // The target block should be direct parent.
@@ -197,7 +197,7 @@ impl ETHHeader {
         }
 
         // The source block should be the highest justified block.
-        let parent_vote_attestation = parent.vote_attestation()?;
+        let parent_vote_attestation = parent.get_vote_attestation()?;
         let parent_data = &parent_vote_attestation.data;
         if target_data.source_number != parent_data.target_number
             || target_data.source_hash != parent_data.target_hash
@@ -212,7 +212,7 @@ impl ETHHeader {
         Ok((target_vote_attestation, parent_vote_attestation))
     }
 
-    pub fn vote_attestation(&self) -> Result<VoteAttestation, Error> {
+    pub fn get_vote_attestation(&self) -> Result<VoteAttestation, Error> {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
@@ -369,10 +369,10 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
+        //https://github.com/bnb-chain/bsc/blob/bb6bdc055d1a7f1f049c924028ad8aaf04291b3b/core/types/gen_header_rlp.go#L43
         if let Some(v) = base_fee_per_gas {
             stream.append(&v);
         }
-
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
