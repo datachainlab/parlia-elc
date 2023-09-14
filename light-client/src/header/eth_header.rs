@@ -369,10 +369,10 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
+        //https://github.com/bnb-chain/bsc/blob/bb6bdc055d1a7f1f049c924028ad8aaf04291b3b/core/types/gen_header_rlp.go#L43
         if let Some(v) = base_fee_per_gas {
             stream.append(&v);
         }
-
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
