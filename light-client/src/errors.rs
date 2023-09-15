@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
-use lcp_types::{ClientId, Height, Time, TimeError};
+use light_client::types::{ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
@@ -15,6 +15,7 @@ pub enum Error {
     LCPError(light_client::Error),
 
     // data conversion error
+    TimestampOverflowError(u128),
     TimeError(TimeError),
     RLPDecodeError(rlp::DecoderError),
     ProtoDecodeError(prost::DecodeError),
@@ -47,10 +48,12 @@ pub enum Error {
     MissingTargetTrustedValidators(BlockNumber),
     MissingPreviousTargetTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
-    HeaderNotWithinTrustingPeriod(Time, Time),
+    OutOfTrustingPeriod(Time, Time),
+    HeaderFromFuture(Time, core::time::Duration, Time),
     InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
     MissingTrustingPeriod,
+    NegativeMaxClockDrift,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     InsufficientHeaderToVerify(BlockNumber, usize, usize),
@@ -106,6 +109,7 @@ impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Error::LCPError(e) => write!(f, "LCPError: {}", e),
+            Error::TimestampOverflowError(e) => write!(f, "TimestampOverflowError: {}", e),
             Error::TimeError(e) => write!(f, "TimeError: {}", e),
             Error::RLPDecodeError(e) => write!(f, "RLPDecodeError : {}", e),
             Error::ProtoDecodeError(e) => write!(f, "ProtoDecodeError: {}", e),
@@ -127,8 +131,11 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedStorageRoot(e) => write!(f, "UnexpectedStorageRoot: {:?}", e),
             Error::UnexpectedCommitmentValue(e) => write!(f, "UnexpectedCommitmentValue: {:?}", e),
-            Error::HeaderNotWithinTrustingPeriod(e1, e2) => {
-                write!(f, "HeaderNotWithinTrustingPeriod: {} {}", e1, e2)
+            Error::OutOfTrustingPeriod(e1, e2) => {
+                write!(f, "OutOfTrustingPeriod: {} {}", e1, e2)
+            }
+            Error::HeaderFromFuture(e1, e2, e3) => {
+                write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
             }
             Error::InvalidTrustThreshold(e1, e2) => {
                 write!(f, "InvalidTrustThreshold: {} {}", e1, e2)
@@ -199,6 +206,7 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedHeaderRelation: {} {}", e1, e2)
             }
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
+            Error::NegativeMaxClockDrift => write!(f, "NegativeMaxClockDrift"),
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),

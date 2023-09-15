@@ -15,7 +15,7 @@ pub mod header;
 pub mod misbehaviour;
 mod misc;
 
-pub fn register_implementations(registry: &mut dyn light_client_registry::LightClientRegistry) {
+pub fn register_implementations(registry: &mut dyn light_client::LightClientRegistry) {
     registry
         .put_light_client(
             alloc::string::String::from(client_state::PARLIA_CLIENT_STATE_TYPE_URL),

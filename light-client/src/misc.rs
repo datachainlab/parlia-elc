@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use lcp_types::{Height, Time};
+use light_client::types::{Height, Time};
 use patricia_merkle_trie::keccak::keccak_256;
 use rlp::{Decodable, Rlp};
 
@@ -91,7 +91,11 @@ pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
 }
 
 pub fn new_timestamp(second: u64) -> Result<Time, Error> {
-    Time::from_unix_timestamp_secs(second).map_err(Error::TimeError)
+    let second = second as u128;
+    let nanos = second
+        .checked_mul(1_000_000_000)
+        .ok_or_else(|| Error::TimestampOverflowError(second))?;
+    Time::from_unix_timestamp_nanos(nanos).map_err(Error::TimeError)
 }
 
 pub fn keccak_256_vec(targets: &[Vec<u8>]) -> Hash {
