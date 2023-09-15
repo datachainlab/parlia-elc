@@ -67,7 +67,7 @@ pub struct Header {
     /// validator set for parent
     parent_validators: Vec<Vec<u8>>,
     /// previous epoch validator for target
-    previous_target_validators: ValidatorSet,
+    previous_target_validators: Vec<Vec<u8>>,
 }
 ```
 
