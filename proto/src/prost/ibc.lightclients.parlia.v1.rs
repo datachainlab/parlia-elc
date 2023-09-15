@@ -1,4 +1,3 @@
-#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientState {
@@ -12,19 +11,23 @@ pub struct ClientState {
     pub latest_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(uint64, tag = "5")]
-    pub trusting_period: u64,
-    #[prost(bool, tag = "6")]
+    #[prost(message, optional, tag = "5")]
+    pub trusting_period: ::core::option::Option<
+        super::super::super::super::google::protobuf::Duration,
+    >,
+    #[prost(message, optional, tag = "6")]
+    pub max_clock_drift: ::core::option::Option<
+        super::super::super::super::google::protobuf::Duration,
+    >,
+    #[prost(bool, tag = "7")]
     pub frozen: bool,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EthHeader {
     #[prost(bytes = "vec", tag = "1")]
     pub header: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Header {
@@ -47,7 +50,6 @@ pub struct Header {
         ::prost::alloc::vec::Vec<u8>,
     >,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusState {
@@ -58,7 +60,6 @@ pub struct ConsensusState {
     #[prost(bytes = "vec", tag = "3")]
     pub validators_hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(::serde::Serialize, ::serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Misbehaviour {

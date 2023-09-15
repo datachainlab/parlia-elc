@@ -1,6 +1,6 @@
 use core::str::FromStr;
 
-use lcp_types::{Any, ClientId};
+use light_client::types::{Any, ClientId};
 use prost::Message;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -11,7 +11,7 @@ use crate::header::Header;
 
 pub const PARLIA_MISBEHAVIOUR_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Misbehaviour";
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Misbehaviour {
     pub client_id: ClientId,
     pub header_1: Header,

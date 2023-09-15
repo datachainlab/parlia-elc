@@ -1,7 +1,6 @@
-use alloc::borrow::ToOwned as _;
 use alloc::vec::Vec;
 
-use lcp_types::{Any, Height, Time};
+use light_client::types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
@@ -24,9 +23,8 @@ mod eth_header;
 pub(crate) mod validator_set;
 mod vote_attestation;
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Header {
-    inner: RawHeader,
     account_proof: Vec<u8>,
     target: ETHHeader,
     parent: ETHHeader,
@@ -106,7 +104,6 @@ impl TryFrom<RawHeader> for Header {
     type Error = Error;
 
     fn try_from(value: RawHeader) -> Result<Header, Self::Error> {
-        let inner = value.clone();
         let trusted_height = value
             .trusted_height
             .as_ref()
@@ -145,11 +142,8 @@ impl TryFrom<RawHeader> for Header {
             return Err(Error::MissingPreviousTargetTrustedValidators(target.number));
         }
 
-        let account_proof = inner.account_proof.clone();
-
         Ok(Self {
-            inner,
-            account_proof,
+            account_proof: value.account_proof,
             target,
             parent,
             trusted_height,
@@ -157,12 +151,6 @@ impl TryFrom<RawHeader> for Header {
             target_validators,
             previous_target_validators,
         })
-    }
-}
-
-impl From<Header> for RawHeader {
-    fn from(value: Header) -> Self {
-        value.inner
     }
 }
 
@@ -178,31 +166,11 @@ impl TryFrom<IBCAny> for Header {
     }
 }
 
-impl From<Header> for Any {
-    fn from(value: Header) -> Self {
-        IBCAny::from(value).into()
-    }
-}
-
 impl TryFrom<Any> for Header {
     type Error = Error;
 
     fn try_from(any: Any) -> Result<Self, Self::Error> {
         IBCAny::from(any).try_into()
-    }
-}
-
-impl From<Header> for IBCAny {
-    fn from(value: Header) -> Self {
-        let value: RawHeader = value.into();
-        let mut v = Vec::new();
-        value
-            .encode(&mut v)
-            .expect("encoding to `Any` from `ParliaHeader`");
-        Self {
-            type_url: PARLIA_HEADER_TYPE_URL.to_owned(),
-            value: v,
-        }
     }
 }
 
