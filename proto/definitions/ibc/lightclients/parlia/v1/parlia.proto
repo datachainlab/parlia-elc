@@ -5,11 +5,7 @@ option (gogoproto.goproto_getters_all) = false;
 
 import "gogoproto/gogo.proto";
 import "ibc/core/client/v1/client.proto";
-
-message Fraction {
-  uint64 numerator = 1;
-  uint64 denominator = 2;
-}
+import "google/protobuf/duration.proto";
 
 message ClientState {
   uint64 chain_id = 1;
@@ -19,8 +15,8 @@ message ClientState {
 
   ibc.core.client.v1.Height latest_height = 4;
 
-  Fraction trust_level = 5;
-  uint64 trusting_period = 6;
+  google.protobuf.Duration trusting_period = 5 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
+  google.protobuf.Duration max_clock_drift = 6 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
   bool frozen = 7;
 }
@@ -30,15 +26,23 @@ message ETHHeader {
 }
 
 message Header {
-  repeated ETHHeader headers = 1;
-  ibc.core.client.v1.Height trusted_height = 2;
-  bytes account_proof = 3;
-  repeated bytes previous_validators = 4;
-  repeated bytes current_validators = 5;
+  ETHHeader target = 1;
+  ETHHeader parent = 2;
+  ibc.core.client.v1.Height trusted_height = 3;
+  bytes account_proof = 4;
+  repeated bytes parent_validators = 5;
+  repeated bytes target_validators = 6;
+  repeated bytes previous_target_validators = 7;
 }
 
 message ConsensusState {
   bytes state_root = 1;
   uint64 timestamp = 2;
   bytes validators_hash = 3;
+}
+
+message Misbehaviour {
+  string client_id = 1;
+  Header header_1 = 2;
+  Header header_2 = 3;
 }

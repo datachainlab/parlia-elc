@@ -12,10 +12,4 @@ fn main() {
         )
         .unwrap();
     }
-    {
-        use std::io::Write;
-        let mut file = std::fs::File::create("src/header/config.rs").unwrap();
-        let luban_fork = std::env::var("BSC_LUBAN_FORK").unwrap_or_else(|_| "29295050".to_string());
-        writeln!(file, "pub const LUBAN_FORK: u64 = {};", luban_fork).unwrap();
-    }
 }
