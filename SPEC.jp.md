@@ -12,6 +12,9 @@ BSC は、コンセンサスのために DPoS と PoA を組み合わせるこ�
 
 参考：https://docs.bnbchain.org/docs/learn/consensus
 
+# Target Height
+このクライアントはBEP126 Fast Finality Mechanismを前提としています。そのため、29020050のブロックのみで利用可能です。
+
 # Technical Specification
 
 ## ClientState
@@ -24,6 +27,7 @@ pub struct ClientState {
     pub ibc_store_address: Address,
     pub ibc_commitments_slot: Hash,
     pub trusting_period: Duration,
+    pub max_clock_drift: Duration,
     pub latest_height: Height,
     pub frozen: bool,
 }
@@ -41,8 +45,7 @@ pub struct ConsensusState {
     pub timestamp: Time,
     /// finalized header's validator set
     /// only epoch headers contain validator set
-    pub validators_hash: Hash,
-    pub validators_size: u64,
+    pub validators_hash: Hash
 }
 ```
 
@@ -63,6 +66,8 @@ pub struct Header {
     target_validators: Vec<Vec<u8>>,
     /// validator set for parent
     parent_validators: Vec<Vec<u8>>,
+    /// previous epoch validator for target
+    previous_target_validators: ValidatorSet,
 }
 ```
 
