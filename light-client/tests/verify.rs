@@ -1,10 +1,10 @@
 mod test {
     use std::collections::BTreeMap;
     use std::num::ParseIntError;
-    use hex_literal::hex;
-    use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
+
     use light_client::commitments::Commitment;
     use light_client::types::{Any, ClientId, Height, Time};
+    use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
     use parlia_ibc_lc::client::ParliaLightClient;
 
     struct MockClientReader {
@@ -36,9 +36,9 @@ mod test {
 
     impl ClientReader for MockClientReader {
         fn client_state(&self, client_id: &ClientId) -> Result<Any, light_client::Error> {
-            self.client_state.clone().ok_or_else(|| {
-                light_client::Error::client_state_not_found(client_id.clone())
-            })
+            self.client_state
+                .clone()
+                .ok_or_else(|| light_client::Error::client_state_not_found(client_id.clone()))
         }
 
         fn consensus_state(
@@ -46,19 +46,18 @@ mod test {
             client_id: &ClientId,
             height: &Height,
         ) -> Result<Any, light_client::Error> {
-           let v = self.consensus_state.get(height).ok_or_else(|| {
-                    light_client::Error::consensus_state_not_found(client_id.clone(), *height)
-           })?;
-           Ok(v.clone())
+            let v = self.consensus_state.get(height).ok_or_else(|| {
+                light_client::Error::consensus_state_not_found(client_id.clone(), *height)
+            })?;
+            Ok(v.clone())
         }
     }
-
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct MsgCreateClient {
         pub client_state: String,
-        pub consensus_state: String
+        pub consensus_state: String,
     }
 
     impl MsgCreateClient {
@@ -87,32 +86,43 @@ mod test {
         verify("./tests/create_mainnet.json", "./tests/update_mainnet.json");
     }
 
-    fn verify(create_path: &'static str, update_path: &'static str ){
-        let msg_create_client= std::fs::read(create_path).unwrap();
-        let msg_create_client: MsgCreateClient = serde_json::from_slice(&msg_create_client).unwrap();
-        let msg_update_client= std::fs::read(update_path).unwrap();
-        let msg_update_client: MsgUpdateClients = serde_json::from_slice(&msg_update_client).unwrap();
+    #[test]
+    fn test_verify_testnet() {
+        verify("./tests/create_testnet.json", "./tests/update_testnet.json");
+    }
+
+    fn verify(create_path: &'static str, update_path: &'static str) {
+        let msg_create_client = std::fs::read(create_path).unwrap();
+        let msg_create_client: MsgCreateClient =
+            serde_json::from_slice(&msg_create_client).unwrap();
+        let msg_update_client = std::fs::read(update_path).unwrap();
+        let msg_update_client: MsgUpdateClients =
+            serde_json::from_slice(&msg_update_client).unwrap();
+
+        assert!(msg_update_client.data.len() >= 10);
 
         let mut ctx = MockClientReader {
             client_state: None,
-            consensus_state: BTreeMap::default()
+            consensus_state: BTreeMap::default(),
         };
         let client = ParliaLightClient::default();
         let any_client_state = msg_create_client.any_client_state();
         let any_cons_state = msg_create_client.any_consensus_state();
-        let result = client.create_client(&ctx, any_client_state, any_cons_state.clone()).unwrap();
+        let result = client
+            .create_client(&ctx, any_client_state, any_cons_state.clone())
+            .unwrap();
         match result.commitment {
             Commitment::UpdateClient(upd) => {
                 println!("height = {}", upd.new_height);
                 ctx.client_state = upd.new_state;
                 ctx.consensus_state.insert(upd.new_height, any_cons_state);
-            },
-             _ => unreachable!("invalid commitment")
+            }
+            _ => unreachable!("invalid commitment"),
         }
 
         let client_id = ClientId::new(client.client_type().as_str(), 0).unwrap();
         for update in msg_update_client.data {
-            let any : Any = decode_hex(&update.header).try_into().unwrap();
+            let any: Any = decode_hex(&update.header).try_into().unwrap();
             let result = client.update_client(&ctx, client_id.clone(), any);
             match result {
                 Err(err) => {
@@ -121,14 +131,15 @@ mod test {
                 Ok(result) => {
                     println!("update height = {}", result.height);
                     ctx.client_state = Some(result.new_any_client_state);
-                    ctx.consensus_state.insert(result.height, result.new_any_consensus_state);
+                    ctx.consensus_state
+                        .insert(result.height, result.new_any_consensus_state);
                 }
             }
         }
     }
 
     fn decode_hex(s: &str) -> Vec<u8> {
-        let v: Result<Vec<u8>, ParseIntError>  = (0..s.len())
+        let v: Result<Vec<u8>, ParseIntError> = (0..s.len())
             .step_by(2)
             .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
             .collect();
