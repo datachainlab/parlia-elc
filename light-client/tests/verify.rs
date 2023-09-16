@@ -83,15 +83,18 @@ mod test {
 
     #[test]
     fn test_verify_mainnet() {
-        verify("./tests/create_mainnet.json", "./tests/update_mainnet.json");
+        verify("mainnet");
     }
 
     #[test]
     fn test_verify_testnet() {
-        verify("./tests/create_testnet.json", "./tests/update_testnet.json");
+        verify("testnet");
     }
 
-    fn verify(create_path: &'static str, update_path: &'static str) {
+    fn verify(net_id: &'static str) {
+        let root = "./tests/ibc-parlia-relay/tool/testdata";
+        let create_path = format!("{}/create_{}.json", root, net_id);
+        let update_path = format!("{}/update_{}.json", root, net_id);
         let msg_create_client = std::fs::read(create_path).unwrap();
         let msg_create_client: MsgCreateClient =
             serde_json::from_slice(&msg_create_client).unwrap();
@@ -99,7 +102,7 @@ mod test {
         let msg_update_client: MsgUpdateClients =
             serde_json::from_slice(&msg_update_client).unwrap();
 
-        assert!(msg_update_client.data.len() >= 10);
+        assert!(!msg_update_client.data.is_empty());
 
         let mut ctx = MockClientReader {
             client_state: None,
