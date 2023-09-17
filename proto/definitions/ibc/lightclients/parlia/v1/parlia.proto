@@ -27,12 +27,14 @@ message ETHHeader {
 
 message Header {
   ETHHeader target = 1;
-  ETHHeader parent = 2;
-  ibc.core.client.v1.Height trusted_height = 3;
-  bytes account_proof = 4;
-  repeated bytes parent_validators = 5;
+  ETHHeader child = 2;
+  ETHHeader grand_child = 3;
+  ibc.core.client.v1.Height trusted_height = 4;
+  bytes account_proof = 5;
   repeated bytes target_validators = 6;
-  repeated bytes previous_target_validators = 7;
+  repeated bytes child_validators = 7;
+  repeated bytes grand_child_validators = 8;
+  repeated bytes previous_target_validators = 9;
 }
 
 message ConsensusState {

@@ -34,18 +34,22 @@ pub struct Header {
     #[prost(message, optional, tag = "1")]
     pub target: ::core::option::Option<EthHeader>,
     #[prost(message, optional, tag = "2")]
-    pub parent: ::core::option::Option<EthHeader>,
+    pub child: ::core::option::Option<EthHeader>,
     #[prost(message, optional, tag = "3")]
+    pub grand_child: ::core::option::Option<EthHeader>,
+    #[prost(message, optional, tag = "4")]
     pub trusted_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(bytes = "vec", tag = "4")]
+    #[prost(bytes = "vec", tag = "5")]
     pub account_proof: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", repeated, tag = "5")]
-    pub parent_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "6")]
     pub target_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "7")]
+    pub child_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", repeated, tag = "8")]
+    pub grand_child_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", repeated, tag = "9")]
     pub previous_target_validators: ::prost::alloc::vec::Vec<
         ::prost::alloc::vec::Vec<u8>,
     >,

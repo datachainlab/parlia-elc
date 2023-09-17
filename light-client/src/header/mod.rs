@@ -67,7 +67,8 @@ impl Header {
     }
 
     pub fn new_validator_set_in_child(&self) -> Result<ValidatorSet, Error> {
-        Ok(self.child
+        Ok(self
+            .child
             .get_validator_bytes()
             .ok_or_else(|| Error::UnexpectedChildNewValidatorSet(self.child.number))?
             .into())
@@ -157,8 +158,7 @@ impl TryFrom<RawHeader> for Header {
         if child_validators.validators.is_empty() {
             return Err(Error::MissingChildTrustedValidators(child.number));
         }
-        let grand_child_validators: ValidatorSet =
-            value.grand_child_validators.clone().into();
+        let grand_child_validators: ValidatorSet = value.grand_child_validators.clone().into();
         if grand_child_validators.validators.is_empty() {
             return Err(Error::MissingGrandChildTrustedValidators(target.number));
         }

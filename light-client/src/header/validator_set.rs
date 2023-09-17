@@ -1,4 +1,3 @@
-use crate::errors::Error;
 use alloc::vec::Vec;
 
 use crate::misc::{keccak_256_vec, Hash, Validators};

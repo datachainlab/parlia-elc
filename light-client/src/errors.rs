@@ -298,32 +298,56 @@ impl core::fmt::Display for Error {
             Error::UnexpectedChildNewValidatorSet(e1) => {
                 write!(f, "UnexpectedChildNewValidatorSet : {:?}", e1)
             }
-            Error::UnexpectedValidatorSetC1_1(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedValidatorSetC1_1 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            Error::UnexpectedValidatorSetC1_1(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedValidatorSetC1_1 : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedValidatorSetC1_2(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedValidatorSetC1_2 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            Error::UnexpectedValidatorSetC1_2(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedValidatorSetC1_2 : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedValidatorSetC1_3(e1,e2,e3) => {
+            Error::UnexpectedValidatorSetC1_3(e1, e2, e3) => {
                 write!(f, "UnexpectedValidatorSetC1_3 : {:?} {:?} {:?}", e1, e2, e3)
             }
-            Error::UnexpectedValidatorSetC2_1(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedValidatorSetC2_1 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            Error::UnexpectedValidatorSetC2_1(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedValidatorSetC2_1 : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedValidatorSetC2_2(e1,e2,e3) => {
+            Error::UnexpectedValidatorSetC2_2(e1, e2, e3) => {
                 write!(f, "UnexpectedValidatorSetC2_2 : {:?} {:?} {:?}", e1, e2, e3)
             }
-            Error::UnexpectedValidatorSetC3_1(e1,e2,e3) => {
+            Error::UnexpectedValidatorSetC3_1(e1, e2, e3) => {
                 write!(f, "UnexpectedValidatorSetC3_1 : {:?} {:?} {:?}", e1, e2, e3)
             }
-            Error::UnexpectedValidatorSetC3_2(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedValidatorSetC3_2 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            Error::UnexpectedValidatorSetC3_2(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedValidatorSetC3_2 : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::UnexpectedValidatorSetC4(e1,e2,e3,e4,e5) => {
-                write!(f, "UnexpectedValidatorSetC4 : {:?} {:?} {:?} {:?} {:?}", e1, e2, e3, e4, e5)
+            Error::UnexpectedValidatorSetC4(e1, e2, e3, e4, e5) => {
+                write!(
+                    f,
+                    "UnexpectedValidatorSetC4 : {:?} {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4, e5
+                )
             }
-            Error::UnexpectedHeaderVoteRelation(e1,e2,e3,e4) => {
-                write!(f, "UnexpectedHeaderVoteRelation : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            Error::UnexpectedHeaderVoteRelation(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedHeaderVoteRelation : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
         }
     }

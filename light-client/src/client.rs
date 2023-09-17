@@ -20,10 +20,9 @@ use crate::commitment::{
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::constant::BLOCKS_PER_EPOCH;
-use crate::header::validator_set::ValidatorSet;
+
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::misc::Validators;
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -327,15 +326,13 @@ impl ParliaLightClient {
                     )
                     .into());
                 }
-            } else {
-                if current_cs.validators_hash != grand_child_validators.hash {
-                    return Err(Error::UnexpectedValidatorSetC1_3(
-                        target,
-                        current_cs.validators_hash,
-                        grand_child_validators.hash,
-                    )
-                    .into());
-                }
+            } else if current_cs.validators_hash != grand_child_validators.hash {
+                return Err(Error::UnexpectedValidatorSetC1_3(
+                    target,
+                    current_cs.validators_hash,
+                    grand_child_validators.hash,
+                )
+                .into());
             }
         } else if target.revision_height() == checkpoint - 1 {
             let current_cs =
@@ -381,20 +378,18 @@ impl ParliaLightClient {
                 )
                 .into());
             }
-        } else {
-            if previous_cs.validators_hash != target_validators.hash
-                || previous_cs.validators_hash != child_validators.hash
-                || previous_cs.validators_hash != grand_child_validators.hash
-            {
-                return Err(Error::UnexpectedValidatorSetC4(
-                    target,
-                    previous_cs.validators_hash,
-                    target_validators.hash,
-                    child_validators.hash,
-                    grand_child_validators.hash,
-                )
-                .into());
-            }
+        } else if previous_cs.validators_hash != target_validators.hash
+            || previous_cs.validators_hash != child_validators.hash
+            || previous_cs.validators_hash != grand_child_validators.hash
+        {
+            return Err(Error::UnexpectedValidatorSetC4(
+                target,
+                previous_cs.validators_hash,
+                target_validators.hash,
+                child_validators.hash,
+                grand_child_validators.hash,
+            )
+            .into());
         }
         Ok(())
     }
