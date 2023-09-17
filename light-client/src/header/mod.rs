@@ -27,9 +27,11 @@ mod vote_attestation;
 pub struct Header {
     account_proof: Vec<u8>,
     target: ETHHeader,
-    parent: ETHHeader,
+    child: ETHHeader,
+    grand_child: ETHHeader,
     trusted_height: Height,
-    parent_validators: ValidatorSet,
+    grand_child_validators: ValidatorSet,
+    child_validators: ValidatorSet,
     target_validators: ValidatorSet,
     previous_target_validators: ValidatorSet,
 }
@@ -37,10 +39,6 @@ pub struct Header {
 impl Header {
     pub fn height(&self) -> Height {
         new_height(self.trusted_height.revision_number(), self.target.number)
-    }
-
-    pub fn parent_height(&self) -> Height {
-        new_height(self.trusted_height.revision_number(), self.parent.number)
     }
 
     pub fn timestamp(&self) -> Result<Time, Error> {
@@ -68,8 +66,18 @@ impl Header {
             .ok_or_else(|| Error::MissingValidatorInEpochBlock(self.target.number))
     }
 
-    pub fn parent_validators(&self) -> &ValidatorSet {
-        &self.parent_validators
+    pub fn new_validator_set_in_child(&self) -> Result<ValidatorSet, Error> {
+        Ok(self.child
+            .get_validator_bytes()
+            .ok_or_else(|| Error::UnexpectedChildNewValidatorSet(self.child.number))?
+            .into())
+    }
+
+    pub fn child_validators(&self) -> &ValidatorSet {
+        &self.child_validators
+    }
+    pub fn grand_child_validators(&self) -> &ValidatorSet {
+        &self.grand_child_validators
     }
 
     pub fn previous_target_validators(&self) -> &ValidatorSet {
@@ -81,16 +89,35 @@ impl Header {
     }
 
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
-        self.target.verify_cascading_fields(&self.parent)?;
-        let (target_vote_attestation, parent_vote_attestation) =
-            self.target.verify_vote_attestation(&self.parent)?;
-        target_vote_attestation.verify(&self.target_validators.validators)?;
-        parent_vote_attestation.verify(&self.parent_validators.validators)?;
+        self.grand_child.verify_cascading_fields(&self.child)?;
+        self.child.verify_cascading_fields(&self.target)?;
 
+        let (grand_child_vote_attestation, _) =
+            self.grand_child.verify_vote_attestation(&self.child)?;
+        let (child_vote_attestation, target_vote_attestation) =
+            self.child.verify_vote_attestation(&self.target)?;
+
+        if grand_child_vote_attestation.data.source_number != self.target.number
+            || grand_child_vote_attestation.data.source_hash != self.target.hash
+        {
+            return Err(Error::UnexpectedHeaderVoteRelation(
+                grand_child_vote_attestation.data.source_number,
+                grand_child_vote_attestation.data.source_hash,
+                self.target.number,
+                self.target.hash,
+            ));
+        }
+
+        grand_child_vote_attestation.verify(&self.grand_child_validators.validators)?;
+        child_vote_attestation.verify(&self.child_validators.validators)?;
+        target_vote_attestation.verify(&self.target_validators.validators)?;
+
+        self.grand_child
+            .verify_seal(&self.grand_child_validators.validators, chain_id)?;
+        self.child
+            .verify_seal(&self.child_validators.validators, chain_id)?;
         self.target
             .verify_seal(&self.target_validators.validators, chain_id)?;
-        self.parent
-            .verify_seal(&self.parent_validators.validators, chain_id)?;
 
         Ok(())
     }
@@ -114,7 +141,8 @@ impl TryFrom<RawHeader> for Header {
         );
 
         let target = ETHHeader::try_from(value.target.ok_or(Error::EmptyHeader)?)?;
-        let parent = ETHHeader::try_from(value.parent.ok_or(Error::EmptyHeader)?)?;
+        let child = ETHHeader::try_from(value.child.ok_or(Error::EmptyHeader)?)?;
+        let grand_child = ETHHeader::try_from(value.grand_child.ok_or(Error::EmptyHeader)?)?;
 
         // Ensure target height is greater than or equals to trusted height.
         let trusted_header_height = trusted_height.revision_height();
@@ -125,19 +153,21 @@ impl TryFrom<RawHeader> for Header {
             ));
         }
 
-        let parent_validators: ValidatorSet = value.parent_validators.clone().try_into()?;
-        if parent_validators.validators.is_empty() {
-            return Err(Error::MissingParentTrustedValidators(target.number));
+        let child_validators: ValidatorSet = value.child_validators.clone().into();
+        if child_validators.validators.is_empty() {
+            return Err(Error::MissingChildTrustedValidators(child.number));
         }
-
-        // Epoch header contains validator set
-        let target_validators: ValidatorSet = value.target_validators.clone().try_into()?;
+        let grand_child_validators: ValidatorSet =
+            value.grand_child_validators.clone().into();
+        if grand_child_validators.validators.is_empty() {
+            return Err(Error::MissingGrandChildTrustedValidators(target.number));
+        }
+        let target_validators: ValidatorSet = value.target_validators.clone().into();
         if target_validators.validators.is_empty() {
             return Err(Error::MissingTargetTrustedValidators(target.number));
         }
-
         let previous_target_validators: ValidatorSet =
-            value.previous_target_validators.clone().try_into()?;
+            value.previous_target_validators.clone().into();
         if previous_target_validators.validators.is_empty() {
             return Err(Error::MissingPreviousTargetTrustedValidators(target.number));
         }
@@ -145,10 +175,12 @@ impl TryFrom<RawHeader> for Header {
         Ok(Self {
             account_proof: value.account_proof,
             target,
-            parent,
+            child,
+            grand_child,
             trusted_height,
-            parent_validators,
             target_validators,
+            child_validators,
+            grand_child_validators,
             previous_target_validators,
         })
     }

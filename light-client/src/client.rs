@@ -23,6 +23,7 @@ use crate::header::constant::BLOCKS_PER_EPOCH;
 use crate::header::validator_set::ValidatorSet;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
+use crate::misc::Validators;
 
 #[derive(Default)]
 pub struct ParliaLightClient;
@@ -93,14 +94,7 @@ impl LightClient for ParliaLightClient {
         }
 
         // Ensure valid validator set
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            header.height(),
-            header.target_validators(),
-            header.parent_validators(),
-            header.previous_target_validators(),
-        )?;
+        self.verify_validator_set(ctx, &client_id, &header)?;
 
         // Create new state and ensure header is valid
         let latest_trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
@@ -210,22 +204,8 @@ impl ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            misbehaviour.header_1.height(),
-            misbehaviour.header_1.target_validators(),
-            misbehaviour.header_1.parent_validators(),
-            misbehaviour.header_1.previous_target_validators(),
-        )?;
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            misbehaviour.header_2.height(),
-            misbehaviour.header_2.target_validators(),
-            misbehaviour.header_2.parent_validators(),
-            misbehaviour.header_2.previous_target_validators(),
-        )?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_1)?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_2)?;
 
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
         let trusted_consensus_state2 = ConsensusState::try_from(any_consensus_state2)?;
@@ -280,11 +260,13 @@ impl ParliaLightClient {
         &self,
         ctx: &dyn HostClientReader,
         client_id: &ClientId,
-        target: Height,
-        target_validators: &ValidatorSet,
-        parent_validators: &ValidatorSet,
-        previous_target_validators: &ValidatorSet,
+        header: &Header,
     ) -> Result<(), LightClientError> {
+        let target: Height = header.height();
+        let target_validators = header.target_validators();
+        let child_validators = header.child_validators();
+        let grand_child_validators = header.grand_child_validators();
+        let previous_target_validators = header.previous_target_validators();
         let epoch_count = target.revision_height() / BLOCKS_PER_EPOCH;
         let previous_epoch = if epoch_count == 0 { 0 } else { epoch_count - 1 };
         let previous_epoch =
@@ -299,7 +281,7 @@ impl ParliaLightClient {
             return Err(Error::UnexpectedPreviousTargetValidatorsHash(
                 target,
                 previous_validator_size,
-                parent_validators.hash,
+                previous_target_validators.hash,
                 previous_cs.validators_hash,
             )
             .into());
@@ -307,42 +289,112 @@ impl ParliaLightClient {
 
         let checkpoint = current_epoch.revision_height() + (previous_validator_size as u64) / 2 + 1;
 
-        // Ensure parent validators are valid
-        if checkpoint == target.revision_height() {
-            // The parent is checkpoint - 1 when the target is checkpoint
-            if previous_cs.validators_hash != parent_validators.hash {
-                return Err(Error::UnexpectedParentValidatorsHash(
+        // 1.target >= checkpoint -> T = C = cval
+        //   if grand_child >= next_checkpoint -> GC = nval.
+        //   Child header is epoch in this case.
+        //   This is caused by validator size is 1.
+        //      ex) T=399, C=400, GC=401 (next_checkpoint)
+        // 2.target = checkpoint -1 -> T = pval, C = GC = cval
+        // 3.target = checkpoint -2 -> T = C = pval, GC = cval
+        // 4.target < checkpoint -2 -> T = C = GC = pval
+
+        if checkpoint >= target.revision_height() {
+            let current_cs =
+                ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch)?)?;
+            if current_cs.validators_hash != target_validators.hash
+                || current_cs.validators_hash != child_validators.hash
+            {
+                return Err(Error::UnexpectedValidatorSetC1_1(
                     target,
-                    previous_validator_size,
-                    parent_validators.hash,
-                    previous_cs.validators_hash,
+                    current_cs.validators_hash,
+                    target_validators.hash,
+                    child_validators.hash,
                 )
                 .into());
             }
-        } else if target_validators.hash != parent_validators.hash {
-            return Err(Error::UnexpectedParentValidatorsHash(
-                target,
-                previous_validator_size,
-                parent_validators.hash,
-                target_validators.hash,
-            )
-            .into());
-        }
-
-        // Ensure target validators are valid
-        let cs = if checkpoint <= target.revision_height() {
-            ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch)?)?
+            let next_checkpoint = (current_epoch.revision_height() + BLOCKS_PER_EPOCH)
+                + (target_validators.validators.len() as u64) / 2
+                + 1;
+            if target.revision_height() + 2 >= next_checkpoint {
+                // use new validator set
+                let new_validators_hash = header.new_validator_set_in_child()?.hash;
+                if new_validators_hash != grand_child_validators.hash {
+                    return Err(Error::UnexpectedValidatorSetC1_2(
+                        target,
+                        next_checkpoint,
+                        new_validators_hash,
+                        grand_child_validators.hash,
+                    )
+                    .into());
+                }
+            } else {
+                if current_cs.validators_hash != grand_child_validators.hash {
+                    return Err(Error::UnexpectedValidatorSetC1_3(
+                        target,
+                        current_cs.validators_hash,
+                        grand_child_validators.hash,
+                    )
+                    .into());
+                }
+            }
+        } else if target.revision_height() == checkpoint - 1 {
+            let current_cs =
+                ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch)?)?;
+            if current_cs.validators_hash != child_validators.hash
+                || current_cs.validators_hash != grand_child_validators.hash
+            {
+                return Err(Error::UnexpectedValidatorSetC2_1(
+                    target,
+                    current_cs.validators_hash,
+                    child_validators.hash,
+                    grand_child_validators.hash,
+                )
+                .into());
+            }
+            if previous_cs.validators_hash != target_validators.hash {
+                return Err(Error::UnexpectedValidatorSetC2_2(
+                    target,
+                    previous_cs.validators_hash,
+                    target_validators.hash,
+                )
+                .into());
+            }
+        } else if target.revision_height() == checkpoint - 2 {
+            let current_cs =
+                ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch)?)?;
+            if current_cs.validators_hash != grand_child_validators.hash {
+                return Err(Error::UnexpectedValidatorSetC3_1(
+                    target,
+                    current_cs.validators_hash,
+                    grand_child_validators.hash,
+                )
+                .into());
+            }
+            if previous_cs.validators_hash != target_validators.hash
+                || previous_cs.validators_hash != child_validators.hash
+            {
+                return Err(Error::UnexpectedValidatorSetC3_2(
+                    target,
+                    previous_cs.validators_hash,
+                    target_validators.hash,
+                    child_validators.hash,
+                )
+                .into());
+            }
         } else {
-            previous_cs
-        };
-        if cs.validators_hash != target_validators.hash {
-            return Err(Error::UnexpectedTargetValidatorsHash(
-                target,
-                previous_validator_size,
-                target_validators.hash,
-                cs.validators_hash,
-            )
-            .into());
+            if previous_cs.validators_hash != target_validators.hash
+                || previous_cs.validators_hash != child_validators.hash
+                || previous_cs.validators_hash != grand_child_validators.hash
+            {
+                return Err(Error::UnexpectedValidatorSetC4(
+                    target,
+                    previous_cs.validators_hash,
+                    target_validators.hash,
+                    child_validators.hash,
+                    grand_child_validators.hash,
+                )
+                .into());
+            }
         }
         Ok(())
     }

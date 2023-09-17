@@ -44,7 +44,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
-    MissingParentTrustedValidators(BlockNumber),
+    MissingChildTrustedValidators(BlockNumber),
+    MissingGrandChildTrustedValidators(BlockNumber),
     MissingTargetTrustedValidators(BlockNumber),
     MissingPreviousTargetTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
@@ -78,14 +79,24 @@ pub enum Error {
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
-    InsufficientParentValidators(usize, usize),
+    InsufficientChildValidators(usize, usize),
     InsufficientTargetValidators(usize, usize),
-    UnexpectedTargetValidatorsHash(Height, usize, Hash, Hash),
-    UnexpectedParentValidatorsHash(Height, usize, Hash, Hash),
     UnexpectedPreviousTargetValidatorsHash(Height, usize, Hash, Hash),
     MissingValidatorInEpochBlock(BlockNumber),
+    UnexpectedChildNewValidatorSet(BlockNumber),
+
+    // ValidatorSet
+    UnexpectedValidatorSetC1_1(Height, Hash, Hash, Hash),
+    UnexpectedValidatorSetC1_2(Height, u64, Hash, Hash),
+    UnexpectedValidatorSetC1_3(Height, Hash, Hash),
+    UnexpectedValidatorSetC2_1(Height, Hash, Hash, Hash),
+    UnexpectedValidatorSetC2_2(Height, Hash, Hash),
+    UnexpectedValidatorSetC3_1(Height, Hash, Hash),
+    UnexpectedValidatorSetC3_2(Height, Hash, Hash, Hash),
+    UnexpectedValidatorSetC4(Height, Hash, Hash, Hash, Hash),
 
     // Vote attestation
+    UnexpectedHeaderVoteRelation(BlockNumber, Hash, BlockNumber, Hash),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
@@ -161,20 +172,6 @@ impl core::fmt::Display for Error {
             Error::UnexpectedValidatorsHashSize(e) => {
                 write!(f, "UnexpectedValidatorsHashSize: {:?}", e)
             }
-            Error::UnexpectedTargetValidatorsHash(e1, e2, e3, e4) => {
-                write!(
-                    f,
-                    "UnexpectedTargetValidatorsHash: {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
-                )
-            }
-            Error::UnexpectedParentValidatorsHash(e1, e2, e3, e4) => {
-                write!(
-                    f,
-                    "UnexpectedParentValidatorsHash: {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
-                )
-            }
             Error::UnexpectedPreviousTargetValidatorsHash(e1, e2, e3, e4) => {
                 write!(
                     f,
@@ -210,8 +207,8 @@ impl core::fmt::Display for Error {
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
-            Error::MissingParentTrustedValidators(e) => {
-                write!(f, "MissingParentTrustedValidators : {}", e)
+            Error::MissingChildTrustedValidators(e) => {
+                write!(f, "MissingChildTrustedValidators : {}", e)
             }
             Error::MissingTargetTrustedValidators(e) => {
                 write!(f, "MissingTargetTrustedValidators : {}", e)
@@ -222,8 +219,8 @@ impl core::fmt::Display for Error {
             Error::MissingTrustedValidatorsHeight => {
                 write!(f, "MissingTrustedValidatorsHeight")
             }
-            Error::InsufficientParentValidators(e1, e2) => {
-                write!(f, "InsufficientParentValidators : {} {}", e1, e2)
+            Error::InsufficientChildValidators(e1, e2) => {
+                write!(f, "InsufficientChildValidators : {} {}", e1, e2)
             }
             Error::InsufficientTargetValidators(e1, e2) => {
                 write!(f, "InsufficientTargetValidators : {} {}", e1, e2)
@@ -294,6 +291,39 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedValidatorHeight(e1) => {
                 write!(f, "UnexpectedValidatorHeight : {:?}", e1)
+            }
+            Error::MissingGrandChildTrustedValidators(e1) => {
+                write!(f, "MissingGrandChildTrustedValidators : {:?}", e1)
+            }
+            Error::UnexpectedChildNewValidatorSet(e1) => {
+                write!(f, "UnexpectedChildNewValidatorSet : {:?}", e1)
+            }
+            Error::UnexpectedValidatorSetC1_1(e1,e2,e3,e4) => {
+                write!(f, "UnexpectedValidatorSetC1_1 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            }
+            Error::UnexpectedValidatorSetC1_2(e1,e2,e3,e4) => {
+                write!(f, "UnexpectedValidatorSetC1_2 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            }
+            Error::UnexpectedValidatorSetC1_3(e1,e2,e3) => {
+                write!(f, "UnexpectedValidatorSetC1_3 : {:?} {:?} {:?}", e1, e2, e3)
+            }
+            Error::UnexpectedValidatorSetC2_1(e1,e2,e3,e4) => {
+                write!(f, "UnexpectedValidatorSetC2_1 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            }
+            Error::UnexpectedValidatorSetC2_2(e1,e2,e3) => {
+                write!(f, "UnexpectedValidatorSetC2_2 : {:?} {:?} {:?}", e1, e2, e3)
+            }
+            Error::UnexpectedValidatorSetC3_1(e1,e2,e3) => {
+                write!(f, "UnexpectedValidatorSetC3_1 : {:?} {:?} {:?}", e1, e2, e3)
+            }
+            Error::UnexpectedValidatorSetC3_2(e1,e2,e3,e4) => {
+                write!(f, "UnexpectedValidatorSetC3_2 : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
+            }
+            Error::UnexpectedValidatorSetC4(e1,e2,e3,e4,e5) => {
+                write!(f, "UnexpectedValidatorSetC4 : {:?} {:?} {:?} {:?} {:?}", e1, e2, e3, e4, e5)
+            }
+            Error::UnexpectedHeaderVoteRelation(e1,e2,e3,e4) => {
+                write!(f, "UnexpectedHeaderVoteRelation : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
             }
         }
     }
