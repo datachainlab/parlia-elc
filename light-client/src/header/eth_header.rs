@@ -134,7 +134,12 @@ impl ETHHeader {
             || parent.hash != self.parent_hash.as_slice()
             || parent.timestamp >= self.timestamp
         {
-            return Err(Error::UnexpectedHeaderRelation(parent.number, self.number));
+            return Err(Error::UnexpectedHeaderRelation(
+                parent.number,
+                self.number,
+                parent.hash,
+                self.parent_hash.clone(),
+            ));
         }
 
         //Verify that the gas limit remains within allowed bounds
@@ -477,7 +482,7 @@ mod test {
         let block = header_31297201();
         let result = block.verify_cascading_fields(&parent);
         match result.unwrap_err() {
-            Error::UnexpectedHeaderRelation(parent_no, child_no) => {
+            Error::UnexpectedHeaderRelation(parent_no, child_no, _, _) => {
                 assert_eq!(parent.number, parent_no);
                 assert_eq!(block.number, child_no);
             }
