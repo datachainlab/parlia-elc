@@ -13,6 +13,6 @@ go run main.go history testnet
 
 ```sh
 cd lcp-parlia/light-client
-cargo test --package parlia-ibc-lc --test verify test::test_verify_mainnet
-cargo test --package parlia-ibc-lc --test verify test::test_verify_testnet
+cargo test --package parlia-ibc-lc --test verify test::test_verify_mainnet -- --ignored
+cargo test --package parlia-ibc-lc --test verify test::test_verify_testnet -- --ignored
 ```

@@ -1,3 +1,4 @@
+#[cfg(test)]
 mod test {
     use std::collections::BTreeMap;
     use std::num::ParseIntError;
@@ -82,11 +83,13 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn test_verify_mainnet() {
         verify("mainnet");
     }
 
     #[test]
+    #[ignore]
     fn test_verify_testnet() {
         verify("testnet");
     }
