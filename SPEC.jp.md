@@ -51,21 +51,25 @@ pub struct ConsensusState {
 
 ## Headers
 
-Headerには、提出対象のHeaderとその親のHeader、アカウント証明、信頼できる高さ、検証に使うバリデータセットが含まれます。  
+Headerには、提出対象のHeaderとその検証用のHeader、アカウント証明、信頼できる高さ、検証に使うバリデータセットが含まれます。  
 
 ```rust
 pub struct Header {
     /// target header
     target: ETHHeader,
-    /// parent of the target header
-    parent: ETHHeader,
+    /// child of the target header
+    child: ETHHeader,
+    /// grand child of the target header
+    grand_child: ETHHeader,
     /// account proof for the ibc handler
     account_proof: Vec<u8>,
     trusted_height: Height,
     /// validator set for target 
     target_validators: Vec<Vec<u8>>,
-    /// validator set for parent
-    parent_validators: Vec<Vec<u8>>,
+    /// validator set for child
+    child_validators: Vec<Vec<u8>>,
+    /// validator set for grand child
+    grand_child_validators: Vec<Vec<u8>>
     /// previous epoch validator for target
     previous_target_validators: Vec<Vec<u8>>,
 }
@@ -128,7 +132,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、提出対象Headerのtimestampとstorage rootと、epochの場合にはvalidatorSetのhashを登録します。
+* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、提出対象Headerのtimestampとstorage rootと、次のvalidatorSetのhashを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
@@ -138,19 +142,18 @@ fn update_client(
 
 ### <a name="update_consensus_state_validity"></a>ConsensusState validity predicate
 * ClientIdとHeaderのtrusted_heightに対応するConsensusStateが存在すること
-* 提出対象Headerの検証用のvalidatorSetがConsensusStateに保存されていること
-* 親Header(Header.parent)の検証用のvalidatorSetがConsensusStateに保存されていること
+* 提出対象Headerの検証用のvalidatorSetと検証用HeaderのvalidatorSetがConsensusStateに保存されていること
 * trusted_heightに対応するConsensusStateがtrusting_period期間内に作成されていること
 
 ### <a name="update_header_validity"></a>Header validity predicate
 * 提出対象Headerが、trusted_heightに対応するConsensusStateのtrusting_period期間内に生成されたものであること
 * 提出対象Headerのheightがtrusted_headerよりも高いこと
-* 提出対象Headerと親Headerの関係が正しいこと
+* 提出対象Headerと検証用Headerの関係が正しいこと
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
   - extra_dataから抽出したVoteAttesationの関係が正しいこと
-* 提出対象Headerと親Headerの署名とBLS署名が正しいこと
+* 提出対象Headerと検証用Headerの署名とBLS署名が正しいこと
 
 ## Misbehavior predicate
 
