@@ -19,8 +19,7 @@ use crate::commitment::{
 };
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::header::constant::BLOCKS_PER_EPOCH;
-use crate::header::validator_set::ValidatorSet;
+
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 
@@ -93,14 +92,8 @@ impl LightClient for ParliaLightClient {
         }
 
         // Ensure valid validator set
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            header.height(),
-            header.target_validators(),
-            header.parent_validators(),
-            header.previous_target_validators(),
-        )?;
+        // Ensure valid validator set
+        self.verify_validator_set(ctx, &client_id, &header)?;
 
         // Create new state and ensure header is valid
         let latest_trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
@@ -210,22 +203,8 @@ impl ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
 
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            misbehaviour.header_1.height(),
-            misbehaviour.header_1.target_validators(),
-            misbehaviour.header_1.parent_validators(),
-            misbehaviour.header_1.previous_target_validators(),
-        )?;
-        self.verify_validator_set(
-            ctx,
-            &client_id,
-            misbehaviour.header_2.height(),
-            misbehaviour.header_2.target_validators(),
-            misbehaviour.header_2.parent_validators(),
-            misbehaviour.header_2.previous_target_validators(),
-        )?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_1)?;
+        self.verify_validator_set(ctx, &client_id, &misbehaviour.header_2)?;
 
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
         let trusted_consensus_state2 = ConsensusState::try_from(any_consensus_state2)?;
@@ -280,67 +259,35 @@ impl ParliaLightClient {
         &self,
         ctx: &dyn HostClientReader,
         client_id: &ClientId,
-        target: Height,
-        target_validators: &ValidatorSet,
-        parent_validators: &ValidatorSet,
-        previous_target_validators: &ValidatorSet,
+        header: &Header,
     ) -> Result<(), LightClientError> {
-        let epoch_count = target.revision_height() / BLOCKS_PER_EPOCH;
-        let previous_epoch = if epoch_count == 0 { 0 } else { epoch_count - 1 };
-        let previous_epoch =
-            Height::new(target.revision_number(), previous_epoch * BLOCKS_PER_EPOCH);
-        let current_epoch = Height::new(target.revision_number(), epoch_count * BLOCKS_PER_EPOCH);
-        let previous_cs: ConsensusState = ctx
-            .consensus_state(client_id, &previous_epoch)?
-            .try_into()?;
-
-        let previous_validator_size = previous_target_validators.validators.len();
-        if previous_cs.validators_hash != previous_target_validators.hash {
-            return Err(Error::UnexpectedPreviousTargetValidatorsHash(
-                target,
-                previous_validator_size,
-                parent_validators.hash,
-                previous_cs.validators_hash,
-            )
-            .into());
-        }
-
-        let checkpoint = current_epoch.revision_height() + (previous_validator_size as u64) / 2 + 1;
-
-        // Ensure parent validators are valid
-        if checkpoint == target.revision_height() {
-            // The parent is checkpoint - 1 when the target is checkpoint
-            if previous_cs.validators_hash != parent_validators.hash {
-                return Err(Error::UnexpectedParentValidatorsHash(
-                    target,
-                    previous_validator_size,
-                    parent_validators.hash,
-                    previous_cs.validators_hash,
+        // Ensure trusted validator set is valid.
+        // If the submission target is epoch block, the validator set is included in the header and not in the consensus_state.
+        if !header.is_target_epoch() {
+            let (current_epoch_height, current_validators_hash) = header.current_epoch_validators();
+            let current_trusted_validators_hash =
+                ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch_height)?)?
+                    .validators_hash;
+            if current_validators_hash != current_trusted_validators_hash {
+                return Err(Error::UnexpectedCurrentValidatorsHash(
+                    current_epoch_height,
+                    current_validators_hash,
+                    current_trusted_validators_hash,
                 )
                 .into());
             }
-        } else if target_validators.hash != parent_validators.hash {
-            return Err(Error::UnexpectedParentValidatorsHash(
-                target,
-                previous_validator_size,
-                parent_validators.hash,
-                target_validators.hash,
-            )
-            .into());
         }
 
-        // Ensure target validators are valid
-        let cs = if checkpoint <= target.revision_height() {
-            ConsensusState::try_from(ctx.consensus_state(client_id, &current_epoch)?)?
-        } else {
-            previous_cs
-        };
-        if cs.validators_hash != target_validators.hash {
-            return Err(Error::UnexpectedTargetValidatorsHash(
-                target,
-                previous_validator_size,
-                target_validators.hash,
-                cs.validators_hash,
+        // Ensure previous trusted validator set is valid
+        let (previous_epoch_height, previous_validators_hash) = header.previous_epoch_validators();
+        let previous_trusted_validators_hash =
+            ConsensusState::try_from(ctx.consensus_state(client_id, &previous_epoch_height)?)?
+                .validators_hash;
+        if previous_validators_hash != previous_trusted_validators_hash {
+            return Err(Error::UnexpectedPreviousValidatorsHash(
+                previous_epoch_height,
+                previous_validators_hash,
+                previous_trusted_validators_hash,
             )
             .into());
         }

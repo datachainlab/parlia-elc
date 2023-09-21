@@ -1,4 +1,3 @@
-use crate::errors::Error;
 use alloc::vec::Vec;
 
 use crate::misc::{keccak_256_vec, Hash, Validators};
@@ -9,13 +8,12 @@ pub struct ValidatorSet {
     pub hash: Hash,
 }
 
-impl TryFrom<Vec<Vec<u8>>> for ValidatorSet {
-    type Error = Error;
-    fn try_from(value: Vec<Vec<u8>>) -> Result<Self, Self::Error> {
+impl From<Vec<Vec<u8>>> for ValidatorSet {
+    fn from(value: Vec<Vec<u8>>) -> Self {
         let hash = keccak_256_vec(&value);
-        Ok(Self {
+        Self {
             validators: value as Validators,
             hash,
-        })
+        }
     }
 }
