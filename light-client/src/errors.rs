@@ -55,8 +55,6 @@ pub enum Error {
     NegativeMaxClockDrift,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
-    InsufficientHeaderToVerify(BlockNumber, usize, usize),
-    InsufficientHeaderToVerifyAcrossCheckpoint(BlockNumber, u64, usize, usize, usize),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -82,6 +80,7 @@ pub enum Error {
     UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
 
     // Vote attestation
+    UnexpectedVoteRelation(BlockNumber, usize, Vec<Error>),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
@@ -141,9 +140,6 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
-            Error::InsufficientHeaderToVerify(e1, e2, e3) => {
-                write!(f, "InsufficientHeaderToVerify: {} {} {}", e1, e2, e3)
-            }
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
             }
@@ -184,13 +180,6 @@ impl core::fmt::Display for Error {
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1, e2, e3, e4, e5) => {
-                write!(
-                    f,
-                    "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
-                    e1, e2, e3, e4, e5
-                )
-            }
             Error::MissingHeader1 => write!(f, "MissingHeader1"),
             Error::MissingHeader2 => write!(f, "MissingHeader2"),
             Error::UnexpectedClientId(e1) => write!(f, "UnexpectedClientId : {}", e1),
@@ -276,6 +265,9 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?}",
                     e1, e2, e3
                 )
+            }
+            Error::UnexpectedVoteRelation(e1, e2, e3) => {
+                write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
         }
     }

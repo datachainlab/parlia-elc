@@ -589,7 +589,7 @@ mod test {
             ),
             ..Default::default()
         };
-        mock_consensus_state.insert(Height::new(0, 31923818), ConsensusState::default());
+        mock_consensus_state.insert(Height::new(0, 31923817), ConsensusState::default());
         mock_consensus_state.insert(Height::new(0, 31923800), epoch_cs);
         mock_consensus_state.insert(
             Height::new(0, 31923800 - BLOCKS_PER_EPOCH),
