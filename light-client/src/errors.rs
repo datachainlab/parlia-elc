@@ -88,7 +88,7 @@ pub enum Error {
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedBLSSignature(milagro_bls::AmclError),
-    UnexpectedBLSPubkey(milagro_bls::AmclError),
+    UnexpectedBLSPubkey(usize, milagro_bls::AmclError),
     FailedToVerifyBLSSignature(usize),
     InsufficientValidatorCount(usize, usize),
     UnexpectedVoteAddressCount(usize, usize),
@@ -234,8 +234,8 @@ impl core::fmt::Display for Error {
             Error::UnexpectedBLSSignatureLength(e1) => {
                 write!(f, "UnexpectedBLSSignatureLength : {:?}", e1)
             }
-            Error::UnexpectedBLSPubkey(e1) => {
-                write!(f, "UnexpectedBLSPubkey : {:?}", e1)
+            Error::UnexpectedBLSPubkey(e1, e2) => {
+                write!(f, "UnexpectedBLSPubkey : {:?} {:?}", e1, e2)
             }
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)

@@ -16,6 +16,7 @@ pub struct VoteAddressBitSet {
 
 impl VoteAddressBitSet {
     fn new(value: u64) -> Self {
+        let v = format!("{:b}", value);
         Self {
             vote_address_set: format!("{:b}", value)
                 .chars()
@@ -57,8 +58,8 @@ impl VoteAttestation {
                 continue;
             }
             let bls_pub_key_bytes = &val[val.len() - BLS_PUBKEY_LENGTH..];
-            let bls_pub_key =
-                PublicKey::from_bytes(bls_pub_key_bytes).map_err(Error::UnexpectedBLSPubkey)?;
+            let bls_pub_key = PublicKey::from_bytes(bls_pub_key_bytes)
+                .map_err(|e| Error::UnexpectedBLSPubkey(bls_pub_key_bytes.len(), e))?;
             voted_addr.push(bls_pub_key);
         }
 

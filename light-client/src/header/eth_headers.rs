@@ -5,6 +5,7 @@ use light_client::types::Height;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
+use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;
@@ -42,10 +43,22 @@ impl ETHHeaders {
         }
 
         // Ensure target is finalized
-        self.verify_finalized()
+        let headers_for_finalize = self.verify_finalized()?;
+
+        // Ensure BLS signature is collect
+        for h in headers_for_finalize {
+            let vote = h.get_vote_attestation()?;
+            // At the just checkpoint BLS signature uses previous validator set.
+            if h.number % BLOCKS_PER_EPOCH > checkpoint {
+                vote.verify(current_validators)?;
+            } else {
+                vote.verify(previous_validators)?;
+            }
+        }
+        Ok(())
     }
 
-    fn verify_finalized(&self) -> Result<(), Error> {
+    fn verify_finalized(&self) -> Result<Vec<&ETHHeader>, Error> {
         if self.all.len() < 3 {
             return Err(Error::InvalidVerifyingHeaderLength(
                 self.target.number,
@@ -64,7 +77,7 @@ impl ETHHeaders {
                     if i + 2 != self.all.len() - 1 {
                         return Err(Error::TooManyHeaders(self.target.number, self.all.len()));
                     }
-                    return Ok(());
+                    return Ok(vec![child, grand_child]);
                 }
             }
         }
