@@ -5,7 +5,7 @@ use light_client::types::Height;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::vote_attestation::VoteAttestation;
+
 use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;

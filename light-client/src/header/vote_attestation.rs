@@ -16,7 +16,6 @@ pub struct VoteAddressBitSet {
 
 impl VoteAddressBitSet {
     fn new(value: u64) -> Self {
-        let v = format!("{:b}", value);
         Self {
             vote_address_set: format!("{:b}", value)
                 .chars()
