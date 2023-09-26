@@ -147,10 +147,12 @@ fn update_client(
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
-  - extra_dataから抽出したVoteAttesationの関係が正しいこと  
-    (31894083のようにVoteAttestationが存在しない、また31894082のようにVoteが後続のHeaderに書き込まれていない場合、その後続のHeaderでVoteAttestationの関係が正しければFinalizedとみなす)
-* 提出対象Headerと検証用Headerの署名とBLS署名が正しいこと
-
+* 全てのHeaderの署名が正しいこと
+* 提出対象HeaderがBEP126のFinality Ruleに従ってファイナライズされていること
+  - BLS署名が正しいこと
+  - VoteAttestationの関係が正しいこと
+    - 31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする。
+  
 ## Misbehavior predicate
 
 ```rust
