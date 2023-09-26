@@ -88,7 +88,7 @@ pub enum Error {
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedBLSSignature(milagro_bls::AmclError),
-    UnexpectedBLSPubkey(usize, milagro_bls::AmclError),
+    UnexpectedBLSPubkey(BlockNumber, milagro_bls::AmclError),
     FailedToVerifyBLSSignature(usize),
     InsufficientValidatorCount(usize, usize),
     UnexpectedVoteAddressCount(usize, usize),

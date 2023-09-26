@@ -34,11 +34,17 @@ impl ETHHeaders {
 
         // Ensure valid seals
         let checkpoint = checkpoint(previous_validators);
-        for h in self.all.iter() {
-            if h.number % BLOCKS_PER_EPOCH >= checkpoint {
+        if self.target.number % BLOCKS_PER_EPOCH >= checkpoint {
+            for h in self.all.iter() {
                 h.verify_seal(current_validators, chain_id)?;
-            } else {
-                h.verify_seal(previous_validators, chain_id)?;
+            }
+        } else {
+            for h in self.all.iter() {
+                if h.number % BLOCKS_PER_EPOCH >= checkpoint {
+                    h.verify_seal(current_validators, chain_id)?;
+                } else {
+                    h.verify_seal(previous_validators, chain_id)?;
+                }
             }
         }
 
@@ -46,13 +52,20 @@ impl ETHHeaders {
         let headers_for_finalize = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
-        for h in headers_for_finalize {
-            let vote = h.get_vote_attestation()?;
-            // At the just checkpoint BLS signature uses previous validator set.
-            if h.number % BLOCKS_PER_EPOCH > checkpoint {
-                vote.verify(current_validators)?;
-            } else {
-                vote.verify(previous_validators)?;
+        // At the just checkpoint BLS signature uses previous validator set.
+        if self.target.number % BLOCKS_PER_EPOCH > checkpoint {
+            for h in headers_for_finalize {
+                let vote = h.get_vote_attestation()?;
+                vote.verify(h.number, current_validators)?;
+            }
+        } else {
+            for h in headers_for_finalize {
+                let vote = h.get_vote_attestation()?;
+                if h.number % BLOCKS_PER_EPOCH > checkpoint {
+                    vote.verify(h.number, current_validators)?;
+                } else {
+                    vote.verify(h.number, previous_validators)?;
+                }
             }
         }
         Ok(())
