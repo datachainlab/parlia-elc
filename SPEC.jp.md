@@ -12,7 +12,7 @@ BSC は、コンセンサスのために DPoS と PoA を組み合わせるこ�
 
 参考：https://docs.bnbchain.org/docs/learn/consensus
 
-# Target Height
+# Target Environment
 このクライアントはBEP126 Fast Finality Mechanismを前提としています。
 
 # Technical Specification
