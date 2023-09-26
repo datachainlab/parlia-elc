@@ -78,9 +78,12 @@ pub enum Error {
     MissingValidatorInEpochBlock(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
+    InvalidVerifyingHeaderLength(BlockNumber, usize),
 
     // Vote attestation
-    UnexpectedVoteRelation(BlockNumber, usize, Vec<Error>),
+    TooManyHeaders(BlockNumber, usize),
+    UnexpectedVoteRelation(BlockNumber, usize, Option<alloc::boxed::Box<Error>>),
+    UnexpectedSourceInGrandChild(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
@@ -265,6 +268,19 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?}",
                     e1, e2, e3
                 )
+            }
+            Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedSourceInGrandChild : {} {} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::InvalidVerifyingHeaderLength(e1, e2) => {
+                write!(f, "InvalidVerifyingHeaderLength : {} {}", e1, e2)
+            }
+            Error::TooManyHeaders(e1, e2) => {
+                write!(f, "TooManyHeaders : {} {}", e1, e2)
             }
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
