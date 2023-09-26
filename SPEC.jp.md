@@ -13,7 +13,7 @@ BSC は、コンセンサスのために DPoS と PoA を組み合わせるこ�
 参考：https://docs.bnbchain.org/docs/learn/consensus
 
 # Target Environment
-このクライアントはBEP126 Fast Finality Mechanismを前提としています。
+このクライアントはBEP126 [Fast Finality Mechanism](https://github.com/bnb-chain/BEPs/blob/bfe4fdb90b732af2e25c9581c5e5391aa00c8246/BEPs/BEP126.md)を前提としています。
 
 # Technical Specification
 
@@ -35,14 +35,15 @@ pub struct ClientState {
 
 ## ConsensusState
 
-クライアントは、タイムスタンプ (ブロック時間)、次のバリデータセットのハッシュ、および以前に検証されたすべてのコンセンサス状態のコミットメントルートを追跡します。
+クライアントは、タイムスタンプ (ブロック時間)、次の検証に使うバリデータセットのハッシュ、および以前に検証されたすべてのコンセンサス状態のコミットメントルートを追跡します。
 
 ```rust
 pub struct ConsensusState {
     /// the storage root(commitment root) of the IBC contract
     pub state_root: Hash,
     pub timestamp: Time,
-    pub validators_hash: Hash
+    pub current_validators_hash: Hash,
+    pub previous_validators_hash: Hash
 }
 ```
 
@@ -124,7 +125,7 @@ fn update_client(
 ```
 
 検証処理成功後
-* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、提出対象Headerのtimestampとstorage rootと、次のvalidatorSetのhashを登録します。
+* 提出対象Header(Header.target)のheightに対してConsensusStateを作成し、提出対象Headerのtimestampとstorage rootと、次の検証に使うvalidator setのhashを登録します。
 * ClientStateのlatest_heightを更新します。
 
 ### <a name="update_client_state_validity"></a>ClientState validity predicate
@@ -145,6 +146,7 @@ fn update_client(
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
 * 全てのHeaderの署名が正しいこと
+  - 具体的には、署名者が有効なValidatorSetに含まれていること
 * 提出対象HeaderがBEP126のFinality Ruleに従ってファイナライズされていること
   - BLS署名が正しいこと
   - VoteAttestationの関係が正しいこと
@@ -152,8 +154,9 @@ fn update_client(
     - 提出対象Headerの子Headerと、孫HeaderのVoteAttestationのTargetと一致すること
     - 提出対象Headerの子HeaderのVoteAttestationのTargetと、孫HeaderのVoteAttestationのSourceが一致すること
     - 提出対象Headerと、孫HeaderのVoteAttestationのSourceが一致すること
-  - 31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする。
-  
+  - VoteAttestationが含まれていないケースでは、後続HeaderのFinalityの確認をもって提出対象Headerを有効とする
+    - 例えば、31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする
+    
 ## Misbehavior predicate
 
 ```rust
