@@ -154,7 +154,7 @@ fn update_client(
     - 提出対象Headerの子Headerと、孫HeaderのVoteAttestationのTargetと一致すること
     - 提出対象Headerの子HeaderのVoteAttestationのTargetと、孫HeaderのVoteAttestationのSourceが一致すること
     - 提出対象Headerと、孫HeaderのVoteAttestationのSourceが一致すること
-  - VoteAttestationが含まれていないケースでは、後続HeaderのFinalityの確認をもって提出対象Headerを有効とする
+  - 提出対象HeaderのFinalityを直接VoteAttestationによっては確認できない場合、有効な子孫Headerの内直接VoteAttestationによってFinalityを確認できるHeaderを検証する
     - 例えば、31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする
     
 ## Misbehavior predicate
