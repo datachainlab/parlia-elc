@@ -41,10 +41,7 @@ pub struct ClientState {
 pub struct ConsensusState {
     /// the storage root(commitment root) of the IBC contract
     pub state_root: Hash,
-    /// timestamp of the Header
     pub timestamp: Time,
-    /// finalized header's validator set
-    /// only epoch headers contain validator set
     pub validators_hash: Hash
 }
 ```
