@@ -801,7 +801,7 @@ mod test {
             .submit_misbehaviour(&ctx, client_id, any)
             .unwrap_err();
         assert!(
-            format!("{:?}", err).contains("UnexpectedHeaderRelation: 31924103 32076004"),
+            format!("{:?}", err).contains("UnexpectedHeaderRelation: 32076003 32076004"),
             "{}",
             err
         );
