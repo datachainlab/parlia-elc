@@ -55,27 +55,22 @@ Headerには、提出対象のHeaderとその検証用のHeader、アカウン�
 
 ```rust
 pub struct Header {
-    /// target header
-    target: ETHHeader,
-    /// child of the target header
-    child: ETHHeader,
-    /// grand child of the target header
-    grand_child: ETHHeader,
-    /// account proof for the ibc handler
     account_proof: Vec<u8>,
+    headers: ETHHeaders,
     trusted_height: Height,
-    /// validator set for target 
-    target_validators: Vec<Vec<u8>>,
-    /// validator set for child
-    child_validators: Vec<Vec<u8>>,
-    /// validator set for grand child
-    grand_child_validators: Vec<Vec<u8>>
-    /// previous epoch validator for target
-    previous_target_validators: Vec<Vec<u8>>,
+    previous_validators: ValidatorSet,
+    current_validators: ValidatorSet,
 }
 ```
 
-ETHHeaderはBSCオンチェーンで生成したブロックの情報が含まれます。
+```rust
+pub struct ETHHeaders {
+    pub target: ETHHeader,
+    pub all: Vec<ETHHeader>,
+}
+```
+
+ETHHeaderには、BSCオンチェーンで生成したブロックの情報が含まれます。
 
 ```rust
 pub struct ETHHeader {
@@ -148,11 +143,12 @@ fn update_client(
 ### <a name="update_header_validity"></a>Header validity predicate
 * 提出対象Headerが、trusted_heightに対応するConsensusStateのtrusting_period期間内に生成されたものであること
 * 提出対象Headerのheightがtrusted_headerよりも高いこと
-* 提出対象Headerと検証用Headerの関係が正しいこと
+* 全てのHeaderの関係が正しいこと
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
   - extra_dataから抽出したVoteAttesationの関係が正しいこと
+    (31894083のようにVoteAttestationが存在しない、また31894082のようにVoteが後続のHeaderに書き込まれていない場合、その後続のHeaderでVoteAttestationの関係が正しければFinalizedとみなす)
 * 提出対象Headerと検証用Headerの署名とBLS署名が正しいこと
 
 ## Misbehavior predicate
