@@ -1,6 +1,6 @@
-# lcp-parlia
+# parlia-elc
 
-[![test](https://github.com/datachainlab/lcp-parlia/actions/workflows/ci.yaml/badge.svg)](https://github.com/datachainlab/lcp-parlia/actions/workflows/ci.yaml)
+[![test](https://github.com/datachainlab/parlia-elc/actions/workflows/ci.yaml/badge.svg)](https://github.com/datachainlab/parlia-elc/actions/workflows/ci.yaml)
 
 ELC implementation for BSC.
 
@@ -16,11 +16,3 @@ This is available in dev feature only.
 ```sh
 BSC_BLOCKS_PER_EPOCH=20 cargo build --features=dev
 ```
-
-### Fork height
-You can change the fork height for each net.
-
-```sh
-BSC_LUBAN_FORK=1000000 cargo build
-```
-
