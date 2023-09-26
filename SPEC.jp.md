@@ -13,7 +13,7 @@ BSC は、コンセンサスのために DPoS と PoA を組み合わせるこ�
 参考：https://docs.bnbchain.org/docs/learn/consensus
 
 # Target Height
-このクライアントはBEP126 Fast Finality Mechanismを前提としています。そのため、29020050のブロックのみで利用可能です。
+このクライアントはBEP126 Fast Finality Mechanismを前提としています。
 
 # Technical Specification
 
@@ -147,7 +147,7 @@ fn update_client(
   - numberとblock hashが連続していること
   - timestampの大小関係が正しいこと
   - gas limitの差が上限以下であること
-  - extra_dataから抽出したVoteAttesationの関係が正しいこと
+  - extra_dataから抽出したVoteAttesationの関係が正しいこと  
     (31894083のようにVoteAttestationが存在しない、また31894082のようにVoteが後続のHeaderに書き込まれていない場合、その後続のHeaderでVoteAttestationの関係が正しければFinalizedとみなす)
 * 提出対象Headerと検証用Headerの署名とBLS署名が正しいこと
 
