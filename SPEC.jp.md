@@ -148,7 +148,11 @@ fn update_client(
 * 提出対象HeaderがBEP126のFinality Ruleに従ってファイナライズされていること
   - BLS署名が正しいこと
   - VoteAttestationの関係が正しいこと
-    - 31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする。
+    - 提出対象Headerと、子HeaderのVoteAttestationのTargetが一致すること
+    - 提出対象Headerの子Headerと、孫HeaderのVoteAttestationのTargetと一致すること
+    - 提出対象Headerの子HeaderのVoteAttestationのTargetと、孫HeaderのVoteAttestationのSourceが一致すること
+    - 提出対象Headerと、孫HeaderのVoteAttestationのSourceが一致すること
+  - 31894081のようにVoteAttestationが31894083に含まれていないケースでは、31894083のFinalityの確認をもって31894081を有効とする。
   
 ## Misbehavior predicate
 
