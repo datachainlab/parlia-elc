@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
 
-use light_client::types::Height;
-
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
@@ -100,8 +98,12 @@ impl ETHHeaders {
             last_error.map(alloc::boxed::Box::new),
         ))
     }
+}
 
-    pub fn new(trusted_height: Height, value: Vec<EthHeader>) -> Result<ETHHeaders, Error> {
+impl TryFrom<Vec<EthHeader>> for ETHHeaders {
+    type Error = Error;
+
+    fn try_from(value: Vec<EthHeader>) -> Result<Self, Self::Error> {
         let mut new_headers: Vec<ETHHeader> = Vec::with_capacity(value.len());
         for (i, header) in value.into_iter().enumerate() {
             new_headers.push(
@@ -114,15 +116,6 @@ impl ETHHeaders {
             Some(v) => v,
             None => return Err(Error::EmptyHeader),
         };
-
-        // Ensure target height is greater than or equals to trusted height.
-        let trusted_header_height = trusted_height.revision_height();
-        if target.number <= trusted_header_height {
-            return Err(Error::UnexpectedTrustedHeight(
-                target.number,
-                trusted_header_height,
-            ));
-        }
 
         Ok(ETHHeaders {
             target: target.clone(),

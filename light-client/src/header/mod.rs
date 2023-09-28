@@ -123,7 +123,14 @@ impl TryFrom<RawHeader> for Header {
         );
 
         // All the header revision must be same as the revision of trusted_height.
-        let headers = ETHHeaders::new(trusted_height, value.headers.clone())?;
+        let headers = ETHHeaders::try_from(value.headers.clone())?;
+
+        if headers.target.number <= trusted_height.revision_height() {
+            return Err(Error::UnexpectedTrustedHeight(
+                headers.target.number,
+                trusted_height.revision_height(),
+            ));
+        }
 
         let previous_validators: ValidatorSet = value.previous_validators.into();
         if previous_validators.validators.is_empty() {
