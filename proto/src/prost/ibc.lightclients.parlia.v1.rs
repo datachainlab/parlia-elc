@@ -52,7 +52,9 @@ pub struct ConsensusState {
     #[prost(uint64, tag = "2")]
     pub timestamp: u64,
     #[prost(bytes = "vec", tag = "3")]
-    pub validators_hash: ::prost::alloc::vec::Vec<u8>,
+    pub current_validators_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub previous_validators_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

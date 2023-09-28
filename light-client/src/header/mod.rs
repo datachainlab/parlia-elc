@@ -10,7 +10,7 @@ use crate::commitment::decode_eip1184_rlp_proof;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::ValidatorSet;
-use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
+use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
 
@@ -62,38 +62,12 @@ impl Header {
         &self.headers.target.root
     }
 
-    pub fn new_validators_hash(&self) -> Hash {
-        let validator = self
-            .headers
-            .target
-            .get_validator_bytes()
-            .unwrap_or_default();
-        keccak_256_vec(&validator)
+    pub fn previous_validators_hash(&self) -> Hash {
+        self.previous_validators.hash
     }
 
-    pub fn previous_epoch_validators(&self) -> (Height, Hash) {
-        let height = &self.height().revision_height();
-        let mut epoch_count = height / BLOCKS_PER_EPOCH;
-        if epoch_count > 0 {
-            epoch_count -= 1;
-        }
-        (
-            Height::new(
-                self.height().revision_number(),
-                epoch_count * BLOCKS_PER_EPOCH,
-            ),
-            self.previous_validators.hash,
-        )
-    }
-
-    pub fn current_epoch_validators(&self) -> (Height, Hash) {
-        let height = &self.height().revision_height();
-        let epoch_count = height / BLOCKS_PER_EPOCH;
-        let epoch_block = epoch_count * BLOCKS_PER_EPOCH;
-        (
-            Height::new(self.height().revision_number(), epoch_block),
-            self.current_validators.hash,
-        )
+    pub fn current_validators_hash(&self) -> Hash {
+        self.current_validators.hash
     }
 
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {

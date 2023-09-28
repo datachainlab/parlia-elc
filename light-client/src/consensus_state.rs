@@ -19,8 +19,8 @@ pub struct ConsensusState {
     pub state_root: Hash,
     /// timestamp from execution payload
     pub timestamp: Time,
-    /// finalized header's validator set.Only epoch headers contain validator set
-    pub validators_hash: Hash,
+    pub current_validators_hash: Hash,
+    pub previous_validators_hash: Hash,
 }
 
 impl ConsensusState {
@@ -40,14 +40,19 @@ impl TryFrom<RawConsensusState> for ConsensusState {
             .try_into()
             .map_err(Error::UnexpectedConsensusStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
-        let validators_hash: Hash = value
-            .validators_hash
+        let current_validators_hash: Hash = value
+            .current_validators_hash
+            .try_into()
+            .map_err(Error::UnexpectedValidatorsHashSize)?;
+        let previous_validators_hash: Hash = value
+            .previous_validators_hash
             .try_into()
             .map_err(Error::UnexpectedValidatorsHashSize)?;
         Ok(Self {
             state_root,
             timestamp,
-            validators_hash,
+            current_validators_hash,
+            previous_validators_hash,
         })
     }
 }
@@ -57,7 +62,8 @@ impl From<ConsensusState> for RawConsensusState {
         Self {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
-            validators_hash: value.validators_hash.into(),
+            current_validators_hash: value.current_validators_hash.into(),
+            previous_validators_hash: value.previous_validators_hash.into(),
         }
     }
 }
@@ -121,7 +127,7 @@ mod test {
         // Check if the result are same as relayer's one
         assert_eq!(
             hex!("73b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c"),
-            cs.validators_hash
+            cs.current_validators_hash
         );
         assert_eq!(0, cs.timestamp.as_unix_timestamp_secs());
         assert_eq!(

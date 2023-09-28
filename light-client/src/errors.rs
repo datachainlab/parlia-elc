@@ -76,8 +76,8 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
-    UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
+    UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
 
     // Vote attestation
@@ -255,18 +255,18 @@ impl core::fmt::Display for Error {
             Error::UnexpectedMixHash(e1) => {
                 write!(f, "UnexpectedMixHash : {:?}", e1)
             }
-            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => {
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?}",
-                    e1, e2, e3
+                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
                 )
             }
-            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3) => {
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?}",
-                    e1, e2, e3
+                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
                 )
             }
             Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {

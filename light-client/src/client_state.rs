@@ -77,7 +77,8 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validators_hash: header.new_validators_hash(),
+            current_validators_hash: header.current_validators_hash(),
+            previous_validators_hash: header.previous_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))

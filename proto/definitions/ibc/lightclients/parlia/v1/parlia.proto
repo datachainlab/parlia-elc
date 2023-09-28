@@ -36,7 +36,8 @@ message Header {
 message ConsensusState {
   bytes state_root = 1;
   uint64 timestamp = 2;
-  bytes validators_hash = 3;
+  bytes current_validators_hash = 3;
+  bytes previous_validators_hash = 4;
 }
 
 message Misbehaviour {
