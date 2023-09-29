@@ -205,13 +205,13 @@ function verifyHeader(
     // - The number and block hash are consecutive.
     // - The timestamp order is correct.
     // - The difference in gas limit is within the upper limit.
-    assert(verifyCascadingFields(headers))
+    assert(verifyCascadingFields(header.headers))
 
-    assert(verifySeals(headers, currentValidators, previousValidators))
+    assert(verifySeals(header.headers, header.currentValidators, header.previousValidators))
 
     // verifies the header adheres to the BEP126 finality rule.
     // Ref. https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP126.md#413-finality-rules
-    assert(verifyFinalized(headers, currentValidators, previousValidators))
+    assert(verifyFinalized(header.headers, header.currentValidators, header.previousValidators))
 }
 
 function verifySeals(
@@ -241,7 +241,7 @@ Primary verification according to BEP-126's finality rule involves:
   - The `source` of the direct grandchild header should match the submitted header.
   - The `target` of the direct grandchild header should match the direct child header.
 
-However, there may be cases where the VoteAttestation cannot directly determin the finality of the submitted header.
+However, there may be cases where the VoteAttestation cannot directly determine the finality of the submitted header.
 In such cases, a valid descendant header is verified, which is included in the `headers` and can directly confirm its finality through VoteAttestation.
 
 ## Misbehavior predicate
