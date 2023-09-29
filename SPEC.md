@@ -233,8 +233,8 @@ Primary verification according to BEP-126's finality rule involves:
   - The `source` of the direct grandchild header should match the submitted header.
   - The `target` of the direct grandchild header should match the direct child header.
 
-However, there may be cases where the VoteAttestation cannt directly determin the finality of the submitted header.
-In such cases, a valid descendant header, which can directly confirm its finality through the use of VoteAttestation, is verified.
+However, there may be cases where the VoteAttestation cannot directly determin the finality of the submitted header.
+In such cases, a valid descendant header is verified, which is included in the `headers` and can directly confirm its finality through VoteAttestation.
 
 ## Misbehavior predicate
 
