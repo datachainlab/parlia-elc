@@ -4,9 +4,15 @@
 
 ELC implementation for BSC.
 
+NOTE: This project is currently under heavy development. Features may change or break.
+
+## Documents
+
+- [Parlia light client spec](./SPEC.md)
+
 ## Configuration
 
-Environment variables can be used to change settings.  
+Environment variables can be used to change settings.
 Each configuration must be determined at build time, not at run time.
 
 ### Blocks per epoch
