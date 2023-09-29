@@ -29,8 +29,8 @@ message Header {
   repeated ETHHeader headers = 1;
   ibc.core.client.v1.Height trusted_height = 2;
   bytes account_proof = 3;
-  repeated bytes previous_validators = 4;
-  repeated bytes current_validators = 5;
+  repeated bytes current_validators = 4;
+  repeated bytes previous_validators = 5;
 }
 
 message ConsensusState {

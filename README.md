@@ -2,11 +2,17 @@
 
 [![test](https://github.com/datachainlab/parlia-elc/actions/workflows/ci.yaml/badge.svg)](https://github.com/datachainlab/parlia-elc/actions/workflows/ci.yaml)
 
-ELC implementation for BSC.
+[ELC](https://docs.lcp.network/protocol/elc) implementation for [BNB Smart Chain](https://github.com/bnb-chain/bsc).
+
+NOTE: This project is currently under heavy development. Features may change or break.
+
+## Documents
+
+- [Parlia light client spec](./SPEC.md)
 
 ## Configuration
 
-Environment variables can be used to change settings.  
+Environment variables can be used to change settings.
 Each configuration must be determined at build time, not at run time.
 
 ### Blocks per epoch
