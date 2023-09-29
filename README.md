@@ -2,7 +2,7 @@
 
 [![test](https://github.com/datachainlab/lcp-parlia/actions/workflows/ci.yaml/badge.svg)](https://github.com/datachainlab/lcp-parlia/actions/workflows/ci.yaml)
 
-[ELC](https://docs.lcp.network/protocol/elc) implementation for BSC.
+[ELC](https://docs.lcp.network/protocol/elc) implementation for [BNB Smart Chain](https://github.com/bnb-chain/bsc).
 
 NOTE: This project is currently under heavy development. Features may change or break.
 

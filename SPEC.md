@@ -4,7 +4,7 @@ This specification document describes a client (verification algorithm) for a bl
 
 # About Parlia
 
-Parlia is a consensus proposed by BSC, combining DPoS and PoA:
+Parlia is a consensus proposed by BNB Smart Chain(BSC), combining DPoS and PoA:
 - Blocks are produced by a limited set of validators
 - Validators take turns to produce blocks in a PoA manner, similar to Ethereum's Clique consensus design
 - Validator set are elected in and out based on a staking based governance
