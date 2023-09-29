@@ -213,7 +213,7 @@ function verifySeals(
 ) {
     chainId = getChainId()
     checkpoint = previousValidators.length() / 2 + 1
-    for header in self.iterate() {
+    for header in headers {
         // verifySeal checks whether the signature contained in the header satisfies the consensus protocol requirements
         if header.number % BLOCKS_PER_EPOCH >= checkpoint {
             verifySeal(header, currentValidators, chainId)
