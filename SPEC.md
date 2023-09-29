@@ -85,7 +85,7 @@ function compare(a: Height, b: Height): Ord {
 
 The Header submitted to the on-chain client includes the target header for submission, the descendant headers for finality verification, account proofs, a trusted height, and the validator sets for verification.
 
-The validator sets pertain to the "current" and the "previous" epoch, as seen from the trusted height.
+The validator sets pertain to the "current" and the "previous" epoch, as seen from the target header.
 Each element in the validator set contains a validator's address and its BLS public key.
 
 ```typescript
@@ -191,8 +191,14 @@ function verifyHeader(
     assert(header.getHeight().revisionHeight > header.trustedHeight.revisionHeight)
 
     // assert header validator sets are valid
-    assert(hash(header.currentValidators) == trustedConsensusState.currentValidatorsHash)
-    assert(hash(header.prevValidators) == trustedConsensusState.previousValidatorsHash)
+    if header.getHeight() % BLOCK_PER_EPOCH == 0 {
+        // extractValidtors gets the validator set of the epoch from 'extraData' of the epoch ETHHeader
+        assert(hash(header.currentValidators)) == hash(extractValidators(header.headers[0])))
+        assert(hash(header.previousValidators)) == trustedConsensusState.currentValidatorsHash)
+    } else {
+        assert(hash(header.currentValidators) == trustedConsensusState.currentValidatorsHash)
+        assert(hash(header.previousValidators) == trustedConsensusState.previousValidatorsHash)
+    }
 
     // verifies all the header fields that are not standalone,
     // rather depend on a batch of previous header:
@@ -214,9 +220,9 @@ function verifySeals(
     previousValidators: Validators
 ) {
     chainId = getChainId()
-    epoch = headers.getHeight() / BLOCK_PER_EPOCH
+    epoch = headers[0].number / BLOCK_PER_EPOCH
     // Validator set changes take place at the (epoch+N/2) blocks. (N is the size of validatorset before epoch block)
-    checkpoint = epoch * headers.getHeight() + checkpoint(previousValidators)
+    checkpoint = epoch * headers[0].number + checkpoint(previousValidators)
     for header in headers {
         // verifySeal checks whether the signature contained in the header satisfies the consensus protocol requirements
         if header.number >= checkpoint {
@@ -278,22 +284,13 @@ function updateState(
         newClientState.latestHeight = header.getHeight()
     }
 
-    if header.getHeight() % BLOCKS_PER_EPOCH == 0 {
-        // get the validator set of the epoch from 'extraData'
-        currentValidatorsHash = hash(extractValidators(header))
-        previousValidatorsHash = hash(header.currentValidators)
-    } else {
-        currentValidatorsHash = hash(header.currentValidators)
-        previousValidatorsHash = hash(header.previousValidators)
-    }
-
     newStateRoot = resolve(header.stateRoot(), header.accountProof, clientState.ibcStoreAddress)
 
     newConsensusState = ConsensusState{
         newStateRoot,
         header.timestamp(),
-        currentValidatorsHash,
-        previousValidatorsHash
+        hash(header.currentValidators),
+        hash(header.previousValidators)
     }
 
     setClientState(newClientState, clientId)
