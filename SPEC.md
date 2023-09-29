@@ -222,7 +222,7 @@ function verifySeals(
     chainId = getChainId()
     epoch = headers[0].number / BLOCK_PER_EPOCH
     // Validator set changes take place at the (epoch+N/2) blocks. (N is the size of validatorset before epoch block)
-    checkpoint = epoch * headers[0].number + checkpoint(previousValidators)
+    checkpoint = epoch * BLOCK_PER_EPOCH + checkpoint(previousValidators)
     for header in headers {
         // verifySeal checks whether the signature contained in the header satisfies the consensus protocol requirements
         if header.number >= checkpoint {
