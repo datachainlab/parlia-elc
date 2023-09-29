@@ -38,10 +38,10 @@ interface ClientState {
 }
 ```
 
-## ConsensusState
+## Consensus state
 
 The Parlia client tracks the timestamp (block time), the hashes of the validator sets for the current and previous epochs, and the commitment root for all previously verified consensus states.
-The commitment root is a storage root of the account corresponding to the IBC store address in the ClientState.
+The commitment root is a storage root of the account corresponding to the IBC store address in the client state.
 
 ```typescript
 interface ConsensusState {
@@ -265,7 +265,7 @@ function submitMisbehaviour(
 
 The function will perform a regular update for the Parlia client.
 It will add a consensus state to the client store.
-If the header is higher than the latest height on the clientState, then the clientState will be updated.
+If the header is higher than the latest height on the client state, then the client state will be updated.
 
 ```typescript
 function updateState(
