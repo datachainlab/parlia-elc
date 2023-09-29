@@ -13,7 +13,7 @@ use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::misc::{keccak_256_vec, new_height, Address, ChainId, Hash};
+use crate::misc::{new_height, Address, ChainId, Hash};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
@@ -71,14 +71,13 @@ impl ClientState {
             &new_client_state.ibc_store_address,
         )?;
 
-        let new_validators = header.new_validators()?;
         let new_consensus_state = ConsensusState {
             state_root: account
                 .storage_root
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validators_hash: keccak_256_vec(&new_validators),
+            validators_hash: header.new_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))

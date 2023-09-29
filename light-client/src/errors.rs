@@ -44,9 +44,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
-    MissingParentTrustedValidators(BlockNumber),
-    MissingTargetTrustedValidators(BlockNumber),
-    MissingPreviousTargetTrustedValidators(BlockNumber),
+    MissingPreviousTrustedValidators(BlockNumber),
+    MissingCurrentTrustedValidators(BlockNumber),
     MissingTrustedValidatorsHeight,
     OutOfTrustingPeriod(Time, Time),
     HeaderFromFuture(Time, core::time::Duration, Time),
@@ -56,8 +55,6 @@ pub enum Error {
     NegativeMaxClockDrift,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
-    InsufficientHeaderToVerify(BlockNumber, usize, usize),
-    InsufficientHeaderToVerifyAcrossCheckpoint(BlockNumber, u64, usize, usize, usize),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -78,19 +75,20 @@ pub enum Error {
     UnexpectedHeaderRelation(BlockNumber, BlockNumber),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
-    InsufficientParentValidators(usize, usize),
-    InsufficientTargetValidators(usize, usize),
-    UnexpectedTargetValidatorsHash(Height, usize, Hash, Hash),
-    UnexpectedParentValidatorsHash(Height, usize, Hash, Hash),
-    UnexpectedPreviousTargetValidatorsHash(Height, usize, Hash, Hash),
     MissingValidatorInEpochBlock(BlockNumber),
+    UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
+    InvalidVerifyingHeaderLength(BlockNumber, usize),
 
     // Vote attestation
+    TooManyHeaders(BlockNumber, usize),
+    UnexpectedVoteRelation(BlockNumber, usize, Option<alloc::boxed::Box<Error>>),
+    UnexpectedSourceInGrandChild(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedBLSSignature(milagro_bls::AmclError),
-    UnexpectedBLSPubkey(milagro_bls::AmclError),
+    UnexpectedBLSPubkey(BlockNumber, milagro_bls::AmclError),
     FailedToVerifyBLSSignature(usize),
     InsufficientValidatorCount(usize, usize),
     UnexpectedVoteAddressCount(usize, usize),
@@ -145,9 +143,6 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
-            Error::InsufficientHeaderToVerify(e1, e2, e3) => {
-                write!(f, "InsufficientHeaderToVerify: {} {} {}", e1, e2, e3)
-            }
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
             }
@@ -161,28 +156,6 @@ impl core::fmt::Display for Error {
             Error::UnexpectedValidatorsHashSize(e) => {
                 write!(f, "UnexpectedValidatorsHashSize: {:?}", e)
             }
-            Error::UnexpectedTargetValidatorsHash(e1, e2, e3, e4) => {
-                write!(
-                    f,
-                    "UnexpectedTargetValidatorsHash: {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
-                )
-            }
-            Error::UnexpectedParentValidatorsHash(e1, e2, e3, e4) => {
-                write!(
-                    f,
-                    "UnexpectedParentValidatorsHash: {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
-                )
-            }
-            Error::UnexpectedPreviousTargetValidatorsHash(e1, e2, e3, e4) => {
-                write!(
-                    f,
-                    "UnexpectedPreviousTargetValidatorsHash: {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
-                )
-            }
-            Error::UnexpectedMixHash(e) => write!(f, "UnexpectedMixHash: {}", e),
             Error::UnexpectedUncleHash(e) => write!(f, "UnexpectedUncleHash: {}", e),
             Error::UnexpectedDifficulty(e1, e2) => write!(f, "UnexpectedDifficulty: {} {}", e1, e2),
             Error::UnexpectedNonce(e) => write!(f, "UnexpectedNonce: {}", e),
@@ -210,31 +183,6 @@ impl core::fmt::Display for Error {
             Error::IllegalTimestamp(e1, e2) => write!(f, "IllegalTimestamp: {} {}", e1, e2),
             Error::UnexpectedHeader(e1, e3) => write!(f, "UnexpectedHeader: {} {:?}", e1, e3),
             Error::ProofRLPError(e) => write!(f, "ProofRLPError : {}", e),
-            Error::MissingParentTrustedValidators(e) => {
-                write!(f, "MissingParentTrustedValidators : {}", e)
-            }
-            Error::MissingTargetTrustedValidators(e) => {
-                write!(f, "MissingTargetTrustedValidators : {}", e)
-            }
-            Error::MissingPreviousTargetTrustedValidators(e) => {
-                write!(f, "MissingPreviousTargetTrustedValidators : {}", e)
-            }
-            Error::MissingTrustedValidatorsHeight => {
-                write!(f, "MissingTrustedValidatorsHeight")
-            }
-            Error::InsufficientParentValidators(e1, e2) => {
-                write!(f, "InsufficientParentValidators : {} {}", e1, e2)
-            }
-            Error::InsufficientTargetValidators(e1, e2) => {
-                write!(f, "InsufficientTargetValidators : {} {}", e1, e2)
-            }
-            Error::InsufficientHeaderToVerifyAcrossCheckpoint(e1, e2, e3, e4, e5) => {
-                write!(
-                    f,
-                    "InsufficientHeaderToVerifyAcrossCheckpoint : {} {} {} {} {}",
-                    e1, e2, e3, e4, e5
-                )
-            }
             Error::MissingHeader1 => write!(f, "MissingHeader1"),
             Error::MissingHeader2 => write!(f, "MissingHeader2"),
             Error::UnexpectedClientId(e1) => write!(f, "UnexpectedClientId : {}", e1),
@@ -286,14 +234,56 @@ impl core::fmt::Display for Error {
             Error::UnexpectedBLSSignatureLength(e1) => {
                 write!(f, "UnexpectedBLSSignatureLength : {:?}", e1)
             }
-            Error::UnexpectedBLSPubkey(e1) => {
-                write!(f, "UnexpectedBLSPubkey : {:?}", e1)
+            Error::UnexpectedBLSPubkey(e1, e2) => {
+                write!(f, "UnexpectedBLSPubkey : {:?} {:?}", e1, e2)
             }
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
             }
             Error::UnexpectedValidatorHeight(e1) => {
                 write!(f, "UnexpectedValidatorHeight : {:?}", e1)
+            }
+            Error::MissingPreviousTrustedValidators(e1) => {
+                write!(f, "MissingPreviousTrustedValidators : {:?}", e1)
+            }
+            Error::MissingCurrentTrustedValidators(e1) => {
+                write!(f, "MissingCurrentTrustedValidators : {:?}", e1)
+            }
+            Error::MissingTrustedValidatorsHeight => {
+                write!(f, "MissingTrustedValidatorsHeight")
+            }
+            Error::UnexpectedMixHash(e1) => {
+                write!(f, "UnexpectedMixHash : {:?}", e1)
+            }
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => {
+                write!(
+                    f,
+                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?}",
+                    e1, e2, e3
+                )
+            }
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?}",
+                    e1, e2, e3
+                )
+            }
+            Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedSourceInGrandChild : {} {} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::InvalidVerifyingHeaderLength(e1, e2) => {
+                write!(f, "InvalidVerifyingHeaderLength : {} {}", e1, e2)
+            }
+            Error::TooManyHeaders(e1, e2) => {
+                write!(f, "TooManyHeaders : {} {}", e1, e2)
+            }
+            Error::UnexpectedVoteRelation(e1, e2, e3) => {
+                write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
         }
     }

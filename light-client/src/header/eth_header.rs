@@ -178,11 +178,7 @@ impl ETHHeader {
         Ok(signer)
     }
 
-    /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L416
-    pub fn verify_vote_attestation(
-        &self,
-        parent: &ETHHeader,
-    ) -> Result<(VoteAttestation, VoteAttestation), Error> {
+    pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
         let target_vote_attestation = self.get_vote_attestation()?;
         let target_data = &target_vote_attestation.data;
 
@@ -195,21 +191,28 @@ impl ETHHeader {
                 parent.hash,
             ));
         }
+        Ok(target_vote_attestation)
+    }
+
+    /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L416
+    pub fn verify_vote_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
+        let vote_attestation = self.verify_target_attestation(parent)?;
+        let vote_data = &vote_attestation.data;
 
         // The source block should be the highest justified block.
         let parent_vote_attestation = parent.get_vote_attestation()?;
         let parent_data = &parent_vote_attestation.data;
-        if target_data.source_number != parent_data.target_number
-            || target_data.source_hash != parent_data.target_hash
+        if vote_data.source_number != parent_data.target_number
+            || vote_data.source_hash != parent_data.target_hash
         {
             return Err(Error::UnexpectedVoteAttestationRelation(
-                target_data.source_number,
+                vote_data.source_number,
                 parent_data.target_number,
-                target_data.source_hash,
+                vote_data.source_hash,
                 parent_data.target_hash,
             ));
         }
-        Ok((target_vote_attestation, parent_vote_attestation))
+        Ok(vote_attestation)
     }
 
     pub fn get_vote_attestation(&self) -> Result<VoteAttestation, Error> {

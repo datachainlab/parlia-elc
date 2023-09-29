@@ -44,7 +44,7 @@ pub struct VoteAttestation {
 }
 
 impl VoteAttestation {
-    pub fn verify(&self, validators: &Validators) -> Result<(), Error> {
+    pub fn verify(&self, number: BlockNumber, validators: &Validators) -> Result<(), Error> {
         if self.vote_address_set.count() > validators.len() {
             return Err(Error::UnexpectedVoteAddressCount(
                 self.vote_address_set.count(),
@@ -57,8 +57,8 @@ impl VoteAttestation {
                 continue;
             }
             let bls_pub_key_bytes = &val[val.len() - BLS_PUBKEY_LENGTH..];
-            let bls_pub_key =
-                PublicKey::from_bytes(bls_pub_key_bytes).map_err(Error::UnexpectedBLSPubkey)?;
+            let bls_pub_key = PublicKey::from_bytes(bls_pub_key_bytes)
+                .map_err(|e| Error::UnexpectedBLSPubkey(number, e))?;
             voted_addr.push(bls_pub_key);
         }
 
@@ -165,7 +165,11 @@ mod test {
             header_31297202(),
         ];
         for block in blocks.iter() {
-            if let Err(e) = block.get_vote_attestation().unwrap().verify(&validators) {
+            if let Err(e) = block
+                .get_vote_attestation()
+                .unwrap()
+                .verify(block.number, &validators)
+            {
                 unreachable!("{} {:?}", block.number, e);
             }
         }
@@ -247,7 +251,7 @@ mod test {
         validators.extend(validators.clone());
         let header = header_31297199();
         let vote = header.get_vote_attestation().unwrap();
-        let err = vote.verify(&validators).unwrap_err();
+        let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
             Error::InsufficientValidatorCount(actual, required) => {
                 assert_eq!(actual, 17);

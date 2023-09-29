@@ -7,9 +7,10 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
-use crate::header::eth_header::ETHHeader;
+
+use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::ValidatorSet;
-use crate::misc::{new_height, new_timestamp, ChainId, Hash, Validators};
+use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
 
@@ -20,31 +21,33 @@ pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 // inner header is module private
 pub mod constant;
 mod eth_header;
+mod eth_headers;
 pub(crate) mod validator_set;
 mod vote_attestation;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
     account_proof: Vec<u8>,
-    target: ETHHeader,
-    parent: ETHHeader,
+    headers: ETHHeaders,
     trusted_height: Height,
-    parent_validators: ValidatorSet,
-    target_validators: ValidatorSet,
-    previous_target_validators: ValidatorSet,
+    previous_validators: ValidatorSet,
+    current_validators: ValidatorSet,
 }
 
 impl Header {
     pub fn height(&self) -> Height {
-        new_height(self.trusted_height.revision_number(), self.target.number)
+        new_height(
+            self.trusted_height.revision_number(),
+            self.headers.target.number,
+        )
     }
 
-    pub fn parent_height(&self) -> Height {
-        new_height(self.trusted_height.revision_number(), self.parent.number)
+    pub fn is_target_epoch(&self) -> bool {
+        self.headers.target.is_epoch()
     }
 
     pub fn timestamp(&self) -> Result<Time, Error> {
-        new_timestamp(self.target.timestamp)
+        new_timestamp(self.headers.target.timestamp)
     }
 
     pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
@@ -56,47 +59,53 @@ impl Header {
     }
 
     pub fn state_root(&self) -> &Hash {
-        &self.target.root
+        &self.headers.target.root
     }
 
-    pub fn new_validators(&self) -> Result<Validators, Error> {
-        if !self.target.is_epoch() {
-            return Ok(vec![]);
-        }
-        self.target
+    pub fn new_validators_hash(&self) -> Hash {
+        let validator = self
+            .headers
+            .target
             .get_validator_bytes()
-            .ok_or_else(|| Error::MissingValidatorInEpochBlock(self.target.number))
+            .unwrap_or_default();
+        keccak_256_vec(&validator)
     }
 
-    pub fn parent_validators(&self) -> &ValidatorSet {
-        &self.parent_validators
+    pub fn previous_epoch_validators(&self) -> (Height, Hash) {
+        let height = &self.height().revision_height();
+        let mut epoch_count = height / BLOCKS_PER_EPOCH;
+        if epoch_count > 0 {
+            epoch_count -= 1;
+        }
+        (
+            Height::new(
+                self.height().revision_number(),
+                epoch_count * BLOCKS_PER_EPOCH,
+            ),
+            self.previous_validators.hash,
+        )
     }
 
-    pub fn previous_target_validators(&self) -> &ValidatorSet {
-        &self.previous_target_validators
-    }
-
-    pub fn target_validators(&self) -> &ValidatorSet {
-        &self.target_validators
+    pub fn current_epoch_validators(&self) -> (Height, Hash) {
+        let height = &self.height().revision_height();
+        let epoch_count = height / BLOCKS_PER_EPOCH;
+        let epoch_block = epoch_count * BLOCKS_PER_EPOCH;
+        (
+            Height::new(self.height().revision_number(), epoch_block),
+            self.current_validators.hash,
+        )
     }
 
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
-        self.target.verify_cascading_fields(&self.parent)?;
-        let (target_vote_attestation, parent_vote_attestation) =
-            self.target.verify_vote_attestation(&self.parent)?;
-        target_vote_attestation.verify(&self.target_validators.validators)?;
-        parent_vote_attestation.verify(&self.parent_validators.validators)?;
-
-        self.target
-            .verify_seal(&self.target_validators.validators, chain_id)?;
-        self.parent
-            .verify_seal(&self.parent_validators.validators, chain_id)?;
-
-        Ok(())
+        self.headers.verify(
+            chain_id,
+            &self.current_validators.validators,
+            &self.previous_validators.validators,
+        )
     }
 
     pub fn block_hash(&self) -> &Hash {
-        &self.target.hash
+        &self.headers.target.hash
     }
 }
 
@@ -113,43 +122,45 @@ impl TryFrom<RawHeader> for Header {
             trusted_height.revision_height,
         );
 
-        let target = ETHHeader::try_from(value.target.ok_or(Error::EmptyHeader)?)?;
-        let parent = ETHHeader::try_from(value.parent.ok_or(Error::EmptyHeader)?)?;
+        // All the header revision must be same as the revision of trusted_height.
+        let headers = ETHHeaders::try_from(value.headers.clone())?;
 
-        // Ensure target height is greater than or equals to trusted height.
-        let trusted_header_height = trusted_height.revision_height();
-        if target.number <= trusted_header_height {
+        if headers.target.number <= trusted_height.revision_height() {
             return Err(Error::UnexpectedTrustedHeight(
-                target.number,
-                trusted_header_height,
+                headers.target.number,
+                trusted_height.revision_height(),
             ));
         }
 
-        let parent_validators: ValidatorSet = value.parent_validators.clone().try_into()?;
-        if parent_validators.validators.is_empty() {
-            return Err(Error::MissingParentTrustedValidators(target.number));
+        let previous_validators: ValidatorSet = value.previous_validators.into();
+        if previous_validators.validators.is_empty() {
+            return Err(Error::MissingPreviousTrustedValidators(
+                headers.target.number,
+            ));
         }
 
         // Epoch header contains validator set
-        let target_validators: ValidatorSet = value.target_validators.clone().try_into()?;
-        if target_validators.validators.is_empty() {
-            return Err(Error::MissingTargetTrustedValidators(target.number));
-        }
-
-        let previous_target_validators: ValidatorSet =
-            value.previous_target_validators.clone().try_into()?;
-        if previous_target_validators.validators.is_empty() {
-            return Err(Error::MissingPreviousTargetTrustedValidators(target.number));
+        let current_validators: ValidatorSet = if headers.target.is_epoch() {
+            headers
+                .target
+                .get_validator_bytes()
+                .ok_or_else(|| Error::MissingValidatorInEpochBlock(headers.target.number))?
+                .into()
+        } else {
+            value.current_validators.into()
+        };
+        if current_validators.validators.is_empty() {
+            return Err(Error::MissingCurrentTrustedValidators(
+                headers.target.number,
+            ));
         }
 
         Ok(Self {
             account_proof: value.account_proof,
-            target,
-            parent,
+            headers,
             trusted_height,
-            parent_validators,
-            target_validators,
-            previous_target_validators,
+            previous_validators,
+            current_validators,
         })
     }
 }
