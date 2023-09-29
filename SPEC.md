@@ -19,6 +19,8 @@ It introduces a fast finality mechanism to finalize a block.
 
 # Technical Specification
 
+We have borrowed the basic terms from [ICS-02](https://github.com/cosmos/ibc/tree/main/spec/core/ics-002-client-semantics).
+
 ## Client state
 
 The Parlia client state tracks the current revision, the IBC store address, the trusting period, the latest height, and the freeze status.
