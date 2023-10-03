@@ -404,6 +404,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 mod test {
 
     use crate::errors::Error;
+    use crate::header::eth_header::PARAMS_GAS_LIMIT_BOUND_DIVISOR;
 
     use crate::header::testdata::*;
 
@@ -432,6 +433,18 @@ mod test {
             header_31297201(),
             header_31297202(),
         ];
+
+        for block in blocks.iter_mut() {
+            let result = block.verify_seal(&validators[0..1].to_vec(), &mainnet());
+            match result.unwrap_err() {
+                Error::MissingSignerInValidator(number, address) => {
+                    assert_eq!(block.number, number);
+                    assert_eq!(block.coinbase, address);
+                }
+                e => unreachable!("{:?}", e),
+            };
+        }
+
         for mut block in blocks.iter_mut() {
             block.coinbase = vec![];
             let result = block.verify_seal(&validators, &mainnet());
@@ -486,11 +499,24 @@ mod test {
             }
             err => unreachable!("{:?}", err),
         }
+
+        let parent = header_31297199();
+        let mut block = header_31297200();
+        block.gas_used = 0;
+        block.gas_limit = 0;
+        let result = block.verify_cascading_fields(&parent);
+        match result.unwrap_err() {
+            Error::UnexpectedGasDiff(number, diff, limit) => {
+                assert_eq!(block.number, number);
+                assert_eq!(parent.gas_limit / PARAMS_GAS_LIMIT_BOUND_DIVISOR, limit);
+                assert_eq!(140000000, diff);
+            }
+            err => unreachable!("{:?}", err),
+        }
     }
 
     #[test]
     fn test_success_verify_vote_attestation() {
-        let _validators = validators_in_31297000();
         let blocks = vec![
             header_31297199(),
             header_31297200(),
@@ -504,6 +530,37 @@ mod test {
             if let Err(e) = block.verify_vote_attestation(&blocks[i - 1]) {
                 unreachable!("{} {:?}", block.number, e);
             }
+        }
+    }
+
+    #[test]
+    fn test_error_verify_vote_attestation() {
+        let header = header_31297201();
+        let parent = header_31297201();
+        let err = header.verify_vote_attestation(&parent).unwrap_err();
+        match err {
+            Error::UnexpectedVoteAttestationRelation(
+                source,
+                parent_target,
+                _source_hash,
+                _parent_target_hash,
+            ) => {
+                assert_eq!(header.number - 1, source);
+                assert_eq!(parent.number, parent_target);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        let mut block = header_31297200();
+        block.extra_data = vec![];
+        let err = block
+            .verify_vote_attestation(&header_31297199())
+            .unwrap_err();
+        match err {
+            Error::UnexpectedVoteLength(size) => {
+                assert_eq!(size, block.extra_data.len());
+            }
+            err => unreachable!("{:?}", err),
         }
     }
 }
