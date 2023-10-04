@@ -86,7 +86,8 @@ pub enum Error {
     UnexpectedSourceInGrandChild(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
-    UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
+    UnexpectedTargetVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
+    UnexpectedSourceVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedBLSSignature(milagro_bls::AmclError),
     UnexpectedBLSPubkey(BlockNumber, milagro_bls::AmclError),
     FailedToVerifyBLSSignature(usize),
@@ -212,10 +213,17 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteAttestationExtraLength(e1) => {
                 write!(f, "UnexpectedVoteAttestationExtraLength : {:?}", e1)
             }
-            Error::UnexpectedVoteAttestationRelation(e1, e2, e3, e4) => {
+            Error::UnexpectedTargetVoteAttestationRelation(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedVoteAttestationRelation : {:?} {:?} {:?} {:?}",
+                    "UnexpectedTargetVoteAttestationRelation : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::UnexpectedSourceVoteAttestationRelation(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedSourceVoteAttestationRelation : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
             }

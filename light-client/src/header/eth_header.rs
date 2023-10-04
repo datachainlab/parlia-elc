@@ -184,7 +184,7 @@ impl ETHHeader {
 
         // The target block should be direct parent.
         if target_data.target_number != parent.number || target_data.target_hash != parent.hash {
-            return Err(Error::UnexpectedVoteAttestationRelation(
+            return Err(Error::UnexpectedTargetVoteAttestationRelation(
                 target_data.target_number,
                 parent.number,
                 target_data.target_hash,
@@ -205,7 +205,7 @@ impl ETHHeader {
         if vote_data.source_number != parent_data.target_number
             || vote_data.source_hash != parent_data.target_hash
         {
-            return Err(Error::UnexpectedVoteAttestationRelation(
+            return Err(Error::UnexpectedSourceVoteAttestationRelation(
                 vote_data.source_number,
                 parent_data.target_number,
                 vote_data.source_hash,
@@ -539,7 +539,7 @@ mod test {
         let parent = header_31297201();
         let err = header.verify_vote_attestation(&parent).unwrap_err();
         match err {
-            Error::UnexpectedVoteAttestationRelation(
+            Error::UnexpectedTargetVoteAttestationRelation(
                 source,
                 parent_target,
                 _source_hash,
@@ -559,6 +559,23 @@ mod test {
         match err {
             Error::UnexpectedVoteLength(size) => {
                 assert_eq!(size, block.extra_data.len());
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        let header = header_31297202();
+        let mut parent = header_31297201();
+        parent.extra_data = header.extra_data.clone();
+        let err = header.verify_vote_attestation(&parent).unwrap_err();
+        match err {
+            Error::UnexpectedSourceVoteAttestationRelation(
+                source,
+                parent_target,
+                _source_hash,
+                _parent_target_hash,
+            ) => {
+                assert_eq!(parent.number - 1, source);
+                assert_eq!(parent.number, parent_target);
             }
             err => unreachable!("{:?}", err),
         }
