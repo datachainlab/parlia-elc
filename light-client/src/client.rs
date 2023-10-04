@@ -299,11 +299,11 @@ impl ParliaLightClient {
                 .into());
             }
             if header.current_validators_hash() != consensus_state.current_validators_hash {
-                return Err(Error::UnexpectedPreviousValidatorsHash(
+                return Err(Error::UnexpectedCurrentValidatorsHash(
                     header.trusted_height(),
                     header.height(),
-                    header.previous_validators_hash(),
-                    consensus_state.previous_validators_hash,
+                    header.current_validators_hash(),
+                    consensus_state.current_validators_hash,
                 )
                 .into());
             }
