@@ -1,5 +1,5 @@
 [package]
-name = "parlia-ibc-lc"
+name = "parlia-elc"
 version = "0.2.0"
 edition = "2021"
 
