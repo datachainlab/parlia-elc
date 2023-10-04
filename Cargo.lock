@@ -1293,8 +1293,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "parlia-ibc-lc"
-version = "0.1.0"
+name = "parlia-elc"
+version = "0.2.0"
 dependencies = [
  "elliptic-curve",
  "hex-literal",
@@ -1317,7 +1317,7 @@ dependencies = [
 
 [[package]]
 name = "parlia-ibc-proto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.21.3",
  "bytes",

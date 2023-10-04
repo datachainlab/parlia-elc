@@ -6,7 +6,7 @@ mod test {
     use light_client::commitments::Commitment;
     use light_client::types::{Any, ClientId, Height, Time};
     use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
-    use parlia_ibc_lc::client::ParliaLightClient;
+    use parlia_elc::client::ParliaLightClient;
 
     struct MockClientReader {
         client_state: Option<Any>,
