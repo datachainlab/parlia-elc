@@ -19,7 +19,6 @@ use crate::commitment::{
 };
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::header::constant::BLOCKS_PER_EPOCH;
 
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
@@ -96,7 +95,7 @@ impl LightClient for ParliaLightClient {
         let trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
 
         // Ensure valid validator set
-        self.verify_validator_set(&trusted_consensus_state, &header)?;
+        header.verify_validator_set(&trusted_consensus_state)?;
 
         let (new_client_state, new_consensus_state) = client_state.check_header_and_update_state(
             ctx.host_timestamp(),
@@ -205,10 +204,14 @@ impl ParliaLightClient {
         }
 
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
-        self.verify_validator_set(&trusted_consensus_state1, &misbehaviour.header_1)?;
+        misbehaviour
+            .header_1
+            .verify_validator_set(&trusted_consensus_state1)?;
 
         let trusted_consensus_state2 = ConsensusState::try_from(any_consensus_state2)?;
-        self.verify_validator_set(&trusted_consensus_state2, &misbehaviour.header_2)?;
+        misbehaviour
+            .header_2
+            .verify_validator_set(&trusted_consensus_state2)?;
 
         let new_client_state = client_state.check_misbehaviour_and_update_state(
             ctx.host_timestamp(),
@@ -255,61 +258,6 @@ impl ParliaLightClient {
 
         gen_state_id(client_state, consensus_state)
     }
-
-    fn verify_validator_set(
-        &self,
-        consensus_state: &ConsensusState,
-        header: &Header,
-    ) -> Result<(), LightClientError> {
-        let header_epoch = header.height().revision_height() / BLOCKS_PER_EPOCH;
-        let trusted_epoch = header.trusted_height().revision_height() / BLOCKS_PER_EPOCH;
-
-        if header.is_target_epoch() {
-            if header_epoch != trusted_epoch + 1 {
-                return Err(Error::UnexpectedTrustedHeight(
-                    header.height().revision_height(),
-                    header.height().revision_height(),
-                )
-                .into());
-            }
-            if header.previous_validators_hash() != consensus_state.current_validators_hash {
-                return Err(Error::UnexpectedPreviousValidatorsHash(
-                    header.trusted_height(),
-                    header.height(),
-                    header.previous_validators_hash(),
-                    consensus_state.current_validators_hash,
-                )
-                .into());
-            }
-        } else {
-            if header_epoch != trusted_epoch {
-                return Err(Error::UnexpectedTrustedHeight(
-                    header.height().revision_height(),
-                    header.height().revision_height(),
-                )
-                .into());
-            }
-            if header.previous_validators_hash() != consensus_state.previous_validators_hash {
-                return Err(Error::UnexpectedPreviousValidatorsHash(
-                    header.trusted_height(),
-                    header.height(),
-                    header.previous_validators_hash(),
-                    consensus_state.previous_validators_hash,
-                )
-                .into());
-            }
-            if header.current_validators_hash() != consensus_state.current_validators_hash {
-                return Err(Error::UnexpectedCurrentValidatorsHash(
-                    header.trusted_height(),
-                    header.height(),
-                    header.current_validators_hash(),
-                    consensus_state.current_validators_hash,
-                )
-                .into());
-            }
-        }
-        Ok(())
-    }
 }
 
 fn gen_state_id(
@@ -341,7 +289,6 @@ mod test {
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
 
-    use crate::header::testdata::mainnet;
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_height, ChainId, Hash};
 
@@ -421,6 +368,10 @@ mod test {
                 .clone();
             Ok(Any::from(state))
         }
+    }
+
+    fn mainnet() -> ChainId {
+        ChainId::new(56)
     }
 
     #[test]
