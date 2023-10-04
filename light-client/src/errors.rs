@@ -79,11 +79,11 @@ pub enum Error {
     UnexpectedVoteAttestationExtraLength(usize),
     UnexpectedTargetVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedSourceVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
-    UnexpectedBLSSignature(milagro_bls::AmclError),
+    UnexpectedBLSSignature(BlockNumber, milagro_bls::AmclError),
     UnexpectedBLSPubkey(BlockNumber, milagro_bls::AmclError),
-    FailedToVerifyBLSSignature(usize),
-    InsufficientValidatorCount(usize, usize),
-    UnexpectedVoteAddressCount(usize, usize),
+    FailedToVerifyBLSSignature(BlockNumber, usize),
+    InsufficientValidatorCount(BlockNumber, usize, usize),
+    UnexpectedVoteAddressCount(BlockNumber, usize, usize),
     UnexpectedBLSSignatureLength(Vec<u8>),
 
     // Misbehaviour
@@ -208,17 +208,17 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4
                 )
             }
-            Error::UnexpectedBLSSignature(e1) => {
-                write!(f, "UnexpectedBLSSignature : {:?}", e1)
+            Error::UnexpectedBLSSignature(e1, e2) => {
+                write!(f, "UnexpectedBLSSignature : {:?} {:?}", e1, e2)
             }
-            Error::FailedToVerifyBLSSignature(e1) => {
-                write!(f, "FailedToVerifyBLSSignature : {:?} ", e1)
+            Error::FailedToVerifyBLSSignature(e1, e2) => {
+                write!(f, "FailedToVerifyBLSSignature : {:?} {:?}", e1, e2)
             }
-            Error::UnexpectedVoteAddressCount(e1, e2) => {
-                write!(f, "UnexpectedVoteAddressCount : {:?} {:?}", e1, e2,)
+            Error::UnexpectedVoteAddressCount(e1, e2, e3) => {
+                write!(f, "UnexpectedVoteAddressCount : {:?} {:?} {:?}", e1, e2, e3)
             }
-            Error::InsufficientValidatorCount(e1, e2) => {
-                write!(f, "InsufficientValidatorCount : {:?} {:?}", e1, e2)
+            Error::InsufficientValidatorCount(e1, e2, e3) => {
+                write!(f, "InsufficientValidatorCount : {:?} {:?} {:?}", e1, e2, e3)
             }
             Error::UnexpectedBLSSignatureLength(e1) => {
                 write!(f, "UnexpectedBLSSignatureLength : {:?}", e1)
