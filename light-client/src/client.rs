@@ -238,7 +238,7 @@ impl ParliaLightClient {
             return Err(Error::ClientFrozen(client_id).into());
         }
         let proof_height = *proof_height;
-        if client_state.latest_height != proof_height {
+        if client_state.latest_height < proof_height {
             return Err(
                 Error::UnexpectedLatestHeight(proof_height, client_state.latest_height).into(),
             );
