@@ -70,9 +70,10 @@ pub enum Error {
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
+    ValidatorNotTrusted(Hash),
 
     // Vote attestation
-    TooManyHeaders(BlockNumber, usize),
+    UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
     UnexpectedVoteRelation(BlockNumber, usize, Option<alloc::boxed::Box<Error>>),
     UnexpectedSourceInGrandChild(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedVoteLength(usize),
@@ -262,11 +263,14 @@ impl core::fmt::Display for Error {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
                 write!(f, "InvalidVerifyingHeaderLength : {} {}", e1, e2)
             }
-            Error::TooManyHeaders(e1, e2) => {
-                write!(f, "TooManyHeaders : {} {}", e1, e2)
+            Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
+                write!(f, "UnexpectedTooManyHeadersToFinalize : {} {}", e1, e2)
             }
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
+            }
+            Error::ValidatorNotTrusted(e1) => {
+                write!(f, "ValidatorNotTrusted : {:?}", e1)
             }
         }
     }

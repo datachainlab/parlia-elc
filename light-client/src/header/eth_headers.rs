@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
+use crate::header::validator_set::ValidatorSet;
 
 use crate::misc::{ChainId, Validators};
 
@@ -19,8 +20,8 @@ impl ETHHeaders {
     pub fn verify(
         &self,
         chain_id: &ChainId,
-        current_validators: &Validators,
-        previous_validators: &Validators,
+        current_validators: &ValidatorSet,
+        previous_validators: &ValidatorSet,
     ) -> Result<(), Error> {
         // Ensure all the headers are successfully chained.
         for (i, header) in self.all.iter().enumerate() {
@@ -30,12 +31,14 @@ impl ETHHeaders {
             }
         }
 
+        let previous_validators = previous_validators.validators()?;
+
         // Ensure valid seals
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let checkpoint = epoch * BLOCKS_PER_EPOCH + checkpoint(previous_validators);
         for h in self.all.iter() {
             if h.number >= checkpoint {
-                h.verify_seal(current_validators, chain_id)?;
+                h.verify_seal(current_validators.validators()?, chain_id)?;
             } else {
                 h.verify_seal(previous_validators, chain_id)?;
             }
@@ -49,7 +52,7 @@ impl ETHHeaders {
         for h in headers_for_finalize {
             let vote = h.get_vote_attestation()?;
             if h.number > checkpoint {
-                vote.verify(h.number, current_validators)?;
+                vote.verify(h.number, current_validators.validators()?)?;
             } else {
                 vote.verify(h.number, previous_validators)?;
             }
@@ -74,7 +77,10 @@ impl ETHHeaders {
                 Err(e) => last_error = Some(e),
                 Ok(()) => {
                     if i + 2 != self.all.len() - 1 {
-                        return Err(Error::TooManyHeaders(self.target.number, self.all.len()));
+                        return Err(Error::UnexpectedTooManyHeadersToFinalize(
+                            self.target.number,
+                            self.all.len(),
+                        ));
                     }
                     return Ok(vec![child, grand_child]);
                 }
@@ -145,45 +151,56 @@ mod test {
     use crate::errors::Error;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::*;
+    use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
+    use crate::misc::Validators;
     use hex_literal::hex;
     use light_client::types::Any;
+
+    fn trust(mut v: ValidatorSet) -> ValidatorSet {
+        v.trusted = true;
+        v
+    }
+
+    fn empty() -> ValidatorSet {
+        let validators: Validators = vec![];
+        validators.into()
+    }
 
     #[test]
     fn test_success_verify_before_checkpoint() {
         let headers = create_before_checkpoint_headers();
-        let p_val = validators_in_31297000();
-        headers.verify(&mainnet(), &vec![], &p_val).unwrap();
+        let p_val = trust(validators_in_31297000().into());
+        headers.verify(&mainnet(), &empty(), &p_val).unwrap();
     }
 
     #[test]
     fn test_success_verify_across_checkpoint() {
         let headers = create_across_checkpoint_headers();
-        let c_val = header_31297200().get_validator_bytes().unwrap();
-        let p_val = validators_in_31297000();
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        let p_val = trust(validators_in_31297000().into());
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
     #[test]
     fn test_success_verify_after_checkpoint() {
         let headers = create_after_checkpoint_headers();
-        let c_val = header_31297200().get_validator_bytes().unwrap();
-        headers.verify(&mainnet(), &c_val, &vec![]).unwrap();
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        headers.verify(&mainnet(), &c_val, &trust(empty())).unwrap();
     }
 
     #[test]
     fn test_error_verify_before_checkpoint() {
         let header = create_before_checkpoint_headers();
-
         let mainnet = &mainnet();
-        let _result = header.verify(mainnet, &vec![], &vec![]);
 
         // first block uses previous broken validator set
-        let mut previous_validator_set = validators_in_31297000();
-        for v in previous_validator_set.iter_mut() {
+        let mut validators = validators_in_31297000();
+        for v in validators.iter_mut() {
             v.remove(0);
         }
-        let result = header.verify(mainnet, &vec![], &previous_validator_set);
+        let previous_validator_set = trust(validators.into());
+        let result = header.verify(mainnet, &empty(), &previous_validator_set);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 assert_eq!(number, header.target.number)
@@ -194,21 +211,17 @@ mod test {
 
     #[test]
     fn test_error_verify_across_checkpoint() {
-        let mut new_validator_set = header_31297200().get_validator_bytes().unwrap();
-        let previous_validator_set = validators_in_31297000();
+        let mut new_validators: Validators = header_31297200().get_validator_bytes().unwrap();
+        for (i, v) in new_validators.iter_mut().enumerate() {
+            v[0] = i as u8;
+        }
+        let new_validator_set = trust(new_validators.into());
+        let previous_validator_set = trust(validators_in_31297000().into());
 
         let mainnet = &mainnet();
 
-        // insufficient header for after checkpoint
-        let mut header = create_across_checkpoint_headers();
-        header.all.pop();
-        let _result = header.verify(mainnet, &new_validator_set, &previous_validator_set);
-
         // last block uses new empty validator set
         let header = create_across_checkpoint_headers();
-        for (i, v) in new_validator_set.iter_mut().enumerate() {
-            v[0] = i as u8;
-        }
         let result = header.verify(mainnet, &new_validator_set, &previous_validator_set);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
@@ -223,8 +236,8 @@ mod test {
     fn test_error_verify_non_continuous_header() {
         let mut headers = create_after_checkpoint_headers();
         headers.all[1] = headers.all[0].clone();
-        let c_val = header_31297200().get_validator_bytes().unwrap();
-        let result = headers.verify(&mainnet(), &c_val, &vec![]);
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(e1, e2) => {
                 assert_eq!(e1, headers.target.number);
@@ -235,13 +248,13 @@ mod test {
     }
 
     #[test]
-    fn test_error_verify_too_many_headers() {
+    fn test_error_verify_too_many_headers_to_finalize() {
         let mut headers = create_after_checkpoint_headers();
         headers.all.push(header_31297214());
-        let c_val = header_31297200().get_validator_bytes().unwrap();
-        let result = headers.verify(&mainnet(), &c_val, &vec![]);
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
         match result.unwrap_err() {
-            Error::TooManyHeaders(e1, e2) => {
+            Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
                 assert_eq!(e2, headers.all.len(), "header size");
             }
@@ -253,8 +266,8 @@ mod test {
     fn test_error_verify_invalid_header_size() {
         let mut headers = create_after_checkpoint_headers();
         headers.all.pop();
-        let c_val = header_31297200().get_validator_bytes().unwrap();
-        let result = headers.verify(&mainnet(), &c_val, &vec![]);
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
         match result.unwrap_err() {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -284,6 +297,49 @@ mod test {
                 assert_eq!(e1, header.headers.target.number, "block error");
                 assert_eq!(e2, header.headers.all.len(), "header size");
                 assert!(format!("{:?}", &err.unwrap()).contains("UnexpectedVoteLength"));
+            }
+            e => unreachable!("{:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_error_verify_too_many_headers_to_seal() {
+        let v = vec![
+            header_31297200(),
+            header_31297201(),
+            header_31297202(),
+            header_31297203(),
+            header_31297204(),
+            header_31297205(),
+            header_31297206(),
+            header_31297207(),
+            header_31297208(),
+            header_31297209(),
+            header_31297210(),
+        ];
+        let mut headers = ETHHeaders {
+            target: v[0].clone(),
+            all: v,
+        };
+
+        // success ( untrusted validator not used )
+        let p_val = trust(validators_in_31297000().into());
+        let untrusted_c_val = validators_in_31297000().into();
+        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
+        match result.unwrap_err() {
+            Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
+                assert_eq!(e1, headers.target.number, "block error");
+                assert_eq!(e2, headers.all.len(), "header size");
+            }
+            e => unreachable!("{:?}", e),
+        }
+
+        // error
+        headers.all.push(header_31297211());
+        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
+        match result.unwrap_err() {
+            Error::ValidatorNotTrusted(e1) => {
+                assert_eq!(e1, untrusted_c_val.hash);
             }
             e => unreachable!("{:?}", e),
         }
