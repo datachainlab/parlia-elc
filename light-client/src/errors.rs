@@ -26,7 +26,7 @@ pub enum Error {
     MissingLatestHeight,
     UnexpectedStoreAddress(Vec<u8>),
     ClientFrozen(ClientId),
-    UnexpectedLatestHeight(Height, Height),
+    UnexpectedProofHeight(Height, Height),
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -109,8 +109,8 @@ impl core::fmt::Display for Error {
             Error::MissingLatestHeight => write!(f, "MissingLatestHeight"),
             Error::UnexpectedStoreAddress(e) => write!(f, "UnexpectedStoreAddress: {:?}", e),
             Error::ClientFrozen(e) => write!(f, "ClientFrozen: {}", e),
-            Error::UnexpectedLatestHeight(e1, e2) => {
-                write!(f, "UnexpectedLatestHeight: {} {}", e1, e2)
+            Error::UnexpectedProofHeight(e1, e2) => {
+                write!(f, "UnexpectedProofHeight: {} {}", e1, e2)
             }
             Error::AccountNotFound(e) => write!(f, "AccountNotFound: {:?}", e),
             Error::UnexpectedStateRoot(e) => write!(f, "UnexpectedStateRoot: {:?}", e),

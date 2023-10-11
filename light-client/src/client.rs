@@ -240,7 +240,7 @@ impl ParliaLightClient {
         let proof_height = *proof_height;
         if client_state.latest_height < proof_height {
             return Err(
-                Error::UnexpectedLatestHeight(proof_height, client_state.latest_height).into(),
+                Error::UnexpectedProofHeight(proof_height, client_state.latest_height).into(),
             );
         }
 
@@ -272,7 +272,7 @@ fn gen_state_id(
 #[cfg(test)]
 mod test {
     use alloc::string::ToString;
-    use alloc::vec;
+
     use alloc::vec::Vec;
     use std::collections::BTreeMap;
 
@@ -280,7 +280,9 @@ mod test {
     use light_client::types::{Any, ClientId, Height, Time};
 
     use light_client::commitments::{Commitment, CommitmentContext, TrustingPeriodContext};
-    use light_client::{ClientReader, HostClientReader, HostContext, LightClient};
+    use light_client::{
+        ClientReader, HostClientReader, HostContext, LightClient, StateVerificationResult,
+    };
 
     use patricia_merkle_trie::keccak::keccak_256;
     use time::macros::datetime;
@@ -290,7 +292,7 @@ mod test {
     use crate::consensus_state::ConsensusState;
 
     use crate::header::Header;
-    use crate::misc::{keccak_256_vec, new_height, ChainId, Hash};
+    use crate::misc::{new_height, ChainId, Hash};
 
     impl Default for ClientState {
         fn default() -> Self {
@@ -574,101 +576,102 @@ mod test {
     }
 
     #[test]
-    fn test_verify_membership_lcp_localnet() {
-        let storage_proof_rlp = vec![
-            249, 2, 108, 249, 1, 145, 160, 243, 2, 132, 113, 118, 63, 160, 241, 161, 149, 174, 195,
-            18, 210, 53, 140, 244, 55, 106, 61, 135, 92, 126, 3, 174, 227, 145, 76, 246, 158, 163,
-            237, 128, 128, 160, 161, 243, 110, 96, 138, 107, 213, 87, 172, 13, 123, 131, 19, 176,
-            84, 242, 32, 18, 219, 20, 61, 136, 234, 214, 229, 63, 3, 59, 48, 2, 150, 137, 160, 175,
-            166, 191, 1, 133, 187, 201, 138, 8, 129, 81, 61, 81, 86, 33, 87, 198, 100, 189, 6, 230,
-            101, 136, 66, 66, 242, 24, 147, 184, 24, 61, 33, 160, 23, 83, 180, 210, 64, 112, 1,
-            189, 122, 120, 147, 18, 45, 252, 211, 143, 177, 16, 93, 219, 135, 216, 71, 156, 65,
-            241, 141, 38, 171, 247, 237, 182, 160, 210, 143, 238, 182, 140, 97, 22, 255, 66, 68,
-            225, 250, 55, 56, 89, 201, 28, 147, 181, 102, 138, 47, 37, 0, 189, 189, 203, 212, 152,
-            186, 241, 212, 160, 93, 33, 126, 80, 5, 168, 58, 116, 140, 187, 49, 219, 74, 219, 118,
-            193, 62, 119, 121, 235, 231, 13, 122, 189, 163, 187, 122, 145, 6, 196, 148, 3, 160, 9,
-            226, 194, 151, 8, 9, 20, 134, 217, 158, 89, 5, 196, 34, 23, 235, 234, 182, 193, 155,
-            131, 238, 116, 100, 192, 196, 214, 102, 88, 180, 15, 239, 160, 114, 77, 73, 24, 57, 36,
-            101, 1, 166, 27, 246, 128, 196, 20, 105, 243, 251, 51, 205, 247, 112, 2, 4, 109, 93, 1,
-            104, 71, 100, 138, 24, 237, 160, 209, 8, 0, 140, 126, 171, 172, 12, 93, 82, 67, 64,
-            234, 3, 152, 165, 245, 137, 166, 131, 218, 2, 177, 29, 84, 166, 186, 8, 42, 245, 54,
-            145, 160, 214, 233, 118, 109, 210, 194, 72, 219, 143, 9, 216, 125, 95, 190, 129, 254,
-            160, 111, 112, 122, 146, 103, 213, 223, 119, 10, 156, 212, 4, 60, 116, 180, 160, 90,
-            98, 164, 183, 88, 177, 161, 231, 114, 25, 237, 70, 112, 69, 253, 90, 125, 202, 100,
-            255, 155, 200, 174, 225, 111, 199, 221, 194, 180, 124, 109, 50, 160, 39, 152, 155, 234,
-            177, 15, 57, 47, 67, 85, 70, 121, 225, 22, 86, 184, 135, 250, 224, 143, 245, 81, 251,
-            117, 185, 11, 128, 32, 154, 54, 102, 126, 128, 128, 128, 248, 145, 128, 128, 128, 128,
-            128, 160, 103, 18, 133, 119, 55, 115, 130, 213, 70, 76, 86, 39, 144, 246, 223, 29, 254,
-            134, 177, 180, 108, 75, 102, 200, 241, 205, 231, 206, 19, 221, 182, 244, 128, 128, 160,
-            111, 93, 78, 118, 145, 122, 232, 53, 185, 114, 80, 95, 148, 212, 14, 218, 218, 253,
-            220, 68, 46, 148, 77, 193, 87, 179, 71, 171, 145, 93, 173, 118, 128, 128, 128, 128,
-            160, 192, 156, 224, 147, 42, 238, 11, 71, 160, 213, 233, 164, 59, 206, 68, 79, 86, 159,
-            212, 42, 109, 164, 91, 77, 164, 86, 88, 8, 192, 152, 241, 183, 128, 160, 8, 21, 54,
-            159, 64, 208, 81, 17, 118, 220, 29, 163, 73, 142, 1, 7, 9, 151, 63, 23, 186, 206, 165,
-            2, 3, 144, 30, 15, 37, 48, 164, 148, 128, 248, 67, 160, 32, 63, 196, 45, 223, 108, 27,
-            91, 178, 24, 206, 36, 225, 76, 64, 175, 158, 14, 177, 39, 165, 215, 96, 80, 211, 125,
-            115, 105, 226, 252, 74, 71, 161, 160, 34, 171, 87, 106, 125, 243, 139, 180, 134, 15,
-            251, 198, 95, 48, 213, 166, 101, 54, 251, 45, 142, 195, 213, 215, 212, 171, 154, 62,
-            173, 14, 67, 18,
-        ];
-        let expected_value = vec![
-            10, 12, 108, 99, 112, 45, 99, 108, 105, 101, 110, 116, 45, 48, 18, 35, 10, 1, 49, 18,
-            13, 79, 82, 68, 69, 82, 95, 79, 82, 68, 69, 82, 69, 68, 18, 15, 79, 82, 68, 69, 82, 95,
-            85, 78, 79, 82, 68, 69, 82, 69, 68, 24, 1, 34, 21, 10, 12, 108, 99, 112, 45, 99, 108,
-            105, 101, 110, 116, 45, 48, 26, 5, 10, 3, 105, 98, 99,
-        ];
+    fn test_success_verify_membership() {
+        let proof_height = new_height(0, 232);
+        let proof = hex!("f902ccf90211a06868e3a43071c06084145e2546b14ab7b49b4a073213228fd2fe5b9ad6978723a032238795ce6d015be83c499b744c7108308321b5c52b424bdfe851819470572ca0db54777eae7ba641adeb842ebae3b86206443a817af6211162cb7b8f54685722a094b114ebfe63288bd344dc06b50a25982f93b38ae7deb1c4f0085a80b76692fda087385f44c834ce1d100176adb7dabf314d3d3799e83cecbdbae8bf0047bbeb8da0afa75930fdc8b5bbcc7de9653a126bbd5e7480ba180117ac8f6448ac620fe881a0c9970b5bcfc0a37c601a907ab40e0d73fe4a19b00564ebfaa2962bc4659937e8a07c6b19783013eefd4b7362ea987dda4509b7a6f6b9fa765f4be79817023c9fefa0c928ae51650933cbdc43721f48a8d96b1ff49326b6afc59fe4441a6ab4ec6391a0c60665890ed3028fb4cc13ffe5b37f9eaf93886aa0920ea7aab00e5f36a58cb9a0341de64564e1cde279f15a152a41fc07b955ed8fb331e8fbb70b6ada2f4533c1a0eb2cfd02210dd040808b05b9fcb94d99fb459a04cbaae816a87b30224962b82fa0dbd758e0c3164e578837b817584efafc5582fa3ad872bc59ba20a0ff29d84438a0ad31c527b35a0c5a0f50c15bcba55b473de5ced9ab8c22736bc71ca7ff5f9e4fa03d448120e46b82861ae5eccd3a72e3c12f8cd350b466dc27586a1d6d58791212a08a70cfd0b8005d9c457f0d83b1a7b29244963fadf71fb1ce35764fe7141bc90080f8718080808080a0ce42aec576e424376d1bfec5089611170bedc488327075ec1c37905b2eb04a7b80808080a0e8c783a5d1417b9c3c59e642b630d1fb818a3ca870068c33a8d3b3114d1a31278080a05868dd463ca96a009a6bbf76fe9a9d904ca04e30b83a3759619f191367ce5b26808080f843a0203fc42ddf6c1b5bb218ce24e14c40af9e0eb127a5d76050d37d7369e2fc4a47a1a038841326d6f11b905566840b11a81201594ec536da63c44f38c1681ddad3eee4");
+        let state_root = hex!("4050c398b206f467b6d88cfd3d877a11f65701c37aabaa48d77466a63dfda9b7");
+        let value = hex!("0a0b78782d7061726c69612d3012230a0131120d4f524445525f4f524445524544120f4f524445525f554e4f524445524544180322220a0b78782d7061726c69612d30120c636f6e6e656374696f6e2d301a050a03696263").to_vec();
+        let path = "connections/connection-0";
+        let result = do_test_verify_membership(
+            path,
+            value.to_vec(),
+            proof_height,
+            proof.to_vec(),
+            state_root,
+            proof_height,
+        )
+        .unwrap();
+        match result.state_commitment {
+            Commitment::State(data) => {
+                assert_eq!(data.path, path);
+                assert_eq!(data.height, proof_height);
+                assert_eq!(data.value, Some(keccak_256(value.as_slice())));
+            }
+            _ => unreachable!("invalid state commitment {:?}", result.state_commitment),
+        };
+    }
+
+    #[test]
+    fn test_error_verify_membership() {
+        let proof_height = new_height(0, 232);
+        let proof = hex!("f902ccf90211a06868e3a43071c06084145e2546b14ab7b49b4a073213228fd2fe5b9ad6978723a032238795ce6d015be83c499b744c7108308321b5c52b424bdfe851819470572ca0db54777eae7ba641adeb842ebae3b86206443a817af6211162cb7b8f54685722a094b114ebfe63288bd344dc06b50a25982f93b38ae7deb1c4f0085a80b76692fda087385f44c834ce1d100176adb7dabf314d3d3799e83cecbdbae8bf0047bbeb8da0afa75930fdc8b5bbcc7de9653a126bbd5e7480ba180117ac8f6448ac620fe881a0c9970b5bcfc0a37c601a907ab40e0d73fe4a19b00564ebfaa2962bc4659937e8a07c6b19783013eefd4b7362ea987dda4509b7a6f6b9fa765f4be79817023c9fefa0c928ae51650933cbdc43721f48a8d96b1ff49326b6afc59fe4441a6ab4ec6391a0c60665890ed3028fb4cc13ffe5b37f9eaf93886aa0920ea7aab00e5f36a58cb9a0341de64564e1cde279f15a152a41fc07b955ed8fb331e8fbb70b6ada2f4533c1a0eb2cfd02210dd040808b05b9fcb94d99fb459a04cbaae816a87b30224962b82fa0dbd758e0c3164e578837b817584efafc5582fa3ad872bc59ba20a0ff29d84438a0ad31c527b35a0c5a0f50c15bcba55b473de5ced9ab8c22736bc71ca7ff5f9e4fa03d448120e46b82861ae5eccd3a72e3c12f8cd350b466dc27586a1d6d58791212a08a70cfd0b8005d9c457f0d83b1a7b29244963fadf71fb1ce35764fe7141bc90080f8718080808080a0ce42aec576e424376d1bfec5089611170bedc488327075ec1c37905b2eb04a7b80808080a0e8c783a5d1417b9c3c59e642b630d1fb818a3ca870068c33a8d3b3114d1a31278080a05868dd463ca96a009a6bbf76fe9a9d904ca04e30b83a3759619f191367ce5b26808080f843a0203fc42ddf6c1b5bb218ce24e14c40af9e0eb127a5d76050d37d7369e2fc4a47a1a038841326d6f11b905566840b11a81201594ec536da63c44f38c1681ddad3eee4");
+        let state_root = hex!("4050c398b206f467b6d88cfd3d877a11f65701c37aabaa48d77466a63dfda9b7");
+        let value = hex!("0a0b78782d7061726c69612d3012230a0131120d4f524445525f4f524445524544120f4f524445525f554e4f524445524544180322220a0b78782d7061726c69612d30120c636f6e6e656374696f6e2d301a050a03696263").to_vec();
         let path = "connections/connection-0";
 
+        let err = do_test_verify_membership(
+            path,
+            value[0..1].to_vec(),
+            proof_height,
+            proof.to_vec(),
+            state_root,
+            proof_height,
+        )
+        .unwrap_err();
+        let expected = format!("{:?}", err).contains("UnexpectedStateValue");
+        assert!(expected, "{}", err);
+
+        let latest_height = new_height(
+            proof_height.revision_number(),
+            proof_height.revision_height() - 1,
+        );
+        let err = do_test_verify_membership(
+            path,
+            value,
+            proof_height,
+            proof.to_vec(),
+            state_root,
+            latest_height,
+        )
+        .unwrap_err();
+        let expected = format!("{:?}", err).contains("UnexpectedProofHeight");
+        assert!(expected, "{}", err);
+    }
+
+    fn do_test_verify_membership(
+        path: &str,
+        value: Vec<u8>,
+        proof_height: Height,
+        proof: Vec<u8>,
+        state_root: Hash,
+        latest_height: Height,
+    ) -> Result<StateVerificationResult, light_client::Error> {
         let client = ParliaLightClient::default();
-        let proof_height = Height::new(0, 400);
+        let client_id = ClientId::new(client.client_type().as_str(), 0).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
         mock_consensus_state.insert(
             proof_height,
             ConsensusState {
-                state_root: [
-                    51, 143, 168, 48, 229, 178, 255, 245, 35, 4, 82, 182, 21, 136, 15, 201, 229,
-                    227, 54, 146, 158, 189, 229, 10, 242, 165, 205, 60, 170, 52, 212, 78,
-                ],
-                current_validators_hash: keccak_256_vec(&[vec![
-                    185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
-                    3, 78, 91,
-                ]]),
-                previous_validators_hash: keccak_256_vec(&[vec![
-                    185, 13, 158, 11, 243, 253, 38, 122, 99, 113, 215, 108, 127, 137, 33, 136, 133,
-                    3, 78, 91,
-                ]]),
+                state_root,
                 ..Default::default()
             },
         );
         let ctx = MockClientReader {
             client_state: Some(ClientState {
-                latest_height: proof_height,
+                latest_height,
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state,
         };
-        let prefix = vec![0];
-        let client_id = ClientId::new(client.client_type().as_str(), 0).unwrap();
-
-        match client.verify_membership(
+        client.verify_membership(
             &ctx,
             client_id,
-            prefix,
+            "ibc".into(),
             path.to_string(),
-            expected_value.clone(),
+            value,
             proof_height,
-            storage_proof_rlp.to_vec(),
-        ) {
-            Ok(data) => match &data.state_commitment {
-                Commitment::State(data) => {
-                    assert_eq!(data.path, path);
-                    assert_eq!(data.height, proof_height);
-                    assert_eq!(data.value, Some(keccak_256(expected_value.as_slice())));
-                }
-                _ => unreachable!("invalid state commitment {:?}", data.state_commitment),
-            },
-            Err(e) => unreachable!("error {:?}", e),
-        };
+            proof,
+        )
     }
 
     #[test]
