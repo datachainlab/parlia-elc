@@ -53,10 +53,10 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        header: Header,
+        mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &header)?;
+        self.check_header(now, trusted_consensus_state, &mut header)?;
 
         let mut new_client_state = self.clone();
         let header_height = header.height();
@@ -89,14 +89,19 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: Misbehaviour,
+        mut misbehaviour: Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+    fn check_header(
+        &self,
+        now: Time,
+        cs: &ConsensusState,
+        header: &mut Header,
+    ) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         validate_within_trusting_period(
             now,
@@ -114,6 +119,10 @@ impl ClientState {
                 header_height.revision_number(),
             ));
         }
+
+        // Ensure validator set is
+        header.verify_validator_set(cs)?;
+
         // Ensure header is valid
         header.verify(&self.chain_id)
     }

@@ -78,7 +78,7 @@ impl LightClient for ParliaLightClient {
         any_header: Any,
     ) -> Result<UpdateClientResult, LightClientError> {
         //Ensure header can be verified.
-        let mut header = Header::try_from(any_header)?;
+        let header = Header::try_from(any_header)?;
         let height = header.height();
         let timestamp = header.timestamp()?;
         let trusted_height = header.trusted_height();
@@ -93,9 +93,6 @@ impl LightClient for ParliaLightClient {
 
         // Create new state and ensure header is valid
         let trusted_consensus_state = ConsensusState::try_from(any_consensus_state)?;
-
-        // Ensure valid validator set
-        header.verify_validator_set(&trusted_consensus_state)?;
 
         let (new_client_state, new_consensus_state) = client_state.check_header_and_update_state(
             ctx.host_timestamp(),
@@ -191,7 +188,7 @@ impl ParliaLightClient {
         client_id: ClientId,
         any_misbehaviour: Any,
     ) -> Result<ClientState, LightClientError> {
-        let mut misbehaviour = Misbehaviour::try_from(any_misbehaviour)?;
+        let misbehaviour = Misbehaviour::try_from(any_misbehaviour)?;
         let any_client_state = ctx.client_state(&client_id)?;
         let any_consensus_state1 =
             ctx.consensus_state(&client_id, &misbehaviour.header_1.trusted_height())?;
@@ -204,15 +201,7 @@ impl ParliaLightClient {
         }
 
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
-        misbehaviour
-            .header_1
-            .verify_validator_set(&trusted_consensus_state1)?;
-
         let trusted_consensus_state2 = ConsensusState::try_from(any_consensus_state2)?;
-        misbehaviour
-            .header_2
-            .verify_validator_set(&trusted_consensus_state2)?;
-
         let new_client_state = client_state.check_misbehaviour_and_update_state(
             ctx.host_timestamp(),
             &trusted_consensus_state1,
