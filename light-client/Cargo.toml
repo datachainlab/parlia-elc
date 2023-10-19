@@ -1,6 +1,6 @@
 [package]
-name = "parlia-ibc-lc"
-version = "0.1.0"
+name = "parlia-elc"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ light-client = { git = "https://github.com/datachainlab/lcp", rev = "v0.2.2", de
 rlp = { version = "0.5.2", default-features = false }
 prost = { version = "0.11", default-features = false }
 
-parlia-ibc-proto = { version = "0.1.0", path = "../proto", default-features = false }
+parlia-ibc-proto = { version = "0.2.0", path = "../proto", default-features = false }
 
 tiny-keccak = { version = "2.0.2", default-features = false, features = ["keccak"] }
 trie-db = { version= "0.24.0", default-features = false }

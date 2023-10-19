@@ -53,10 +53,10 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        header: Header,
+        mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &header)?;
+        self.check_header(now, trusted_consensus_state, &mut header)?;
 
         let mut new_client_state = self.clone();
         let header_height = header.height();
@@ -77,7 +77,8 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            validators_hash: header.new_validators_hash(),
+            current_validators_hash: header.current_validators_hash(),
+            previous_validators_hash: header.previous_validators_hash(),
         };
 
         Ok((new_client_state, new_consensus_state))
@@ -88,14 +89,19 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: Misbehaviour,
+        mut misbehaviour: Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+    fn check_header(
+        &self,
+        now: Time,
+        cs: &ConsensusState,
+        header: &mut Header,
+    ) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         validate_within_trusting_period(
             now,
@@ -113,6 +119,10 @@ impl ClientState {
                 header_height.revision_number(),
             ));
         }
+
+        // Ensure validator set is
+        header.verify_validator_set(cs)?;
+
         // Ensure header is valid
         header.verify(&self.chain_id)
     }
@@ -268,15 +278,15 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        let relayer_client_state_protobuf = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124b08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510a9ba900f2a020864320410c0843d").to_vec();
-        let any: Any = relayer_client_state_protobuf.try_into().unwrap();
-        let cs: ClientState = any.try_into().unwrap();
+        let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510af9da90f2a040880a305320410c0843d").to_vec();
+        let cs: Any = cs.try_into().unwrap();
+        let cs: ClientState = cs.try_into().unwrap();
 
         assert_eq!(0, cs.latest_height.revision_number());
-        assert_eq!(31726889, cs.latest_height.revision_height());
+        assert_eq!(32132783, cs.latest_height.revision_height());
         assert_eq!(56, cs.chain_id.id());
         assert_eq!(0, cs.chain_id.version());
-        assert_eq!(100, cs.trusting_period.as_secs());
+        assert_eq!(86400, cs.trusting_period.as_secs());
         assert_eq!(1, cs.max_clock_drift.as_millis());
         assert_eq!(
             hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),

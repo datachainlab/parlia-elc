@@ -47,6 +47,7 @@ impl VoteAttestation {
     pub fn verify(&self, number: BlockNumber, validators: &Validators) -> Result<(), Error> {
         if self.vote_address_set.count() > validators.len() {
             return Err(Error::UnexpectedVoteAddressCount(
+                number,
                 self.vote_address_set.count(),
                 validators.len(),
             ));
@@ -65,16 +66,20 @@ impl VoteAttestation {
         let required = Self::ceil_div(validators.len() * 2, 3);
         if voted_addr.len() < required {
             return Err(Error::InsufficientValidatorCount(
+                number,
                 voted_addr.len(),
                 required,
             ));
         }
 
         let app_sig = milagro_bls::AggregateSignature::from_bytes(&self.app_signature)
-            .map_err(Error::UnexpectedBLSSignature)?;
+            .map_err(|e| Error::UnexpectedBLSSignature(number, e))?;
         let pub_keys_ref: Vec<&PublicKey> = voted_addr.iter().collect();
         if !app_sig.fast_aggregate_verify(self.data.hash().as_slice(), &pub_keys_ref) {
-            return Err(Error::FailedToVerifyBLSSignature(pub_keys_ref.len()));
+            return Err(Error::FailedToVerifyBLSSignature(
+                number,
+                pub_keys_ref.len(),
+            ));
         }
         Ok(())
     }
@@ -253,11 +258,62 @@ mod test {
         let vote = header.get_vote_attestation().unwrap();
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
-            Error::InsufficientValidatorCount(actual, required) => {
-                assert_eq!(actual, 17);
+            Error::InsufficientValidatorCount(number, vote_count_in_extra, required) => {
+                assert_eq!(number, header.number);
+                assert_eq!(vote_count_in_extra, 17);
                 assert_eq!(required, 28); //42 * 2 / 3
             }
             _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let validators = validators_in_31297000()[0..16].to_vec();
+        let err = vote.verify(header.number, &validators).unwrap_err();
+        match err {
+            Error::UnexpectedVoteAddressCount(number, vote_count_in_extra, val_size) => {
+                assert_eq!(number, header.number);
+                assert_eq!(vote_count_in_extra, 17);
+                assert_eq!(val_size, validators.len());
+            }
+            _ => unreachable!("{} {:?}", header.number, err),
+        }
+
+        let mut validators = validators_in_31297000();
+        for v in validators.iter_mut() {
+            v.pop();
+        }
+        let err = vote.verify(header.number, &validators).unwrap_err();
+        match err {
+            Error::UnexpectedBLSPubkey(number, e) => {
+                assert_eq!(header.number, number);
+                assert_eq!(format!("{:?}", e), "InvalidPoint");
+            }
+            _ => unreachable!("{} {:?}", header.number, err),
+        }
+
+        let validators = validators_in_31297000();
+        let header = header_31297199();
+        let mut vote = header.get_vote_attestation().unwrap();
+        vote.app_signature[0] = 1;
+        let err = vote.verify(header.number, &validators).unwrap_err();
+        match err {
+            Error::UnexpectedBLSSignature(number, e) => {
+                assert_eq!(number, header.number);
+                assert_eq!(format!("{:?}", e), "InvalidG2Size");
+            }
+            _ => unreachable!("{} {:?}", header.number, err),
+        }
+
+        let validators = validators_in_31297000();
+        let header = header_31297199();
+        let mut vote = header.get_vote_attestation().unwrap();
+        vote.vote_address_set.vote_address_set.pop();
+        let err = vote.verify(header.number, &validators).unwrap_err();
+        match err {
+            Error::FailedToVerifyBLSSignature(number, e) => {
+                assert_eq!(number, header.number);
+                assert_eq!(e, 16);
+            }
+            _ => unreachable!("{} {:?}", header.number, err),
         }
     }
 }

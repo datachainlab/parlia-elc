@@ -12,8 +12,6 @@ type BoxedTrieError = alloc::boxed::Box<TrieError<primitive_types::H256, rlp::De
 
 #[derive(Debug)]
 pub enum Error {
-    LCPError(light_client::Error),
-
     // data conversion error
     TimestampOverflowError(u128),
     TimeError(TimeError),
@@ -26,30 +24,25 @@ pub enum Error {
 
     // ClientState error
     MissingLatestHeight,
-    MissingTrustLevel,
     UnexpectedStoreAddress(Vec<u8>),
     ClientFrozen(ClientId),
-    UnexpectedLatestHeight(Height, Height),
+    UnexpectedProofHeight(Height, Height),
 
     // ConsensusState error
     AccountNotFound(Address),
     UnexpectedStateValue(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
-    UnexpectedTimestamp(TimeError),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
     UnexpectedStorageRoot(Vec<u8>),
     UnexpectedConsensusStateRoot(Vec<u8>),
-    UnexpectedCommitmentValue(Vec<u8>),
     UnexpectedHeader(usize, alloc::boxed::Box<Error>),
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
     MissingPreviousTrustedValidators(BlockNumber),
     MissingCurrentTrustedValidators(BlockNumber),
-    MissingTrustedValidatorsHeight,
     OutOfTrustingPeriod(Time, Time),
     HeaderFromFuture(Time, core::time::Duration, Time),
-    InvalidTrustThreshold(u64, u64),
     MissingTrustedHeight,
     MissingTrustingPeriod,
     NegativeMaxClockDrift,
@@ -59,7 +52,6 @@ pub enum Error {
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
-    UnexpectedValidatorHeight(BlockNumber),
     UnexpectedMixHash(BlockNumber),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
@@ -68,7 +60,6 @@ pub enum Error {
     UnexpectedEncodedPoint(BlockNumber),
     UnexpectedAddress(BlockNumber),
     UnexpectedCoinbase(BlockNumber),
-    UnexpectedDoubleSign(BlockNumber, Address),
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
@@ -76,22 +67,24 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
-    UnexpectedPreviousValidatorsHash(Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHash(Height, Hash, Hash),
+    UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
+    ValidatorNotTrusted(Hash),
 
     // Vote attestation
-    TooManyHeaders(BlockNumber, usize),
+    UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
     UnexpectedVoteRelation(BlockNumber, usize, Option<alloc::boxed::Box<Error>>),
     UnexpectedSourceInGrandChild(BlockNumber, BlockNumber, Hash, Hash),
     UnexpectedVoteLength(usize),
     UnexpectedVoteAttestationExtraLength(usize),
-    UnexpectedVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
-    UnexpectedBLSSignature(milagro_bls::AmclError),
+    UnexpectedTargetVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
+    UnexpectedSourceVoteAttestationRelation(BlockNumber, BlockNumber, Hash, Hash),
+    UnexpectedBLSSignature(BlockNumber, milagro_bls::AmclError),
     UnexpectedBLSPubkey(BlockNumber, milagro_bls::AmclError),
-    FailedToVerifyBLSSignature(usize),
-    InsufficientValidatorCount(usize, usize),
-    UnexpectedVoteAddressCount(usize, usize),
+    FailedToVerifyBLSSignature(BlockNumber, usize),
+    InsufficientValidatorCount(BlockNumber, usize, usize),
+    UnexpectedVoteAddressCount(BlockNumber, usize, usize),
     UnexpectedBLSSignatureLength(Vec<u8>),
 
     // Misbehaviour
@@ -106,7 +99,6 @@ pub enum Error {
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            Error::LCPError(e) => write!(f, "LCPError: {}", e),
             Error::TimestampOverflowError(e) => write!(f, "TimestampOverflowError: {}", e),
             Error::TimeError(e) => write!(f, "TimeError: {}", e),
             Error::RLPDecodeError(e) => write!(f, "RLPDecodeError : {}", e),
@@ -115,28 +107,22 @@ impl core::fmt::Display for Error {
             Error::UnknownClientStateType(e) => write!(f, "UnknownClientStateType: {}", e),
             Error::UnknownConsensusStateType(e) => write!(f, "UnknownClientStateType: {}", e),
             Error::MissingLatestHeight => write!(f, "MissingLatestHeight"),
-            Error::MissingTrustLevel => write!(f, "MissingTrustLevel"),
             Error::UnexpectedStoreAddress(e) => write!(f, "UnexpectedStoreAddress: {:?}", e),
             Error::ClientFrozen(e) => write!(f, "ClientFrozen: {}", e),
-            Error::UnexpectedLatestHeight(e1, e2) => {
-                write!(f, "UnexpectedLatestHeight: {} {}", e1, e2)
+            Error::UnexpectedProofHeight(e1, e2) => {
+                write!(f, "UnexpectedProofHeight: {} {}", e1, e2)
             }
             Error::AccountNotFound(e) => write!(f, "AccountNotFound: {:?}", e),
-            Error::UnexpectedTimestamp(e) => write!(f, "UnexpectedTimestamp: {}", e),
             Error::UnexpectedStateRoot(e) => write!(f, "UnexpectedStateRoot: {:?}", e),
             Error::UnexpectedConsensusStateRoot(e) => {
                 write!(f, "UnexpectedConsensusStateRoot: {:?}", e)
             }
             Error::UnexpectedStorageRoot(e) => write!(f, "UnexpectedStorageRoot: {:?}", e),
-            Error::UnexpectedCommitmentValue(e) => write!(f, "UnexpectedCommitmentValue: {:?}", e),
             Error::OutOfTrustingPeriod(e1, e2) => {
                 write!(f, "OutOfTrustingPeriod: {} {}", e1, e2)
             }
             Error::HeaderFromFuture(e1, e2, e3) => {
                 write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
-            }
-            Error::InvalidTrustThreshold(e1, e2) => {
-                write!(f, "InvalidTrustThreshold: {} {}", e1, e2)
             }
             Error::MissingTrustedHeight => write!(f, "MissingTrustedHeight"),
             Error::UnexpectedTrustedHeight(e1, e2) => {
@@ -163,9 +149,6 @@ impl core::fmt::Display for Error {
             Error::UnexpectedEncodedPoint(e) => write!(f, "UnexpectedEncodedPoint: {}", e),
             Error::UnexpectedAddress(e) => write!(f, "UnexpectedAddress: {}", e),
             Error::UnexpectedCoinbase(e) => write!(f, "UnexpectedCoinbase: {}", e),
-            Error::UnexpectedDoubleSign(e1, e2) => {
-                write!(f, "UnexpectedDoubleSign: {} {:?}", e1, e2)
-            }
             Error::MissingSignerInValidator(e1, e2) => {
                 write!(f, "MissingSignerInValidator: {} {:?}", e1, e2)
             }
@@ -212,24 +195,31 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteAttestationExtraLength(e1) => {
                 write!(f, "UnexpectedVoteAttestationExtraLength : {:?}", e1)
             }
-            Error::UnexpectedVoteAttestationRelation(e1, e2, e3, e4) => {
+            Error::UnexpectedTargetVoteAttestationRelation(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedVoteAttestationRelation : {:?} {:?} {:?} {:?}",
+                    "UnexpectedTargetVoteAttestationRelation : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
             }
-            Error::UnexpectedBLSSignature(e1) => {
-                write!(f, "UnexpectedBLSSignature : {:?}", e1)
+            Error::UnexpectedSourceVoteAttestationRelation(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedSourceVoteAttestationRelation : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
-            Error::FailedToVerifyBLSSignature(e1) => {
-                write!(f, "FailedToVerifyBLSSignature : {:?} ", e1)
+            Error::UnexpectedBLSSignature(e1, e2) => {
+                write!(f, "UnexpectedBLSSignature : {:?} {:?}", e1, e2)
             }
-            Error::UnexpectedVoteAddressCount(e1, e2) => {
-                write!(f, "UnexpectedVoteAddressCount : {:?} {:?}", e1, e2,)
+            Error::FailedToVerifyBLSSignature(e1, e2) => {
+                write!(f, "FailedToVerifyBLSSignature : {:?} {:?}", e1, e2)
             }
-            Error::InsufficientValidatorCount(e1, e2) => {
-                write!(f, "InsufficientValidatorCount : {:?} {:?}", e1, e2)
+            Error::UnexpectedVoteAddressCount(e1, e2, e3) => {
+                write!(f, "UnexpectedVoteAddressCount : {:?} {:?} {:?}", e1, e2, e3)
+            }
+            Error::InsufficientValidatorCount(e1, e2, e3) => {
+                write!(f, "InsufficientValidatorCount : {:?} {:?} {:?}", e1, e2, e3)
             }
             Error::UnexpectedBLSSignatureLength(e1) => {
                 write!(f, "UnexpectedBLSSignatureLength : {:?}", e1)
@@ -240,33 +230,27 @@ impl core::fmt::Display for Error {
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
             }
-            Error::UnexpectedValidatorHeight(e1) => {
-                write!(f, "UnexpectedValidatorHeight : {:?}", e1)
-            }
             Error::MissingPreviousTrustedValidators(e1) => {
                 write!(f, "MissingPreviousTrustedValidators : {:?}", e1)
             }
             Error::MissingCurrentTrustedValidators(e1) => {
                 write!(f, "MissingCurrentTrustedValidators : {:?}", e1)
             }
-            Error::MissingTrustedValidatorsHeight => {
-                write!(f, "MissingTrustedValidatorsHeight")
-            }
             Error::UnexpectedMixHash(e1) => {
                 write!(f, "UnexpectedMixHash : {:?}", e1)
             }
-            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3) => {
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?}",
-                    e1, e2, e3
+                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
                 )
             }
-            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3) => {
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4) => {
                 write!(
                     f,
-                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?}",
-                    e1, e2, e3
+                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
                 )
             }
             Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
@@ -279,11 +263,14 @@ impl core::fmt::Display for Error {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
                 write!(f, "InvalidVerifyingHeaderLength : {} {}", e1, e2)
             }
-            Error::TooManyHeaders(e1, e2) => {
-                write!(f, "TooManyHeaders : {} {}", e1, e2)
+            Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
+                write!(f, "UnexpectedTooManyHeadersToFinalize : {} {}", e1, e2)
             }
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
+            }
+            Error::ValidatorNotTrusted(e1) => {
+                write!(f, "ValidatorNotTrusted : {:?}", e1)
             }
         }
     }

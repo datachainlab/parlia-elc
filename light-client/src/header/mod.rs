@@ -7,10 +7,11 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
+use crate::consensus_state::ConsensusState;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::ValidatorSet;
-use crate::misc::{keccak_256_vec, new_height, new_timestamp, ChainId, Hash};
+use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
 
@@ -42,10 +43,6 @@ impl Header {
         )
     }
 
-    pub fn is_target_epoch(&self) -> bool {
-        self.headers.target.is_epoch()
-    }
-
     pub fn timestamp(&self) -> Result<Time, Error> {
         new_timestamp(self.headers.target.timestamp)
     }
@@ -62,51 +59,95 @@ impl Header {
         &self.headers.target.root
     }
 
-    pub fn new_validators_hash(&self) -> Hash {
-        let validator = self
-            .headers
-            .target
-            .get_validator_bytes()
-            .unwrap_or_default();
-        keccak_256_vec(&validator)
+    pub fn previous_validators_hash(&self) -> Hash {
+        self.previous_validators.hash
     }
 
-    pub fn previous_epoch_validators(&self) -> (Height, Hash) {
-        let height = &self.height().revision_height();
-        let mut epoch_count = height / BLOCKS_PER_EPOCH;
-        if epoch_count > 0 {
-            epoch_count -= 1;
-        }
-        (
-            Height::new(
-                self.height().revision_number(),
-                epoch_count * BLOCKS_PER_EPOCH,
-            ),
-            self.previous_validators.hash,
-        )
-    }
-
-    pub fn current_epoch_validators(&self) -> (Height, Hash) {
-        let height = &self.height().revision_height();
-        let epoch_count = height / BLOCKS_PER_EPOCH;
-        let epoch_block = epoch_count * BLOCKS_PER_EPOCH;
-        (
-            Height::new(self.height().revision_number(), epoch_block),
-            self.current_validators.hash,
-        )
+    pub fn current_validators_hash(&self) -> Hash {
+        self.current_validators.hash
     }
 
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
-            &self.current_validators.validators,
-            &self.previous_validators.validators,
+            &self.current_validators,
+            &self.previous_validators,
         )
     }
 
     pub fn block_hash(&self) -> &Hash {
         &self.headers.target.hash
     }
+
+    pub fn verify_validator_set(&mut self, consensus_state: &ConsensusState) -> Result<(), Error> {
+        verify_validator_set(
+            consensus_state,
+            self.headers.target.is_epoch(),
+            self.height(),
+            self.trusted_height,
+            &mut self.previous_validators,
+            &mut self.current_validators,
+        )
+    }
+}
+
+fn verify_validator_set(
+    consensus_state: &ConsensusState,
+    is_epoch: bool,
+    height: Height,
+    trusted_height: Height,
+    previous_validators: &mut ValidatorSet,
+    current_validators: &mut ValidatorSet,
+) -> Result<(), Error> {
+    let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
+    let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
+
+    if is_epoch {
+        if header_epoch != trusted_epoch + 1 {
+            return Err(Error::UnexpectedTrustedHeight(
+                trusted_height.revision_height(),
+                height.revision_height(),
+            ));
+        }
+        previous_validators.trusted =
+            previous_validators.hash == consensus_state.current_validators_hash;
+        if !previous_validators.trusted {
+            return Err(Error::UnexpectedPreviousValidatorsHash(
+                trusted_height,
+                height,
+                previous_validators.hash,
+                consensus_state.current_validators_hash,
+            ));
+        }
+    } else {
+        if header_epoch != trusted_epoch {
+            return Err(Error::UnexpectedTrustedHeight(
+                trusted_height.revision_height(),
+                height.revision_height(),
+            ));
+        }
+        previous_validators.trusted =
+            previous_validators.hash == consensus_state.previous_validators_hash;
+        if !previous_validators.trusted {
+            return Err(Error::UnexpectedPreviousValidatorsHash(
+                trusted_height,
+                height,
+                previous_validators.hash,
+                consensus_state.previous_validators_hash,
+            ));
+        }
+        current_validators.trusted =
+            current_validators.hash == consensus_state.current_validators_hash;
+        if !current_validators.trusted {
+            return Err(Error::UnexpectedCurrentValidatorsHash(
+                trusted_height,
+                height,
+                current_validators.hash,
+                consensus_state.current_validators_hash,
+            ));
+        }
+    }
+    Ok(())
 }
 
 impl TryFrom<RawHeader> for Header {
@@ -132,24 +173,22 @@ impl TryFrom<RawHeader> for Header {
             ));
         }
 
-        let previous_validators: ValidatorSet = value.previous_validators.into();
-        if previous_validators.validators.is_empty() {
+        if value.previous_validators.is_empty() {
             return Err(Error::MissingPreviousTrustedValidators(
                 headers.target.number,
             ));
         }
 
         // Epoch header contains validator set
-        let current_validators: ValidatorSet = if headers.target.is_epoch() {
+        let current_validators = if headers.target.is_epoch() {
             headers
                 .target
                 .get_validator_bytes()
                 .ok_or_else(|| Error::MissingValidatorInEpochBlock(headers.target.number))?
-                .into()
         } else {
-            value.current_validators.into()
+            value.current_validators
         };
-        if current_validators.validators.is_empty() {
+        if current_validators.is_empty() {
             return Err(Error::MissingCurrentTrustedValidators(
                 headers.target.number,
             ));
@@ -159,8 +198,8 @@ impl TryFrom<RawHeader> for Header {
             account_proof: value.account_proof,
             headers,
             trusted_height,
-            previous_validators,
-            current_validators,
+            previous_validators: value.previous_validators.into(),
+            current_validators: current_validators.into(),
         })
     }
 }
@@ -186,4 +225,174 @@ impl TryFrom<Any> for Header {
 }
 
 #[cfg(test)]
-pub(crate) mod testdata;
+mod testdata;
+
+#[cfg(test)]
+mod test {
+    use crate::consensus_state::ConsensusState;
+    use crate::errors::Error;
+    use crate::header::validator_set::ValidatorSet;
+    use crate::header::verify_validator_set;
+    use crate::misc::{new_height, Hash, Validators};
+    use light_client::types::Time;
+
+    fn to_validator_set(h: Hash) -> ValidatorSet {
+        let validators: Validators = vec![];
+        let mut v: ValidatorSet = validators.into();
+        v.hash = h;
+        v
+    }
+
+    #[test]
+    fn test_success_verify_validator_set() {
+        let cs = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: Time::now(),
+            current_validators_hash: [1u8; 32],
+            previous_validators_hash: [2u8; 32],
+        };
+
+        let height = new_height(0, 400);
+        let trusted_height = new_height(0, 201);
+        let current_validators = &mut to_validator_set([3u8; 32]);
+        let previous_validators = &mut to_validator_set(cs.current_validators_hash);
+        verify_validator_set(
+            &cs,
+            true,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap();
+
+        let height = new_height(0, 599);
+        let trusted_height = new_height(0, 400);
+        let current_validators = &mut to_validator_set(cs.current_validators_hash);
+        let previous_validators = &mut to_validator_set(cs.previous_validators_hash);
+        verify_validator_set(
+            &cs,
+            false,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_error_verify_validator_set() {
+        let cs = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: Time::now(),
+            current_validators_hash: [1u8; 32],
+            previous_validators_hash: [2u8; 32],
+        };
+
+        let height = new_height(0, 400);
+        let trusted_height = new_height(0, 199);
+        let current_validators = &mut to_validator_set([1u8; 32]);
+        let previous_validators = &mut to_validator_set([2u8; 32]);
+        let err = verify_validator_set(
+            &cs,
+            true,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedTrustedHeight(t, h) => {
+                assert_eq!(t, trusted_height.revision_height());
+                assert_eq!(h, height.revision_height());
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+
+        let trusted_height = new_height(0, 200);
+        let previous_validators = &mut to_validator_set([3u8; 32]);
+        let err = verify_validator_set(
+            &cs,
+            true,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedPreviousValidatorsHash(t, h, hash, cons_hash) => {
+                assert_eq!(t, trusted_height);
+                assert_eq!(h, height);
+                assert_eq!(hash, previous_validators.hash);
+                assert_eq!(cons_hash, cons_hash);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+
+        let height = new_height(0, 401);
+        let trusted_height = new_height(0, 200);
+        let err = verify_validator_set(
+            &cs,
+            false,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedTrustedHeight(t, h) => {
+                assert_eq!(t, trusted_height.revision_height());
+                assert_eq!(h, height.revision_height());
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+
+        let trusted_height = new_height(0, 400);
+        let current_validators = &mut to_validator_set([1u8; 32]);
+        let previous_validators = &mut to_validator_set([3u8; 32]);
+        let err = verify_validator_set(
+            &cs,
+            false,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedPreviousValidatorsHash(t, h, hash, cons_hash) => {
+                assert_eq!(t, trusted_height);
+                assert_eq!(h, height);
+                assert_eq!(hash, previous_validators.hash);
+                assert_eq!(cons_hash, cons_hash);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+
+        let trusted_height = new_height(0, 400);
+        let current_validators = &mut to_validator_set([3u8; 32]);
+        let previous_validators = &mut to_validator_set([2u8; 32]);
+        let err = verify_validator_set(
+            &cs,
+            false,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedCurrentValidatorsHash(t, h, hash, cons_hash) => {
+                assert_eq!(t, trusted_height);
+                assert_eq!(h, height);
+                assert_eq!(hash, current_validators.hash);
+                assert_eq!(cons_hash, cons_hash);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+    }
+}

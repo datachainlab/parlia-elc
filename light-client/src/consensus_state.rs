@@ -19,8 +19,8 @@ pub struct ConsensusState {
     pub state_root: Hash,
     /// timestamp from execution payload
     pub timestamp: Time,
-    /// finalized header's validator set.Only epoch headers contain validator set
-    pub validators_hash: Hash,
+    pub current_validators_hash: Hash,
+    pub previous_validators_hash: Hash,
 }
 
 impl ConsensusState {
@@ -40,14 +40,19 @@ impl TryFrom<RawConsensusState> for ConsensusState {
             .try_into()
             .map_err(Error::UnexpectedConsensusStateRoot)?;
         let timestamp = new_timestamp(value.timestamp)?;
-        let validators_hash: Hash = value
-            .validators_hash
+        let current_validators_hash: Hash = value
+            .current_validators_hash
+            .try_into()
+            .map_err(Error::UnexpectedValidatorsHashSize)?;
+        let previous_validators_hash: Hash = value
+            .previous_validators_hash
             .try_into()
             .map_err(Error::UnexpectedValidatorsHashSize)?;
         Ok(Self {
             state_root,
             timestamp,
-            validators_hash,
+            current_validators_hash,
+            previous_validators_hash,
         })
     }
 }
@@ -57,7 +62,8 @@ impl From<ConsensusState> for RawConsensusState {
         Self {
             state_root: value.state_root.to_vec(),
             timestamp: value.timestamp.as_unix_timestamp_secs(),
-            validators_hash: value.validators_hash.into(),
+            current_validators_hash: value.current_validators_hash.into(),
+            previous_validators_hash: value.previous_validators_hash.into(),
         }
     }
 }
@@ -113,19 +119,21 @@ mod test {
 
     #[test]
     fn test_try_from_any() {
-        // This is ibc-parlia-relay's unit test data
-        let relayer_consensus_state_protobuf = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e737573537461746512440a20c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a4701a2073b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c").to_vec();
-        let any: Any = relayer_consensus_state_protobuf.try_into().unwrap();
-        let cs: ConsensusState = any.try_into().unwrap();
+        let cs = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
+        let cs: Any = cs.try_into().unwrap();
+        let cs: ConsensusState = cs.try_into().unwrap();
 
-        // Check if the result are same as relayer's one
         assert_eq!(
-            hex!("73b0a7eec725ec1c4016d9cba46fbdac22478f8eadb6690067b2aa943afa0a9c"),
-            cs.validators_hash
+            hex!("9c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e"),
+            cs.current_validators_hash
         );
-        assert_eq!(0, cs.timestamp.as_unix_timestamp_secs());
         assert_eq!(
-            hex!("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
+            hex!("7a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a"),
+            cs.previous_validators_hash
+        );
+        assert_eq!(1695891806, cs.timestamp.as_unix_timestamp_secs());
+        assert_eq!(
+            hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
             cs.state_root
         );
     }
