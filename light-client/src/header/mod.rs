@@ -21,10 +21,10 @@ pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
 // inner header is module private
 pub mod constant;
-mod eth_header;
-mod eth_headers;
-pub(crate) mod validator_set;
-mod vote_attestation;
+pub mod eth_header;
+pub mod eth_headers;
+pub mod validator_set;
+pub mod vote_attestation;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
