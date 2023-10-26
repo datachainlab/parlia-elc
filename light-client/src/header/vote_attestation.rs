@@ -8,6 +8,7 @@ use rlp::{Rlp, RlpStream};
 
 pub(crate) const BLS_PUBKEY_LENGTH: usize = 48;
 const MAX_ATTESTATION_EXTRA_LENGTH: usize = 256;
+const BLS_SIGNATURE_LENGTH: usize = 96;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct VoteAddressBitSet {
@@ -118,10 +119,10 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
         let mut rlp = RlpIterator::new(value);
         let vote_address_set: u64 = rlp.try_next_as_val()?;
 
-        let app_signature: [u8; 96] = rlp
+        let app_signature: [u8; BLS_SIGNATURE_LENGTH] = rlp
             .try_next_as_val::<Vec<u8>>()?
             .try_into()
-            .map_err(Error::UnexpectedBLSSignatureLength)?;
+            .map_err(|v: Vec<u8>| Error::UnexpectedBLSSignatureLength(v.len()))?;
 
         let vote = rlp.try_next()?;
         let source_number: u64 = rlp_as_val(&vote, 0)?;
@@ -156,9 +157,51 @@ mod test {
     use crate::header::testdata::{
         header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
     };
-    use crate::header::vote_attestation::{VoteAddressBitSet, VoteAttestation, VoteData};
+    use crate::header::vote_attestation::{
+        VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
+        MAX_ATTESTATION_EXTRA_LENGTH,
+    };
     use hex_literal::hex;
-    use rlp::Rlp;
+    use rlp::{Rlp, RlpStream};
+    use std::io::Read;
+
+    #[test]
+    fn test_error_try_from_unexpected_bls_signature_length() {
+        let mut stream = RlpStream::new_list(2);
+        stream.append(&(10 as u64));
+        stream.append(&[0u8; BLS_SIGNATURE_LENGTH + 1].to_vec());
+        let raw = stream.out();
+        let err = VoteAttestation::try_from(Rlp::new(&raw)).unwrap_err();
+        match err {
+            Error::UnexpectedBLSSignatureLength(size) => {
+                assert_eq!(size, BLS_SIGNATURE_LENGTH + 1)
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_vote_extra_length() {
+        let mut vote_stream = RlpStream::new_list(4);
+        vote_stream.append(&(10 as u64));
+        vote_stream.append(&[1u8; 32].to_vec());
+        vote_stream.append(&(11 as u64));
+        vote_stream.append(&[0u8; 32].to_vec());
+        let vote_data_size = vote_stream.len();
+        let mut stream = RlpStream::new_list(vote_data_size + 3);
+        stream.append(&(10 as u64));
+        stream.append(&[0u8; BLS_SIGNATURE_LENGTH].to_vec());
+        stream.append_raw(&vote_stream.out().to_vec(), vote_data_size);
+        stream.append(&[0u8; MAX_ATTESTATION_EXTRA_LENGTH + 1].to_vec());
+        let raw = stream.out();
+        let err = VoteAttestation::try_from(Rlp::new(&raw)).unwrap_err();
+        match err {
+            Error::UnexpectedVoteAttestationExtraLength(size) => {
+                assert_eq!(size, MAX_ATTESTATION_EXTRA_LENGTH + 1)
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
 
     #[test]
     fn test_success_verify() {

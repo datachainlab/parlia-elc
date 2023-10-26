@@ -85,7 +85,7 @@ pub enum Error {
     FailedToVerifyBLSSignature(BlockNumber, usize),
     InsufficientValidatorCount(BlockNumber, usize, usize),
     UnexpectedVoteAddressCount(BlockNumber, usize, usize),
-    UnexpectedBLSSignatureLength(Vec<u8>),
+    UnexpectedBLSSignatureLength(usize),
 
     // Misbehaviour
     MissingHeader1,
