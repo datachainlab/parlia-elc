@@ -262,32 +262,6 @@ impl ETHHeader {
     }
 }
 
-impl TryFrom<ETHHeader> for RawETHHeader {
-    type Error = Error;
-
-    fn try_from(header: ETHHeader) -> Result<Self, Self::Error> {
-        let mut stream = RlpStream::new_list(15);
-        stream.append(&header.parent_hash);
-        stream.append(&header.uncle_hash);
-        stream.append(&header.coinbase);
-        stream.append(&header.root.to_vec());
-        stream.append(&header.tx_hash);
-        stream.append(&header.receipt_hash);
-        stream.append(&header.bloom);
-        stream.append(&header.difficulty);
-        stream.append(&header.number);
-        stream.append(&header.gas_limit);
-        stream.append(&header.gas_used);
-        stream.append(&header.timestamp);
-        stream.append(&header.extra_data);
-        stream.append(&header.mix_digest);
-        stream.append(&header.nonce);
-        Ok(RawETHHeader {
-            header: stream.out().to_vec(),
-        })
-    }
-}
-
 impl TryFrom<RawETHHeader> for ETHHeader {
     type Error = Error;
 
@@ -408,30 +382,31 @@ pub(crate) mod test {
     use rlp::{Rlp, RlpStream};
 
     use crate::header::testdata::*;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
-    impl rlp::Encodable for ETHHeader {
-        fn rlp_append(&self, s: &mut RlpStream) {
-            s.begin_unbounded_list()
-                .append(&self.parent_hash)
-                .append(&self.uncle_hash)
-                .append(&self.coinbase)
-                .append(&self.root.to_vec())
-                .append(&self.tx_hash)
-                .append(&self.receipt_hash)
-                .append(&self.bloom)
-                .append(&self.difficulty)
-                .append(&self.number)
-                .append(&self.gas_limit)
-                .append(&self.gas_used)
-                .append(&self.timestamp)
-                .append(&self.extra_data)
-                .append(&self.mix_digest)
-                .append(&self.nonce)
-                .finalize_unbounded_list();
-        }
+    impl TryFrom<&ETHHeader> for RawETHHeader {
+        type Error = Error;
 
-        fn rlp_bytes(&self) -> BytesMut {
-            BytesMut::new()
+        fn try_from(header: &ETHHeader) -> Result<Self, Self::Error> {
+            let mut stream = RlpStream::new_list(15);
+            stream.append(&header.parent_hash);
+            stream.append(&header.uncle_hash);
+            stream.append(&header.coinbase);
+            stream.append(&header.root.to_vec());
+            stream.append(&header.tx_hash);
+            stream.append(&header.receipt_hash);
+            stream.append(&header.bloom);
+            stream.append(&header.difficulty);
+            stream.append(&header.number);
+            stream.append(&header.gas_limit);
+            stream.append(&header.gas_used);
+            stream.append(&header.timestamp);
+            stream.append(&header.extra_data);
+            stream.append(&header.mix_digest);
+            stream.append(&header.nonce);
+            Ok(RawETHHeader {
+                header: stream.out().to_vec(),
+            })
         }
     }
 

@@ -85,9 +85,7 @@ mod test {
 
     fn to_raw(h: &ETHHeader) -> RawHeader {
         RawHeader {
-            headers: vec![EthHeader {
-                header: rlp::encode(h).to_vec(),
-            }],
+            headers: vec![h.try_into().unwrap()],
             trusted_height: Some(Height::default()),
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
