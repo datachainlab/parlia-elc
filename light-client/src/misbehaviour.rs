@@ -67,10 +67,12 @@ impl TryFrom<Any> for Misbehaviour {
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
+    use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297201, header_31297202};
     use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
+    use crate::misbehaviour;
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::new_height;
     use alloc::string::ToString;
@@ -80,6 +82,18 @@ mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
         EthHeader, Misbehaviour as RawMisbehaviour,
     };
+
+    fn to_raw(h: &ETHHeader) -> RawHeader {
+        RawHeader {
+            headers: vec![EthHeader {
+                header: rlp::encode(h).to_vec(),
+            }],
+            trusted_height: Some(Height::default()),
+            account_proof: vec![],
+            current_validators: vec![h.coinbase.clone()],
+            previous_validators: vec![h.coinbase.clone()],
+        }
+    }
 
     #[test]
     fn test_error_try_from_unexpected_client() {
@@ -109,19 +123,10 @@ mod test {
 
     #[test]
     fn test_error_try_from_missing_h2() {
-        let h = header_31297201();
-        let h1 = RawHeader {
-            headers: vec![EthHeader {
-                header: rlp::encode(&h).to_vec(),
-            }],
-            trusted_height: Some(Height::default()),
-            account_proof: vec![],
-            current_validators: vec![h.coinbase.clone()],
-            previous_validators: vec![h.coinbase.clone()],
-        };
+        let h1 = header_31297201();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(h1),
+            header_1: Some(to_raw(&h1)),
             header_2: None,
         };
         match Misbehaviour::try_from(src).unwrap_err() {
@@ -132,60 +137,49 @@ mod test {
 
     #[test]
     fn test_error_try_from_same_block() {
-        let h = header_31297201();
-        let h1 = RawHeader {
-            headers: vec![EthHeader {
-                header: rlp::encode(&h).to_vec(),
-            }],
-            trusted_height: Some(Height::default()),
-            account_proof: vec![],
-            current_validators: vec![h.coinbase.clone()],
-            previous_validators: vec![h.coinbase.clone()],
-        };
+        let h1 = header_31297201();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(h1.clone()),
-            header_2: Some(h1),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h1)),
         };
         match Misbehaviour::try_from(src).unwrap_err() {
-            Error::UnexpectedSameBlockHash(height) => assert_eq!(height, new_height(0, h.number)),
+            Error::UnexpectedSameBlockHash(height) => assert_eq!(height, new_height(0, h1.number)),
             err => unreachable!("{:?}", err),
         }
     }
 
     #[test]
     fn test_error_try_from_different_height() {
-        let h1_src = header_31297201();
-        let h1 = RawHeader {
-            headers: vec![EthHeader {
-                header: rlp::encode(&h1_src).to_vec(),
-            }],
-            trusted_height: Some(Height::default()),
-            account_proof: vec![],
-            current_validators: vec![h1_src.coinbase.clone()],
-            previous_validators: vec![h1_src.coinbase.clone()],
-        };
-        let h2_src = header_31297202();
-        let h2 = RawHeader {
-            headers: vec![EthHeader {
-                header: rlp::encode(&h2_src).to_vec(),
-            }],
-            trusted_height: Some(Height::default()),
-            account_proof: vec![],
-            current_validators: vec![h2_src.coinbase.clone()],
-            previous_validators: vec![h2_src.coinbase.clone()],
-        };
+        let h1 = header_31297201();
+        let h2 = header_31297202();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(h1),
-            header_2: Some(h2),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h2)),
         };
         match Misbehaviour::try_from(src).unwrap_err() {
             Error::UnexpectedDifferentHeight(h1_height, h2_height) => {
-                assert_eq!(h1_height, new_height(0, h1_src.number));
-                assert_eq!(h2_height, new_height(0, h2_src.number))
+                assert_eq!(h1_height, new_height(0, h1.number));
+                assert_eq!(h2_height, new_height(0, h2.number))
             }
             err => unreachable!("{:?}", err),
         }
+    }
+
+    #[test]
+    fn test_success_try_from() {
+        let h1 = header_31297201();
+        let mut h2 = header_31297201();
+        h2.gas_used = h1.gas_used + 1;
+        let src = RawMisbehaviour {
+            client_id: "xx-parlia-1".to_string(),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h2)),
+        };
+        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        assert_eq!(misbehaviour.client_id.as_str(), "xx-parlia-1");
+        assert_eq!(misbehaviour.header_1.height(), new_height(0, h1.number));
+        assert_eq!(misbehaviour.header_2.height(), new_height(0, h2.number));
     }
 }
