@@ -232,10 +232,172 @@ pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header::eth_headers::ETHHeaders;
+    use crate::header::testdata::{header_31297200, header_31297201};
     use crate::header::validator_set::ValidatorSet;
     use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
+    use parlia_ibc_proto::ibc::core::client::v1::Height;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+
+    #[test]
+    fn test_error_try_from_missing_trusted_height() {
+        let h = &header_31297201();
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: None,
+            account_proof: vec![],
+            current_validators: vec![h.coinbase.clone()],
+            previous_validators: vec![h.coinbase.clone()],
+        };
+        let err = Header::try_from(raw).unwrap_err();
+        match err {
+            Error::MissingTrustedHeight => {}
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_try_from_unexpected_trusted_height() {
+        let h = &header_31297201();
+        let trusted_height = Height {
+            revision_number: 0,
+            revision_height: h.number,
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(trusted_height.clone()),
+            account_proof: vec![],
+            current_validators: vec![h.coinbase.clone()],
+            previous_validators: vec![h.coinbase.clone()],
+        };
+        let err = Header::try_from(raw).unwrap_err();
+        match err {
+            Error::UnexpectedTrustedHeight(number, trusted_number) => {
+                assert_eq!(number, h.number);
+                assert_eq!(trusted_number, trusted_height.revision_height);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_try_from_previous_validators_is_empty() {
+        let h = &header_31297201();
+        let trusted_height = Height {
+            revision_number: 0,
+            revision_height: h.number - 1,
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(trusted_height.clone()),
+            account_proof: vec![],
+            current_validators: vec![h.coinbase.clone()],
+            previous_validators: vec![],
+        };
+        let err = Header::try_from(raw).unwrap_err();
+        match err {
+            Error::MissingPreviousTrustedValidators(number) => {
+                assert_eq!(number, h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_try_from_current_validators_is_empty() {
+        let h = &header_31297201();
+        let trusted_height = Height {
+            revision_number: 0,
+            revision_height: h.number - 1,
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(trusted_height.clone()),
+            account_proof: vec![],
+            current_validators: vec![],
+            previous_validators: vec![h.coinbase.clone()],
+        };
+        let err = Header::try_from(raw).unwrap_err();
+        match err {
+            Error::MissingCurrentTrustedValidators(number) => {
+                assert_eq!(number, h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_success_try_from() {
+        let h = &header_31297200();
+        let trusted_height = Height {
+            revision_number: 0,
+            revision_height: h.number - 1,
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(trusted_height.clone()),
+            account_proof: vec![],
+            current_validators: vec![],
+            previous_validators: vec![h.coinbase.clone()],
+        };
+        let mut result = Header::try_from(raw.clone()).unwrap();
+        result.previous_validators.trusted = true;
+        result.current_validators.trusted = true;
+        assert_eq!(result.headers.target, *h);
+        assert_eq!(
+            result.trusted_height.revision_height(),
+            trusted_height.revision_height
+        );
+        assert_eq!(
+            result.trusted_height.revision_number(),
+            trusted_height.revision_number
+        );
+        assert_eq!(
+            result.previous_validators.validators().unwrap(),
+            &raw.previous_validators
+        );
+        assert_eq!(
+            result.current_validators.validators().unwrap(),
+            &h.get_validator_bytes().unwrap()
+        );
+    }
+
+    #[test]
+    fn test_success_try_from2() {
+        let h = &header_31297201();
+        let trusted_height = Height {
+            revision_number: 0,
+            revision_height: h.number - 1,
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(trusted_height.clone()),
+            account_proof: vec![],
+            current_validators: vec![header_31297200().coinbase],
+            previous_validators: vec![h.coinbase.clone()],
+        };
+        let mut result = Header::try_from(raw.clone()).unwrap();
+        result.previous_validators.trusted = true;
+        result.current_validators.trusted = true;
+        assert_eq!(result.headers.target, *h);
+        assert_eq!(
+            result.trusted_height.revision_height(),
+            trusted_height.revision_height
+        );
+        assert_eq!(
+            result.trusted_height.revision_number(),
+            trusted_height.revision_number
+        );
+        assert_eq!(
+            result.previous_validators.validators().unwrap(),
+            &raw.previous_validators
+        );
+        assert_eq!(
+            result.current_validators.validators().unwrap(),
+            &raw.current_validators
+        );
+    }
 
     fn to_validator_set(h: Hash) -> ValidatorSet {
         let validators: Validators = vec![];
