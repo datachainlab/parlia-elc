@@ -377,7 +377,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::Error;
-    use crate::header::eth_header::{ETHHeader, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
+    use crate::header::eth_header::{
+        ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
+    };
     use prost::bytes::BytesMut;
     use rlp::{Rlp, RlpStream};
 
@@ -408,6 +410,95 @@ pub(crate) mod test {
                 header: stream.out().to_vec(),
             })
         }
+    }
+
+    #[test]
+    fn test_error_try_from_missing_vanity() {
+        let mut header = header_31297201();
+        header.extra_data = [0u8; EXTRA_VANITY - 1].to_vec();
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::MissingVanityInExtraData(number, actual, min) => {
+                assert_eq!(number, header.number);
+                assert_eq!(actual, header.extra_data.len());
+                assert_eq!(min, EXTRA_VANITY);
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_missing_signature() {
+        let mut header = header_31297201();
+        header.extra_data = [0u8; EXTRA_VANITY + EXTRA_SEAL - 1].to_vec();
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::MissingSignatureInExtraData(number, actual, min) => {
+                assert_eq!(number, header.number);
+                assert_eq!(actual, header.extra_data.len());
+                assert_eq!(min, EXTRA_VANITY + EXTRA_SEAL);
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_unexpected_mix_hash() {
+        let mut header = header_31297201();
+        header.mix_digest = vec![];
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::UnexpectedMixHash(number) => {
+                assert_eq!(number, header.number);
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_unexpected_uncle_hash() {
+        let mut header = header_31297201();
+        header.uncle_hash = vec![];
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::UnexpectedUncleHash(number) => {
+                assert_eq!(number, header.number);
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_unexpected_difficulty() {
+        let mut header = header_31297201();
+        header.difficulty = 10;
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::UnexpectedDifficulty(number, actual) => {
+                assert_eq!(number, header.number);
+                assert_eq!(actual, header.difficulty);
+            }
+            err => unreachable!("{:?}", err),
+        };
+    }
+
+    #[test]
+    fn test_error_try_from_unexpected_nonce() {
+        let mut header = header_31297201();
+        header.nonce = vec![];
+        let raw = RawETHHeader::try_from(&header).unwrap();
+        let err = ETHHeader::try_from(raw).unwrap_err();
+        match err {
+            Error::UnexpectedNonce(number) => {
+                assert_eq!(number, header.number);
+            }
+            err => unreachable!("{:?}", err),
+        };
     }
 
     #[test]
