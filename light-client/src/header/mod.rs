@@ -225,14 +225,15 @@ impl TryFrom<Any> for Header {
 }
 
 #[cfg(test)]
-mod testdata;
+pub(crate) mod testdata;
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
+    use crate::header::eth_headers::ETHHeaders;
     use crate::header::validator_set::ValidatorSet;
-    use crate::header::verify_validator_set;
+    use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
 

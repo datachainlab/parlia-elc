@@ -401,12 +401,39 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 }
 
 #[cfg(test)]
-mod test {
-
+pub(crate) mod test {
     use crate::errors::Error;
-    use crate::header::eth_header::PARAMS_GAS_LIMIT_BOUND_DIVISOR;
+    use crate::header::eth_header::{ETHHeader, PARAMS_GAS_LIMIT_BOUND_DIVISOR};
+    use prost::bytes::BytesMut;
+    use rlp::{Rlp, RlpStream};
 
     use crate::header::testdata::*;
+
+    impl rlp::Encodable for ETHHeader {
+        fn rlp_append(&self, s: &mut RlpStream) {
+            s.begin_unbounded_list()
+                .append(&self.parent_hash)
+                .append(&self.uncle_hash)
+                .append(&self.coinbase)
+                .append(&self.root.to_vec())
+                .append(&self.tx_hash)
+                .append(&self.receipt_hash)
+                .append(&self.bloom)
+                .append(&self.difficulty)
+                .append(&self.number)
+                .append(&self.gas_limit)
+                .append(&self.gas_used)
+                .append(&self.timestamp)
+                .append(&self.extra_data)
+                .append(&self.mix_digest)
+                .append(&self.nonce)
+                .finalize_unbounded_list();
+        }
+
+        fn rlp_bytes(&self) -> BytesMut {
+            BytesMut::new()
+        }
+    }
 
     #[test]
     fn test_success_verify_seal() {
