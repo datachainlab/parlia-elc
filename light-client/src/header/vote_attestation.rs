@@ -359,4 +359,15 @@ mod test {
             _ => unreachable!("{} {:?}", header.number, err),
         }
     }
+
+    #[test]
+    fn test_vote_address_bitset() {
+        let value = VoteAddressBitSet::new(0b0111);
+        assert!(value.get(0));
+        assert!(value.get(1));
+        assert!(value.get(2));
+        assert!(!value.get(3));
+        assert!(!value.get(4));
+        assert_eq!(value.count(), 3);
+    }
 }
