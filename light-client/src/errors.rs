@@ -25,6 +25,7 @@ pub enum Error {
     // ClientState error
     MissingLatestHeight,
     UnexpectedStoreAddress(Vec<u8>),
+    UnexpectedCommitmentSlot(Vec<u8>),
     ClientFrozen(ClientId),
     UnexpectedProofHeight(Height, Height),
 
@@ -108,6 +109,7 @@ impl core::fmt::Display for Error {
             Error::UnknownConsensusStateType(e) => write!(f, "UnknownClientStateType: {}", e),
             Error::MissingLatestHeight => write!(f, "MissingLatestHeight"),
             Error::UnexpectedStoreAddress(e) => write!(f, "UnexpectedStoreAddress: {:?}", e),
+            Error::UnexpectedCommitmentSlot(e) => write!(f, "UnexpectedCommitmentSlot: {:?}", e),
             Error::ClientFrozen(e) => write!(f, "ClientFrozen: {}", e),
             Error::UnexpectedProofHeight(e1, e2) => {
                 write!(f, "UnexpectedProofHeight: {} {}", e1, e2)

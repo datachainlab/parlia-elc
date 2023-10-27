@@ -180,7 +180,7 @@ impl TryFrom<RawClientState> for ClientState {
         let raw_ibc_commitments_slot = value.ibc_commitments_slot.clone();
         let ibc_commitments_slot = raw_ibc_commitments_slot
             .try_into()
-            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
+            .map_err(|_| Error::UnexpectedCommitmentSlot(value.ibc_commitments_slot))?;
 
         let trusting_period = value
             .trusting_period
@@ -269,15 +269,19 @@ impl TryFrom<Any> for ClientState {
 #[cfg(test)]
 mod test {
     use hex_literal::hex;
+    use ibc_proto::google;
     use std::time::Duration;
     use time::{macros::datetime, OffsetDateTime};
 
     use crate::client_state::{validate_within_trusting_period, ClientState};
     use crate::errors::Error;
     use light_client::types::{Any, Time};
+    use parlia_ibc_proto::ibc::core::client::v1::Height;
+
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
 
     #[test]
-    fn test_try_from_any() {
+    fn test_success_try_from_any() {
         let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510af9da90f2a040880a305320410c0843d").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ClientState = cs.try_into().unwrap();
@@ -296,6 +300,56 @@ mod test {
             hex!("0000000000000000000000000000000000000000000000000000000000000000"),
             cs.ibc_commitments_slot
         );
+    }
+
+    #[test]
+    fn test_error_try_from() {
+        let mut cs = RawClientState {
+            chain_id: 9999,
+            ibc_store_address: vec![0],
+            ibc_commitments_slot: vec![1],
+            latest_height: None,
+            trusting_period: None,
+            max_clock_drift: None,
+            frozen: false,
+        };
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::MissingLatestHeight => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.latest_height = Some(Height::default());
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedStoreAddress(address) => {
+                assert_eq!(address, vec![0]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.ibc_store_address = [1u8; 20].to_vec();
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedCommitmentSlot(address) => {
+                assert_eq!(address, vec![1]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.ibc_commitments_slot = [1u8; 32].to_vec();
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::MissingTrustingPeriod => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.trusting_period = Some(google::protobuf::Duration::default());
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::NegativeMaxClockDrift => {}
+            err => unreachable!("{:?}", err),
+        }
     }
 
     #[test]
