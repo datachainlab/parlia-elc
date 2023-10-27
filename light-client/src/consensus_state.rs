@@ -116,11 +116,13 @@ mod test {
 
     use hex_literal::hex;
     use light_client::types::Any;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ConsensusState as RawConsensusState;
 
     use crate::consensus_state::ConsensusState;
+    use crate::errors::Error;
 
     #[test]
-    fn test_try_from_any() {
+    fn test_success_try_from_any() {
         let cs = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ConsensusState = cs.try_into().unwrap();
@@ -138,5 +140,41 @@ mod test {
             hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
             cs.state_root
         );
+    }
+
+    #[test]
+    fn test_error_try_from() {
+        let mut cs = RawConsensusState {
+            state_root: vec![10],
+            timestamp: 0,
+            current_validators_hash: vec![0],
+            previous_validators_hash: vec![1],
+        };
+
+        let err = ConsensusState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedConsensusStateRoot(state_root) => {
+                assert_eq!(state_root, vec![10]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.state_root = [1u8; 32].to_vec();
+        let err = ConsensusState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedValidatorsHashSize(hash) => {
+                assert_eq!(hash, vec![0]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.current_validators_hash = [1u8; 32].to_vec();
+        let err = ConsensusState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedValidatorsHashSize(hash) => {
+                assert_eq!(hash, vec![1]);
+            }
+            err => unreachable!("{:?}", err),
+        }
     }
 }
