@@ -107,8 +107,8 @@ impl LightClient for ParliaLightClient {
         let new_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
         Ok(UpdateClientResult {
-            new_any_client_state: new_client_state.into(),
-            new_any_consensus_state: new_consensus_state.into(),
+            new_any_client_state: new_client_state.try_into()?,
+            new_any_consensus_state: new_consensus_state.try_into()?,
             height,
             commitment: UpdateClientCommitment {
                 prev_state_id: Some(prev_state_id),
@@ -253,8 +253,8 @@ fn gen_state_id(
     client_state: ClientState,
     consensus_state: ConsensusState,
 ) -> Result<StateID, LightClientError> {
-    let client_state = Any::from(client_state.canonicalize());
-    let consensus_state = Any::from(consensus_state.canonicalize());
+    let client_state = Any::try_from(client_state.canonicalize())?;
+    let consensus_state = Any::try_from(consensus_state.canonicalize())?;
     gen_state_id_from_any(&client_state, &consensus_state).map_err(LightClientError::commitment)
 }
 
@@ -343,7 +343,7 @@ mod test {
 
     impl ClientReader for MockClientReader {
         fn client_state(&self, _client_id: &ClientId) -> Result<Any, light_client::Error> {
-            Ok(Any::from(self.client_state.clone().unwrap()))
+            Ok(Any::try_from(self.client_state.clone().unwrap()).unwrap())
         }
 
         fn consensus_state(
@@ -358,7 +358,7 @@ mod test {
                     light_client::Error::consensus_state_not_found(client_id.clone(), *height)
                 })?
                 .clone();
-            Ok(Any::from(state))
+            Ok(Any::try_from(state)?)
         }
     }
 

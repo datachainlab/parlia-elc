@@ -238,23 +238,24 @@ impl TryFrom<IBCAny> for ClientState {
     }
 }
 
-impl From<ClientState> for IBCAny {
-    fn from(value: ClientState) -> Self {
+impl TryFrom<ClientState> for IBCAny {
+    type Error = Error;
+
+    fn try_from(value: ClientState) -> Result<Self, Self::Error> {
         let value: RawClientState = value.into();
         let mut v = Vec::new();
-        value
-            .encode(&mut v)
-            .expect("encoding to `Any` from `ParliaClientState`");
-        Self {
+        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
+        Ok(Self {
             type_url: PARLIA_CLIENT_STATE_TYPE_URL.to_owned(),
             value: v,
-        }
+        })
     }
 }
 
-impl From<ClientState> for Any {
-    fn from(value: ClientState) -> Self {
-        IBCAny::from(value).into()
+impl TryFrom<ClientState> for Any {
+    type Error = Error;
+    fn try_from(value: ClientState) -> Result<Self, Error> {
+        Ok(IBCAny::try_from(value)?.into())
     }
 }
 

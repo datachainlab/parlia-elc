@@ -81,23 +81,25 @@ impl TryFrom<IBCAny> for ConsensusState {
     }
 }
 
-impl From<ConsensusState> for IBCAny {
-    fn from(value: ConsensusState) -> Self {
+impl TryFrom<ConsensusState> for IBCAny {
+    type Error = Error;
+
+    fn try_from(value: ConsensusState) -> Result<Self, Self::Error> {
         let value: RawConsensusState = value.into();
         let mut v = Vec::new();
-        value
-            .encode(&mut v)
-            .expect("encoding to `Any` from `ParliaConsensusState`");
-        Self {
+        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
+        Ok(Self {
             type_url: PARLIA_CONSENSUS_STATE_TYPE_URL.to_owned(),
             value: v,
-        }
+        })
     }
 }
 
-impl From<ConsensusState> for Any {
-    fn from(value: ConsensusState) -> Self {
-        IBCAny::from(value).into()
+impl TryFrom<ConsensusState> for Any {
+    type Error = Error;
+
+    fn try_from(value: ConsensusState) -> Result<Self, Self::Error> {
+        Ok(IBCAny::try_from(value)?.into())
     }
 }
 
