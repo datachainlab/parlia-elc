@@ -279,7 +279,97 @@ mod test {
     use light_client::types::{Any, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
 
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
+    use crate::consensus_state::ConsensusState;
+    use crate::header::eth_header::ETHHeader;
+    use crate::header::testdata::{header_31297200, header_31297201};
+    use crate::misc::{keccak_256_vec, new_timestamp, ChainId};
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
+        ClientState as RawClientState, EthHeader,
+    };
+
+    #[test]
+    fn test_error_check_header() {
+        let header_fn = |revision: u64, h: alloc::vec::Vec<ETHHeader>| {
+            let trusted_height = Height {
+                revision_number: revision,
+                revision_height: h[0].number - 1,
+            };
+            let raw = RawHeader {
+                headers: h.clone().iter().map(|e| e.try_into().unwrap()).collect(),
+                trusted_height: Some(trusted_height.clone()),
+                account_proof: vec![],
+                current_validators: vec![h[0].coinbase.clone()],
+                previous_validators: vec![h[0].coinbase.clone()],
+            };
+            raw.try_into().unwrap()
+        };
+
+        let mut cs = ClientState {
+            chain_id: ChainId::new(10),
+            ibc_store_address: [0u8; 20],
+            ibc_commitments_slot: [0u8; 32],
+            trusting_period: Duration::from_millis(1001),
+            max_clock_drift: Default::default(),
+            latest_height: Default::default(),
+            frozen: false,
+        };
+        let mut cons_state = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: new_timestamp(0).unwrap(),
+            current_validators_hash: [0u8; 32],
+            previous_validators_hash: [0u8; 32],
+        };
+
+        // fail: validate_trusting_period
+        let h = header_31297200();
+        let now = new_timestamp(h.timestamp - 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let mut header = header_fn(0, vec![h]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::HeaderFromFuture(_, _, _) => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: revision check
+        let h = header_31297200();
+        let now = new_timestamp(h.timestamp + 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let mut header = header_fn(1, vec![h]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedHeaderRevision(n1, n2) => {
+                assert_eq!(cs.chain_id.version(), n1);
+                assert_eq!(header.height().revision_number(), n2);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: verify_validator_set
+        let h = header_31297200();
+        let mut header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedPreviousValidatorsHash(h1, h2, _, _) => {
+                assert_eq!(h1.revision_height(), h.number - 1);
+                assert_eq!(h2.revision_height(), h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: header.verify
+        let h = header_31297200();
+        cons_state.current_validators_hash = keccak_256_vec(&vec![h.coinbase.clone()]);
+        let mut header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedCoinbase(number) => {
+                assert_eq!(number, h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
 
     #[test]
     fn test_success_try_from_any() {
