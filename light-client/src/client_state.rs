@@ -281,12 +281,85 @@ mod test {
 
     use crate::consensus_state::ConsensusState;
     use crate::header::eth_header::ETHHeader;
-    use crate::header::testdata::{header_31297200, header_31297201};
+    use crate::header::testdata::{
+        header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
+    };
+    use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_timestamp, ChainId};
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
         ClientState as RawClientState, EthHeader,
     };
+
+    #[test]
+    fn test_error_check_header_and_update_state() {
+        let mut cs = ClientState {
+            chain_id: mainnet(),
+            ibc_store_address: [0u8; 20],
+            ibc_commitments_slot: [0u8; 32],
+            trusting_period: Duration::from_millis(1001),
+            max_clock_drift: Default::default(),
+            latest_height: Default::default(),
+            frozen: false,
+        };
+
+        // fail: check_header
+        let h = &header_31297200();
+        let mut cons_state = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: new_timestamp(h.timestamp).unwrap(),
+            current_validators_hash: keccak_256_vec(&validators_in_31297000()),
+            previous_validators_hash: keccak_256_vec(&validators_in_31297000()),
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(Height {
+                revision_number: 0,
+                revision_height: h.number - 1,
+            }),
+            account_proof: vec![],
+            current_validators: vec![],
+            previous_validators: validators_in_31297000(),
+        };
+        let now = new_timestamp(h.timestamp + 1).unwrap();
+        let mut invalid_header: Header = raw.clone().try_into().unwrap();
+        let err = cs
+            .check_header_and_update_state(now, &cons_state, invalid_header)
+            .unwrap_err();
+        match err {
+            Error::InvalidVerifyingHeaderLength(number, size) => {
+                assert_eq!(number, h.number);
+                assert_eq!(size, raw.headers.len());
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: resolve_account
+        let raw = RawHeader {
+            headers: vec![
+                (&header_31297200()).try_into().unwrap(),
+                (&header_31297201()).try_into().unwrap(),
+                (&header_31297202()).try_into().unwrap(),
+            ],
+            trusted_height: Some(Height {
+                revision_number: 0,
+                revision_height: h.number - 1,
+            }),
+            account_proof: vec![1],
+            current_validators: vec![],
+            previous_validators: validators_in_31297000(),
+        };
+        let mut valid_header: Header = raw.clone().try_into().unwrap();
+        let err = cs
+            .check_header_and_update_state(now, &cons_state, valid_header)
+            .unwrap_err();
+        match err {
+            Error::InvalidProofFormatError(value) => {
+                assert_eq!(value, vec![1]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
 
     #[test]
     fn test_error_check_header() {
