@@ -169,7 +169,7 @@ mod test {
         }
 
         cs.current_validators_hash = [1u8; 32].to_vec();
-        let err = ConsensusState::try_from(cs.clone()).unwrap_err();
+        let err = ConsensusState::try_from(cs).unwrap_err();
         match err {
             Error::UnexpectedValidatorsHashSize(hash) => {
                 assert_eq!(hash, vec![1]);

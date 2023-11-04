@@ -68,20 +68,16 @@ impl TryFrom<Any> for Misbehaviour {
 mod test {
     use crate::errors::Error;
     use crate::header::eth_header::ETHHeader;
-    use crate::header::eth_headers::ETHHeaders;
+
     use crate::header::testdata::{header_31297201, header_31297202};
-    use crate::header::validator_set::ValidatorSet;
-    use crate::header::Header;
-    use crate::misbehaviour;
+
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::new_height;
     use alloc::string::ToString;
-    use hex_literal::hex;
+
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
-        EthHeader, Misbehaviour as RawMisbehaviour,
-    };
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehaviour;
 
     fn to_raw(h: &ETHHeader) -> RawHeader {
         RawHeader {

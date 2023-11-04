@@ -240,6 +240,12 @@ pub(crate) mod test {
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
+    impl Header {
+        pub(crate) fn eth_header(&self) -> &ETHHeaders {
+            &self.headers
+        }
+    }
+
     #[test]
     fn test_error_try_from_missing_trusted_height() {
         let h = &header_31297201();
@@ -290,7 +296,7 @@ pub(crate) mod test {
         };
         let raw = RawHeader {
             headers: vec![h.try_into().unwrap()],
-            trusted_height: Some(trusted_height.clone()),
+            trusted_height: Some(trusted_height),
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![],
@@ -313,7 +319,7 @@ pub(crate) mod test {
         };
         let raw = RawHeader {
             headers: vec![h.try_into().unwrap()],
-            trusted_height: Some(trusted_height.clone()),
+            trusted_height: Some(trusted_height),
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],

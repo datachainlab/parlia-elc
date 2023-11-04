@@ -134,7 +134,14 @@ impl ETHHeader {
             || parent.hash != self.parent_hash.as_slice()
             || parent.timestamp >= self.timestamp
         {
-            return Err(Error::UnexpectedHeaderRelation(parent.number, self.number));
+            return Err(Error::UnexpectedHeaderRelation(
+                parent.number,
+                self.number,
+                parent.hash,
+                self.parent_hash.clone(),
+                parent.timestamp,
+                self.timestamp,
+            ));
         }
 
         //Verify that the gas limit remains within allowed bounds
@@ -380,8 +387,8 @@ pub(crate) mod test {
     use crate::header::eth_header::{
         ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
     };
-    use prost::bytes::BytesMut;
-    use rlp::{Rlp, RlpStream};
+
+    use rlp::RlpStream;
 
     use crate::header::testdata::*;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
@@ -586,9 +593,20 @@ pub(crate) mod test {
         let block = header_31297201();
         let result = block.verify_cascading_fields(&parent);
         match result.unwrap_err() {
-            Error::UnexpectedHeaderRelation(parent_no, child_no) => {
+            Error::UnexpectedHeaderRelation(
+                parent_no,
+                child_no,
+                parent_hash,
+                child_parent_hash,
+                parent_ts,
+                child_ts,
+            ) => {
                 assert_eq!(parent.number, parent_no);
                 assert_eq!(block.number, child_no);
+                assert_eq!(parent.hash, parent_hash);
+                assert_eq!(block.parent_hash, child_parent_hash);
+                assert_eq!(parent.timestamp, parent_ts);
+                assert_eq!(block.timestamp, child_ts);
             }
             err => unreachable!("{:?}", err),
         }

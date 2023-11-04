@@ -239,7 +239,7 @@ mod test {
         let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
         let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
         match result.unwrap_err() {
-            Error::UnexpectedHeaderRelation(e1, e2) => {
+            Error::UnexpectedHeaderRelation(e1, e2, _, _, _, _) => {
                 assert_eq!(e1, headers.target.number);
                 assert_eq!(e2, headers.target.number);
             }

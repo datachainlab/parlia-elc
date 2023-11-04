@@ -286,14 +286,12 @@ mod test {
     };
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_timestamp, ChainId};
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
-        ClientState as RawClientState, EthHeader,
-    };
 
     #[test]
     fn test_error_check_header_and_update_state() {
-        let mut cs = ClientState {
+        let cs = ClientState {
             chain_id: mainnet(),
             ibc_store_address: [0u8; 20],
             ibc_commitments_slot: [0u8; 32],
@@ -305,7 +303,7 @@ mod test {
 
         // fail: check_header
         let h = &header_31297200();
-        let mut cons_state = ConsensusState {
+        let cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(h.timestamp).unwrap(),
             current_validators_hash: keccak_256_vec(&validators_in_31297000()),
@@ -322,7 +320,7 @@ mod test {
             previous_validators: validators_in_31297000(),
         };
         let now = new_timestamp(h.timestamp + 1).unwrap();
-        let mut invalid_header: Header = raw.clone().try_into().unwrap();
+        let invalid_header: Header = raw.clone().try_into().unwrap();
         let err = cs
             .check_header_and_update_state(now, &cons_state, invalid_header)
             .unwrap_err();
@@ -349,7 +347,7 @@ mod test {
             current_validators: vec![],
             previous_validators: validators_in_31297000(),
         };
-        let mut valid_header: Header = raw.clone().try_into().unwrap();
+        let valid_header: Header = raw.try_into().unwrap();
         let err = cs
             .check_header_and_update_state(now, &cons_state, valid_header)
             .unwrap_err();
@@ -369,8 +367,8 @@ mod test {
                 revision_height: h[0].number - 1,
             };
             let raw = RawHeader {
-                headers: h.clone().iter().map(|e| e.try_into().unwrap()).collect(),
-                trusted_height: Some(trusted_height.clone()),
+                headers: h.iter().map(|e| e.try_into().unwrap()).collect(),
+                trusted_height: Some(trusted_height),
                 account_proof: vec![],
                 current_validators: vec![h[0].coinbase.clone()],
                 previous_validators: vec![h[0].coinbase.clone()],
@@ -378,7 +376,7 @@ mod test {
             raw.try_into().unwrap()
         };
 
-        let mut cs = ClientState {
+        let cs = ClientState {
             chain_id: ChainId::new(10),
             ibc_store_address: [0u8; 20],
             ibc_commitments_slot: [0u8; 32],
@@ -433,7 +431,7 @@ mod test {
 
         // fail: header.verify
         let h = header_31297200();
-        cons_state.current_validators_hash = keccak_256_vec(&vec![h.coinbase.clone()]);
+        cons_state.current_validators_hash = keccak_256_vec(&[h.coinbase.clone()]);
         let mut header = header_fn(0, vec![h.clone()]);
         let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
@@ -509,7 +507,7 @@ mod test {
         }
 
         cs.trusting_period = Some(google::protobuf::Duration::default());
-        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        let err = ClientState::try_from(cs).unwrap_err();
         match err {
             Error::NegativeMaxClockDrift => {}
             err => unreachable!("{:?}", err),

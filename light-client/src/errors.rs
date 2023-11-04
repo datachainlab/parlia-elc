@@ -65,7 +65,7 @@ pub enum Error {
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
-    UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+    UnexpectedHeaderRelation(BlockNumber, BlockNumber, Hash, Vec<u8>, u64, u64),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
@@ -162,8 +162,12 @@ impl core::fmt::Display for Error {
             Error::UnexpectedGasUsed(e1, e2, e3) => {
                 write!(f, "UnexpectedGasUsed: {} {} {}", e1, e2, e3)
             }
-            Error::UnexpectedHeaderRelation(e1, e2) => {
-                write!(f, "UnexpectedHeaderRelation: {} {}", e1, e2)
+            Error::UnexpectedHeaderRelation(e1, e2, e3, e4, e5, e6) => {
+                write!(
+                    f,
+                    "UnexpectedHeaderRelation: {} {} {:?} {:?} {} {}",
+                    e1, e2, e3, e4, e5, e6
+                )
             }
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::NegativeMaxClockDrift => write!(f, "NegativeMaxClockDrift"),

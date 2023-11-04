@@ -163,12 +163,11 @@ mod test {
     };
     use hex_literal::hex;
     use rlp::{Rlp, RlpStream};
-    use std::io::Read;
 
     #[test]
     fn test_error_try_from_unexpected_bls_signature_length() {
         let mut stream = RlpStream::new_list(2);
-        stream.append(&(10 as u64));
+        stream.append(&10_u64);
         stream.append(&[0u8; BLS_SIGNATURE_LENGTH + 1].to_vec());
         let raw = stream.out();
         let err = VoteAttestation::try_from(Rlp::new(&raw)).unwrap_err();
@@ -183,15 +182,15 @@ mod test {
     #[test]
     fn test_error_try_from_vote_extra_length() {
         let mut vote_stream = RlpStream::new_list(4);
-        vote_stream.append(&(10 as u64));
+        vote_stream.append(&10_u64);
         vote_stream.append(&[1u8; 32].to_vec());
-        vote_stream.append(&(11 as u64));
+        vote_stream.append(&11_u64);
         vote_stream.append(&[0u8; 32].to_vec());
         let vote_data_size = vote_stream.len();
         let mut stream = RlpStream::new_list(vote_data_size + 3);
-        stream.append(&(10 as u64));
+        stream.append(&10_u64);
         stream.append(&[0u8; BLS_SIGNATURE_LENGTH].to_vec());
-        stream.append_raw(&vote_stream.out().to_vec(), vote_data_size);
+        stream.append_raw(&vote_stream.out(), vote_data_size);
         stream.append(&[0u8; MAX_ATTESTATION_EXTRA_LENGTH + 1].to_vec());
         let raw = stream.out();
         let err = VoteAttestation::try_from(Rlp::new(&raw)).unwrap_err();
