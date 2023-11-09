@@ -270,7 +270,6 @@ impl TryFrom<Any> for ClientState {
 #[cfg(test)]
 mod test {
     use hex_literal::hex;
-    use ibc_proto::google;
     use std::time::Duration;
     use time::{macros::datetime, OffsetDateTime};
 
@@ -506,7 +505,7 @@ mod test {
             err => unreachable!("{:?}", err),
         }
 
-        cs.trusting_period = Some(google::protobuf::Duration::default());
+        cs.trusting_period = Some(parlia_ibc_proto::google::protobuf::Duration::default());
         let err = ClientState::try_from(cs).unwrap_err();
         match err {
             Error::NegativeMaxClockDrift => {}
