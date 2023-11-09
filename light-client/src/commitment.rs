@@ -187,9 +187,6 @@ mod test {
 
     #[test]
     fn test_verify_commitment_with_lc_data() {
-        use ibc_proto::ibc::core::commitment::v1::MerklePrefix;
-        use ibc_proto::ibc::core::connection::v1::{ConnectionEnd, Counterparty, Version};
-
         let storage_root: Hash = [
             82, 151, 170, 160, 133, 205, 75, 144, 49, 43, 13, 172, 81, 2, 52, 123, 17, 51, 253, 55,
             100, 124, 234, 205, 131, 149, 248, 211, 22, 210, 2, 68,
@@ -232,20 +229,26 @@ mod test {
         ];
         let storage_proof = decode_eip1184_rlp_proof(&storage_proof_rlp).unwrap();
 
-        let connection_end = ConnectionEnd {
+        let connection_end = light_client::types::proto::ibc::core::connection::v1::ConnectionEnd {
             client_id: "99-parlia-0".to_owned(),
-            versions: vec![Version {
-                identifier: "1".to_owned(),
-                features: vec!["ORDER_ORDERED".to_owned(), "ORDER_UNORDERED".to_owned()],
-            }],
+            versions: vec![
+                light_client::types::proto::ibc::core::connection::v1::Version {
+                    identifier: "1".to_owned(),
+                    features: vec!["ORDER_ORDERED".to_owned(), "ORDER_UNORDERED".to_owned()],
+                },
+            ],
             state: 3,
-            counterparty: Some(Counterparty {
-                client_id: "99-parlia-0".to_owned(),
-                connection_id: "connection-0".to_owned(),
-                prefix: Some(MerklePrefix {
-                    key_prefix: hex!("696263").to_vec(),
-                }),
-            }),
+            counterparty: Some(
+                light_client::types::proto::ibc::core::connection::v1::Counterparty {
+                    client_id: "99-parlia-0".to_owned(),
+                    connection_id: "connection-0".to_owned(),
+                    prefix: Some(
+                        light_client::types::proto::ibc::core::commitment::v1::MerklePrefix {
+                            key_prefix: hex!("696263").to_vec(),
+                        },
+                    ),
+                },
+            ),
             delay_period: 0,
         };
         let mut expected_value = alloc::vec::Vec::<u8>::new();
