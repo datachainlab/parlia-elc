@@ -1,3 +1,0 @@
-[submodule "light-client/tests/ibc-parlia-relay"]
-	path = light-client/tests/ibc-parlia-relay
-	url = https://github.com/datachainlab/ibc-parlia-relay.git
