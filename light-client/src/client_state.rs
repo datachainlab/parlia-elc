@@ -180,7 +180,7 @@ impl TryFrom<RawClientState> for ClientState {
         let raw_ibc_commitments_slot = value.ibc_commitments_slot.clone();
         let ibc_commitments_slot = raw_ibc_commitments_slot
             .try_into()
-            .map_err(|_| Error::UnexpectedStoreAddress(value.ibc_commitments_slot))?;
+            .map_err(|_| Error::UnexpectedCommitmentSlot(value.ibc_commitments_slot))?;
 
         let trusting_period = value
             .trusting_period
@@ -238,23 +238,24 @@ impl TryFrom<IBCAny> for ClientState {
     }
 }
 
-impl From<ClientState> for IBCAny {
-    fn from(value: ClientState) -> Self {
+impl TryFrom<ClientState> for IBCAny {
+    type Error = Error;
+
+    fn try_from(value: ClientState) -> Result<Self, Self::Error> {
         let value: RawClientState = value.into();
         let mut v = Vec::new();
-        value
-            .encode(&mut v)
-            .expect("encoding to `Any` from `ParliaClientState`");
-        Self {
+        value.encode(&mut v).map_err(Error::ProtoEncodeError)?;
+        Ok(Self {
             type_url: PARLIA_CLIENT_STATE_TYPE_URL.to_owned(),
             value: v,
-        }
+        })
     }
 }
 
-impl From<ClientState> for Any {
-    fn from(value: ClientState) -> Self {
-        IBCAny::from(value).into()
+impl TryFrom<ClientState> for Any {
+    type Error = Error;
+    fn try_from(value: ClientState) -> Result<Self, Error> {
+        Ok(IBCAny::try_from(value)?.into())
     }
 }
 
@@ -275,9 +276,173 @@ mod test {
     use crate::client_state::{validate_within_trusting_period, ClientState};
     use crate::errors::Error;
     use light_client::types::{Any, Time};
+    use parlia_ibc_proto::ibc::core::client::v1::Height;
+
+    use crate::consensus_state::ConsensusState;
+    use crate::header::eth_header::ETHHeader;
+    use crate::header::testdata::{
+        header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
+    };
+    use crate::header::Header;
+    use crate::misc::{keccak_256_vec, new_timestamp, ChainId};
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
     #[test]
-    fn test_try_from_any() {
+    fn test_error_check_header_and_update_state() {
+        let cs = ClientState {
+            chain_id: mainnet(),
+            ibc_store_address: [0u8; 20],
+            ibc_commitments_slot: [0u8; 32],
+            trusting_period: Duration::from_millis(1001),
+            max_clock_drift: Default::default(),
+            latest_height: Default::default(),
+            frozen: false,
+        };
+
+        // fail: check_header
+        let h = &header_31297200();
+        let cons_state = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: new_timestamp(h.timestamp).unwrap(),
+            current_validators_hash: keccak_256_vec(&validators_in_31297000()),
+            previous_validators_hash: keccak_256_vec(&validators_in_31297000()),
+        };
+        let raw = RawHeader {
+            headers: vec![h.try_into().unwrap()],
+            trusted_height: Some(Height {
+                revision_number: 0,
+                revision_height: h.number - 1,
+            }),
+            account_proof: vec![],
+            current_validators: vec![],
+            previous_validators: validators_in_31297000(),
+        };
+        let now = new_timestamp(h.timestamp + 1).unwrap();
+        let invalid_header: Header = raw.clone().try_into().unwrap();
+        let err = cs
+            .check_header_and_update_state(now, &cons_state, invalid_header)
+            .unwrap_err();
+        match err {
+            Error::InvalidVerifyingHeaderLength(number, size) => {
+                assert_eq!(number, h.number);
+                assert_eq!(size, raw.headers.len());
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: resolve_account
+        let raw = RawHeader {
+            headers: vec![
+                (&header_31297200()).try_into().unwrap(),
+                (&header_31297201()).try_into().unwrap(),
+                (&header_31297202()).try_into().unwrap(),
+            ],
+            trusted_height: Some(Height {
+                revision_number: 0,
+                revision_height: h.number - 1,
+            }),
+            account_proof: vec![1],
+            current_validators: vec![],
+            previous_validators: validators_in_31297000(),
+        };
+        let valid_header: Header = raw.try_into().unwrap();
+        let err = cs
+            .check_header_and_update_state(now, &cons_state, valid_header)
+            .unwrap_err();
+        match err {
+            Error::InvalidProofFormatError(value) => {
+                assert_eq!(value, vec![1]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_check_header() {
+        let header_fn = |revision: u64, h: alloc::vec::Vec<ETHHeader>| {
+            let trusted_height = Height {
+                revision_number: revision,
+                revision_height: h[0].number - 1,
+            };
+            let raw = RawHeader {
+                headers: h.iter().map(|e| e.try_into().unwrap()).collect(),
+                trusted_height: Some(trusted_height),
+                account_proof: vec![],
+                current_validators: vec![h[0].coinbase.clone()],
+                previous_validators: vec![h[0].coinbase.clone()],
+            };
+            raw.try_into().unwrap()
+        };
+
+        let cs = ClientState {
+            chain_id: ChainId::new(10),
+            ibc_store_address: [0u8; 20],
+            ibc_commitments_slot: [0u8; 32],
+            trusting_period: Duration::from_millis(1001),
+            max_clock_drift: Default::default(),
+            latest_height: Default::default(),
+            frozen: false,
+        };
+        let mut cons_state = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: new_timestamp(0).unwrap(),
+            current_validators_hash: [0u8; 32],
+            previous_validators_hash: [0u8; 32],
+        };
+
+        // fail: validate_trusting_period
+        let h = header_31297200();
+        let now = new_timestamp(h.timestamp - 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let mut header = header_fn(0, vec![h]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::HeaderFromFuture(_, _, _) => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: revision check
+        let h = header_31297200();
+        let now = new_timestamp(h.timestamp + 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let mut header = header_fn(1, vec![h]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedHeaderRevision(n1, n2) => {
+                assert_eq!(cs.chain_id.version(), n1);
+                assert_eq!(header.height().revision_number(), n2);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: verify_validator_set
+        let h = header_31297200();
+        let mut header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedPreviousValidatorsHash(h1, h2, _, _) => {
+                assert_eq!(h1.revision_height(), h.number - 1);
+                assert_eq!(h2.revision_height(), h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        // fail: header.verify
+        let h = header_31297200();
+        cons_state.current_validators_hash = keccak_256_vec(&[h.coinbase.clone()]);
+        let mut header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        match err {
+            Error::UnexpectedCoinbase(number) => {
+                assert_eq!(number, h.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_success_try_from_any() {
         let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510af9da90f2a040880a305320410c0843d").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ClientState = cs.try_into().unwrap();
@@ -296,6 +461,56 @@ mod test {
             hex!("0000000000000000000000000000000000000000000000000000000000000000"),
             cs.ibc_commitments_slot
         );
+    }
+
+    #[test]
+    fn test_error_try_from() {
+        let mut cs = RawClientState {
+            chain_id: 9999,
+            ibc_store_address: vec![0],
+            ibc_commitments_slot: vec![1],
+            latest_height: None,
+            trusting_period: None,
+            max_clock_drift: None,
+            frozen: false,
+        };
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::MissingLatestHeight => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.latest_height = Some(Height::default());
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedStoreAddress(address) => {
+                assert_eq!(address, vec![0]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.ibc_store_address = [1u8; 20].to_vec();
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedCommitmentSlot(address) => {
+                assert_eq!(address, vec![1]);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.ibc_commitments_slot = [1u8; 32].to_vec();
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::MissingTrustingPeriod => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.trusting_period = Some(parlia_ibc_proto::google::protobuf::Duration::default());
+        let err = ClientState::try_from(cs).unwrap_err();
+        match err {
+            Error::NegativeMaxClockDrift => {}
+            err => unreachable!("{:?}", err),
+        }
     }
 
     #[test]

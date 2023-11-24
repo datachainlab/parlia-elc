@@ -17,6 +17,7 @@ pub enum Error {
     TimeError(TimeError),
     RLPDecodeError(rlp::DecoderError),
     ProtoDecodeError(prost::DecodeError),
+    ProtoEncodeError(prost::EncodeError),
     UnknownHeaderType(String),
     UnknownClientStateType(String),
     UnknownConsensusStateType(String),
@@ -25,6 +26,7 @@ pub enum Error {
     // ClientState error
     MissingLatestHeight,
     UnexpectedStoreAddress(Vec<u8>),
+    UnexpectedCommitmentSlot(Vec<u8>),
     ClientFrozen(ClientId),
     UnexpectedProofHeight(Height, Height),
 
@@ -63,7 +65,7 @@ pub enum Error {
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
-    UnexpectedHeaderRelation(BlockNumber, BlockNumber),
+    UnexpectedHeaderRelation(BlockNumber, BlockNumber, Hash, Vec<u8>, u64, u64),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
@@ -85,7 +87,7 @@ pub enum Error {
     FailedToVerifyBLSSignature(BlockNumber, usize),
     InsufficientValidatorCount(BlockNumber, usize, usize),
     UnexpectedVoteAddressCount(BlockNumber, usize, usize),
-    UnexpectedBLSSignatureLength(Vec<u8>),
+    UnexpectedBLSSignatureLength(usize),
 
     // Misbehaviour
     MissingHeader1,
@@ -103,11 +105,13 @@ impl core::fmt::Display for Error {
             Error::TimeError(e) => write!(f, "TimeError: {}", e),
             Error::RLPDecodeError(e) => write!(f, "RLPDecodeError : {}", e),
             Error::ProtoDecodeError(e) => write!(f, "ProtoDecodeError: {}", e),
+            Error::ProtoEncodeError(e) => write!(f, "ProtoEncodeError: {}", e),
             Error::UnknownHeaderType(e) => write!(f, "UnknownHeaderType: {}", e),
             Error::UnknownClientStateType(e) => write!(f, "UnknownClientStateType: {}", e),
             Error::UnknownConsensusStateType(e) => write!(f, "UnknownClientStateType: {}", e),
             Error::MissingLatestHeight => write!(f, "MissingLatestHeight"),
             Error::UnexpectedStoreAddress(e) => write!(f, "UnexpectedStoreAddress: {:?}", e),
+            Error::UnexpectedCommitmentSlot(e) => write!(f, "UnexpectedCommitmentSlot: {:?}", e),
             Error::ClientFrozen(e) => write!(f, "ClientFrozen: {}", e),
             Error::UnexpectedProofHeight(e1, e2) => {
                 write!(f, "UnexpectedProofHeight: {} {}", e1, e2)
@@ -158,8 +162,12 @@ impl core::fmt::Display for Error {
             Error::UnexpectedGasUsed(e1, e2, e3) => {
                 write!(f, "UnexpectedGasUsed: {} {} {}", e1, e2, e3)
             }
-            Error::UnexpectedHeaderRelation(e1, e2) => {
-                write!(f, "UnexpectedHeaderRelation: {} {}", e1, e2)
+            Error::UnexpectedHeaderRelation(e1, e2, e3, e4, e5, e6) => {
+                write!(
+                    f,
+                    "UnexpectedHeaderRelation: {} {} {:?} {:?} {} {}",
+                    e1, e2, e3, e4, e5, e6
+                )
             }
             Error::MissingTrustingPeriod => write!(f, "MissingTrustingPeriod"),
             Error::NegativeMaxClockDrift => write!(f, "NegativeMaxClockDrift"),
