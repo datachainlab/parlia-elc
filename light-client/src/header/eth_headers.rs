@@ -5,7 +5,6 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::{ValidatorSet, ValidatorSets};
 
-
 use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;

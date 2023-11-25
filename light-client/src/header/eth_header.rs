@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 
-use crate::header::vote_attestation::VoteAttestation;
+use crate::header::vote_attestation::{VoteAttestation, BLS_PUBKEY_LENGTH};
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
 use super::BLOCKS_PER_EPOCH;
@@ -22,8 +22,8 @@ const DIFFICULTY_NOTURN: u64 = 1;
 pub(crate) const EXTRA_VANITY: usize = 32;
 pub(crate) const EXTRA_SEAL: usize = 65;
 const VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN: usize = 20;
-const BLS_PUBKEY_LENGTH: usize = 48;
-const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
+pub(crate) const VALIDATOR_BYTES_LENGTH: usize =
+    VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
 const VALIDATOR_NUM_SIZE: usize = 1;
 
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
