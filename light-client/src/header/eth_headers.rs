@@ -4,9 +4,9 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
 use crate::header::validator_set::{ValidatorSet, ValidatorSets};
-use crate::header::Header;
 
-use crate::misc::{BlockNumber, ChainId, Validators};
+
+use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 
@@ -295,7 +295,7 @@ mod test {
     }
 
     #[test]
-    fn test_error_verify_too_many_headers_to_seal() {
+    fn test_error_verify_untrusted_current_validators() {
         let v = vec![
             header_31297200(),
             header_31297201(),
@@ -316,8 +316,8 @@ mod test {
 
         // success ( untrusted validator not used )
         let p_val = trust(validators_in_31297000().into());
-        let untrusted_c_val = validators_in_31297000().into();
-        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
+        let c_val = empty();
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -326,12 +326,13 @@ mod test {
             e => unreachable!("{:?}", e),
         }
 
-        // error
+        // error (c_val doesn't contains any p_val)
         headers.all.push(header_31297211());
-        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
+        let c_val = vec![vec![1]].into();
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::ValidatorNotTrusted(e1) => {
-                assert_eq!(e1, untrusted_c_val.hash);
+                assert_eq!(e1, c_val.hash);
             }
             e => unreachable!("{:?}", e),
         }

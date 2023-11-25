@@ -2,7 +2,6 @@ use crate::errors::Error;
 use crate::header::constant::BLOCKS_PER_EPOCH;
 use crate::header::eth_header::ETHHeader;
 use alloc::vec::Vec;
-use core::borrow::Borrow;
 
 use crate::misc::{ceil_div, keccak_256_vec, BlockNumber, Hash, Validators};
 
@@ -97,39 +96,58 @@ impl ValidatorSets {
         c_val: &ValidatorSet,
     ) -> Result<ValidatorSets, Error> {
         let first = &hs[0];
-        let mut validators = vec![ValidatorSetRange::new(
-            first.number,
-            first.number,
-            p_val.clone(),
-        )];
+        let mut validators = vec![];
         let mut p_val = p_val.clone();
         let mut c_val = c_val.clone();
         let mut epoch = first.number / BLOCKS_PER_EPOCH;
         let mut checkpoint = epoch * BLOCKS_PER_EPOCH + p_val.checkpoint();
+        if first.number < checkpoint {
+            validators.push(ValidatorSetRange::new(
+                first.number,
+                first.number,
+                p_val.clone(),
+            ));
+        }
+        let mut current_saved = false;
         for h in hs {
             if h.number >= checkpoint {
-                let next_epoch = (epoch + 1) * BLOCKS_PER_EPOCH;
-                let next_checkpoint = epoch + c_val.checkpoint();
-                c_val.trust(p_val.validators()?);
-                // At the just checkpoint BLS signature uses previous validator set.
-                validators.push(ValidatorSetRange::new(
-                    checkpoint,
-                    checkpoint + 1,
-                    c_val.clone(),
-                ));
+                if !current_saved {
+                    c_val.trust(p_val.validators()?);
+                    validators.push(ValidatorSetRange::new(
+                        checkpoint,
+                        // At the just checkpoint BLS signature uses previous validator set.
+                        checkpoint + 1,
+                        c_val.clone(),
+                    ));
+                    current_saved = true;
+                }
 
+                let next_epoch = (epoch + 1) * BLOCKS_PER_EPOCH;
                 if h.number == next_epoch {
+                    let next_checkpoint = epoch + c_val.checkpoint();
                     let mut n_val: ValidatorSet = h
                         .get_validator_bytes()
                         .ok_or(Error::MissingValidatorInEpochBlock(h.number))?
                         .into();
                     n_val.trust(c_val.validators()?);
+                    p_val = c_val;
                     c_val = n_val;
                     epoch = next_epoch;
                     checkpoint = next_checkpoint;
+                    current_saved = false;
                 }
             }
         }
+        validators.reverse();
+        // ex) validators range. when target = 201
+        // 201, 201, p_val
+        // 211, 212, c_val
+        // 411, 412, n_val
+        // 611, 612, nn_val
+        // ex) validators range. when target = 215
+        // 211, 212, c_val
+        // 411, 412, n_val
+        // 611, 612, nn_val
         Ok(ValidatorSets { validators })
     }
 
