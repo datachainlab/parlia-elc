@@ -32,11 +32,11 @@ impl ValidatorSet {
         if self.trusted {
             return;
         }
-        let (trusted, _, _) = self.trustable(trusted_validators);
+        let (trusted, _, _) = self.is_trustable(trusted_validators);
         self.trusted = trusted
     }
 
-    fn trustable(&self, trusted_validators: &Validators) -> (bool, usize, usize) {
+    fn is_trustable(&self, trusted_validators: &Validators) -> (bool, usize, usize) {
         let mut trusted_validator_count = 0;
         for x1 in &self.validators {
             if trusted_validators.contains(x1) {
@@ -64,7 +64,7 @@ impl From<Vec<Vec<u8>>> for ValidatorSet {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValidatorSetRange {
+struct ValidatorSetRange {
     min_number_to_verify_seal: BlockNumber,
     min_number_to_verify_vote: BlockNumber,
     validators: ValidatorSet,
@@ -126,7 +126,7 @@ impl ValidatorSets {
                 if h.number == next_epoch {
                     let n_val: ValidatorSet = h
                         .get_validator_bytes()
-                        .ok_or(Error::MissingValidatorInEpochBlock(h.number))?
+                        .ok_or_else(|| Error::MissingValidatorInEpochBlock(h.number))?
                         .into();
                     epoch = next_epoch;
                     checkpoint = next_epoch + c_val.checkpoint();
@@ -170,6 +170,7 @@ impl ValidatorSets {
 
 #[cfg(test)]
 mod test {
+    use crate::errors::Error;
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{ETHHeader, EXTRA_SEAL, EXTRA_VANITY, VALIDATOR_BYTES_LENGTH};
     use crate::header::testdata::header_31297200;
@@ -179,31 +180,10 @@ mod test {
 
     #[test]
     pub fn test_success_new_validator_sets() {
-        let extra_with_validator = |val: Validators| {
-            let mut extra_data = Vec::new();
-            extra_data.extend([0u8; EXTRA_VANITY]);
-            extra_data.extend([val.len() as u8; 1]);
-            for v in val {
-                extra_data.extend(v);
-            }
-            extra_data.extend([10; EXTRA_SEAL]);
-            extra_data
-        };
-
         let base = header_31297200();
         let verify = |start, mut p_val: ValidatorSet, c_val| {
             p_val.trusted = true;
-            let mut hs: Vec<ETHHeader> = vec![];
-            for i in start..start + 1000 {
-                let mut target = base.clone();
-                target.number = base.number + i;
-                if target.is_epoch() {
-                    target.extra_data = extra_with_validator(p_val.clone().validators)
-                } else {
-                    target.extra_data = vec![];
-                }
-                hs.push(target);
-            }
+            let hs = create_headers(start, base.clone(), &p_val);
             let mut verify_result = ValidatorSets::new(&hs, &p_val, &c_val).unwrap();
             verify_result.validators.reverse();
             verify_result
@@ -369,7 +349,61 @@ mod test {
     }
 
     #[test]
-    pub fn test_trustable() {
+    pub fn test_error_new_validator_sets() {
+        let gen = |p, c| {
+            let mut p_val: Validators = vec![];
+            for i in 0..p {
+                p_val.push([i + 1_u8; VALIDATOR_BYTES_LENGTH].to_vec())
+            }
+            let mut c_val: Validators = vec![];
+            for i in 0..c {
+                c_val.push([i + 50_u8; VALIDATOR_BYTES_LENGTH].to_vec())
+            }
+            let mut p_val = ValidatorSet::from(p_val);
+            p_val.trusted = true;
+            (p_val, ValidatorSet::from(c_val))
+        };
+
+        let base = header_31297200();
+        let (p_val, c_val) = gen(21, 21);
+        let hs = create_headers(0, base, &p_val);
+        let result = ValidatorSets::new(&hs, &p_val, &c_val).unwrap_err();
+        match result {
+            Error::ValidatorNotTrusted(h) => {
+                assert_eq!(h, c_val.hash);
+            }
+            err => unreachable!("err {:?}", err),
+        }
+    }
+
+    fn create_extra_data(val: Validators) -> Vec<u8> {
+        let mut extra_data = Vec::new();
+        extra_data.extend([0u8; EXTRA_VANITY]);
+        extra_data.extend([val.len() as u8; 1]);
+        for v in val {
+            extra_data.extend(v);
+        }
+        extra_data.extend([10; EXTRA_SEAL]);
+        extra_data
+    }
+
+    fn create_headers(start: u64, base: ETHHeader, p_val: &ValidatorSet) -> Vec<ETHHeader> {
+        let mut hs: Vec<ETHHeader> = vec![];
+        for i in start..start + 1000 {
+            let mut target = base.clone();
+            target.number = base.number + i;
+            if target.is_epoch() {
+                target.extra_data = create_extra_data(p_val.clone().validators)
+            } else {
+                target.extra_data = vec![];
+            }
+            hs.push(target);
+        }
+        hs
+    }
+
+    #[test]
+    fn test_trustable() {
         let mut _assert_trusted = |x, y, _trusted| {
             let trusted_validators = vec![
                 vec![1],
@@ -385,7 +419,7 @@ mod test {
                 hash: [0; 32],
                 trusted: false,
             };
-            let (trusted, count, required) = untrusted_validators.trustable(&trusted_validators);
+            let (trusted, count, required) = untrusted_validators.is_trustable(&trusted_validators);
             assert_eq!(trusted, trusted);
             assert_eq!(count, y);
             assert_eq!(required, 3);
