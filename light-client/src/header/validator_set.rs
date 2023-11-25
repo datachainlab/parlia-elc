@@ -1,7 +1,10 @@
 use crate::errors::Error;
+use crate::header::constant::BLOCKS_PER_EPOCH;
+use crate::header::eth_header::ETHHeader;
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 
-use crate::misc::{ceil_div, keccak_256_vec, Hash, Validators};
+use crate::misc::{ceil_div, keccak_256_vec, BlockNumber, Hash, Validators};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValidatorSet {
@@ -11,6 +14,14 @@ pub struct ValidatorSet {
 }
 
 impl ValidatorSet {
+    /// for example when the validator count is 21 the checkpoint is 211, 411, 611 ...
+    /// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/parlia.go#L607
+    /// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/snapshot.go#L191
+    pub fn checkpoint(&self) -> u64 {
+        let validator_size = self.validators.len() as u64;
+        validator_size / 2 + 1
+    }
+
     pub fn validators(&self) -> Result<&Validators, Error> {
         if !self.trusted {
             return Err(Error::ValidatorNotTrusted(self.hash));
@@ -50,6 +61,94 @@ impl From<Vec<Vec<u8>>> for ValidatorSet {
             hash,
             trusted: false,
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ValidatorSetRange {
+    min_number_to_verify_seal: BlockNumber,
+    min_number_to_verify_vote: BlockNumber,
+    validators: ValidatorSet,
+}
+
+impl ValidatorSetRange {
+    fn new(
+        min_number_to_verify_seal: BlockNumber,
+        min_number_to_verify_vote: BlockNumber,
+        validators: ValidatorSet,
+    ) -> Self {
+        Self {
+            min_number_to_verify_seal,
+            min_number_to_verify_vote,
+            validators,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidatorSets {
+    validators: Vec<ValidatorSetRange>,
+}
+
+impl ValidatorSets {
+    pub fn new(
+        hs: &[ETHHeader],
+        p_val: &ValidatorSet,
+        c_val: &ValidatorSet,
+    ) -> Result<ValidatorSets, Error> {
+        let first = &hs[0];
+        let mut validators = vec![ValidatorSetRange::new(
+            first.number,
+            first.number,
+            p_val.clone(),
+        )];
+        let mut p_val = p_val.clone();
+        let mut c_val = c_val.clone();
+        let mut epoch = first.number / BLOCKS_PER_EPOCH;
+        let mut checkpoint = epoch * BLOCKS_PER_EPOCH + p_val.checkpoint();
+        for h in hs {
+            if h.number >= checkpoint {
+                let next_epoch = (epoch + 1) * BLOCKS_PER_EPOCH;
+                let next_checkpoint = epoch + c_val.checkpoint();
+                c_val.trust(p_val.validators()?);
+                // At the just checkpoint BLS signature uses previous validator set.
+                validators.push(ValidatorSetRange::new(
+                    checkpoint,
+                    checkpoint + 1,
+                    c_val.clone(),
+                ));
+
+                if h.number == next_epoch {
+                    let mut n_val: ValidatorSet = h
+                        .get_validator_bytes()
+                        .ok_or(Error::MissingValidatorInEpochBlock(h.number))?
+                        .into();
+                    n_val.trust(c_val.validators()?);
+                    c_val = n_val;
+                    epoch = next_epoch;
+                    checkpoint = next_checkpoint;
+                }
+            }
+        }
+        Ok(ValidatorSets { validators })
+    }
+
+    pub fn get_for_verify_seal(&self, number: BlockNumber) -> Option<&ValidatorSet> {
+        for range in &self.validators {
+            if number >= range.min_number_to_verify_seal {
+                return Some(&range.validators);
+            }
+        }
+        None
+    }
+
+    pub fn get_for_verify_vote(&self, number: BlockNumber) -> Option<&ValidatorSet> {
+        for range in &self.validators {
+            if number >= range.min_number_to_verify_vote {
+                return Some(&range.validators);
+            }
+        }
+        None
     }
 }
 

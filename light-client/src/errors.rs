@@ -69,6 +69,7 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
+    MissingNextValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
@@ -279,6 +280,9 @@ impl core::fmt::Display for Error {
             }
             Error::ValidatorNotTrusted(e1) => {
                 write!(f, "ValidatorNotTrusted : {:?}", e1)
+            }
+            Error::MissingNextValidatorSet(e1) => {
+                write!(f, "MissingNextValidatorSet : {:?}", e1)
             }
         }
     }

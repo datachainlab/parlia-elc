@@ -3,12 +3,12 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::ValidatorSet;
+use crate::header::validator_set::{ValidatorSet, ValidatorSets};
+use crate::header::Header;
 
-use crate::misc::{ChainId, Validators};
+use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
-use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -31,31 +31,23 @@ impl ETHHeaders {
             }
         }
 
-        let previous_validators = previous_validators.validators()?;
+        let validator_sets =
+            ValidatorSets::new(&self.all, previous_validators, current_validators)?;
 
         // Ensure valid seals
-        let epoch = self.target.number / BLOCKS_PER_EPOCH;
-        let checkpoint = epoch * BLOCKS_PER_EPOCH + checkpoint(previous_validators);
-        for h in self.all.iter() {
-            if h.number >= checkpoint {
-                h.verify_seal(current_validators.validators()?, chain_id)?;
-            } else {
-                h.verify_seal(previous_validators, chain_id)?;
-            }
+        for h in &self.all {
+            let val = validator_sets.get_for_verify_seal(h.number).unwrap();
+            h.verify_seal(val.validators()?, chain_id)?;
         }
 
         // Ensure target is finalized
         let headers_for_finalize = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
-        // At the just checkpoint BLS signature uses previous validator set.
         for h in headers_for_finalize {
+            let val = validator_sets.get_for_verify_vote(h.number).unwrap();
             let vote = h.get_vote_attestation()?;
-            if h.number > checkpoint {
-                vote.verify(h.number, current_validators.validators()?)?;
-            } else {
-                vote.verify(h.number, previous_validators)?;
-            }
+            vote.verify(h.number, val.validators()?)?;
         }
         Ok(())
     }
