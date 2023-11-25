@@ -138,14 +138,14 @@ impl ValidatorSets {
         }
         validators.reverse();
         // ex) when target = 201 then
+        // 611, 612, nn_val
+        // 411, 412, n_val
+        // 211, 212, c_val
         // 201, 201, p_val
-        // 211, 212, c_val
-        // 411, 412, n_val
-        // 611, 612, nn_val
         // ex) when target = 215
-        // 211, 212, c_val
-        // 411, 412, n_val
         // 611, 612, nn_val
+        // 411, 412, n_val
+        // 211, 212, c_val
         Ok(ValidatorSets { validators })
     }
 
