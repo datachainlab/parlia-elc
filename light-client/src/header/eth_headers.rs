@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::{ValidatorRanges, ValidatorSet};
 
-use crate::misc::{ChainId, Validators};
+use crate::misc::ChainId;
 
 use super::eth_header::ETHHeader;
 
@@ -127,14 +127,6 @@ fn verify_finalized(
         ));
     }
     Ok(())
-}
-
-/// for example when the validator count is 21 the checkpoint is 211, 411, 611 ...
-/// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/parlia.go#L607
-/// https://github.com/bnb-chain/bsc/blob/48aaee69e9cb50fc2cedf1398ae4b98b099697db/consensus/parlia/snapshot.go#L191
-fn checkpoint(validators: &Validators) -> u64 {
-    let validator_size = validators.len() as u64;
-    validator_size / 2 + 1
 }
 
 #[cfg(test)]
