@@ -64,17 +64,17 @@ impl From<Vec<Vec<u8>>> for ValidatorSet {
 }
 
 #[derive(Clone, Debug)]
-struct ValidatorSetRange {
+struct ValidatorRange {
     min_number_to_verify_seal: BlockNumber,
     min_number_to_verify_vote: BlockNumber,
-    validators: ValidatorSet,
+    validators: Validators,
 }
 
-impl ValidatorSetRange {
+impl ValidatorRange {
     fn new(
         min_number_to_verify_seal: BlockNumber,
         min_number_to_verify_vote: BlockNumber,
-        validators: ValidatorSet,
+        validators: Validators,
     ) -> Self {
         Self {
             min_number_to_verify_seal,
@@ -85,16 +85,16 @@ impl ValidatorSetRange {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValidatorSets {
-    validators: Vec<ValidatorSetRange>,
+pub struct ValidatorRanges {
+    inner: Vec<ValidatorRange>,
 }
 
-impl ValidatorSets {
+impl ValidatorRanges {
     pub fn new(
         hs: &[ETHHeader],
         p_val: &ValidatorSet,
         c_val: &ValidatorSet,
-    ) -> Result<ValidatorSets, Error> {
+    ) -> Result<Self, Error> {
         let first = &hs[0];
         let mut validators = vec![];
         let mut p_val = p_val.clone();
@@ -102,10 +102,11 @@ impl ValidatorSets {
         let mut epoch = (first.number / BLOCKS_PER_EPOCH) * BLOCKS_PER_EPOCH;
         let mut checkpoint = epoch + p_val.checkpoint();
         if first.number < checkpoint {
-            validators.push(ValidatorSetRange::new(
+            // Default validators before checkpoint
+            validators.push(ValidatorRange::new(
                 first.number,
                 first.number,
-                p_val.clone(),
+                p_val.validators()?.clone(),
             ));
         }
         let mut current_saved = false;
@@ -113,11 +114,11 @@ impl ValidatorSets {
             if h.number >= checkpoint {
                 if !current_saved {
                     c_val.trust(p_val.validators()?);
-                    validators.push(ValidatorSetRange::new(
+                    validators.push(ValidatorRange::new(
                         checkpoint,
                         // At the just checkpoint BLS signature uses previous validator set.
                         checkpoint + 1,
-                        c_val.clone(),
+                        c_val.validators()?.clone(),
                     ));
                     current_saved = true;
                 }
@@ -146,25 +147,25 @@ impl ValidatorSets {
         // 611, 612, nn_val
         // 411, 412, n_val
         // 211, 212, c_val
-        Ok(ValidatorSets { validators })
+        Ok(Self { inner: validators })
     }
 
-    pub fn get_for_verify_seal(&self, number: BlockNumber) -> Option<&ValidatorSet> {
-        for range in &self.validators {
+    pub fn get_to_verify_seal(&self, number: BlockNumber) -> Result<&Validators, Error> {
+        for range in &self.inner {
             if number >= range.min_number_to_verify_seal {
-                return Some(&range.validators);
+                return Ok(&range.validators);
             }
         }
-        None
+        Err(Error::MissingValidatorToVerifySeal(number))
     }
 
-    pub fn get_for_verify_vote(&self, number: BlockNumber) -> Option<&ValidatorSet> {
-        for range in &self.validators {
+    pub fn get_to_verify_vote(&self, number: BlockNumber) -> Result<&Validators, Error> {
+        for range in &self.inner {
             if number >= range.min_number_to_verify_vote {
-                return Some(&range.validators);
+                return Ok(&range.validators);
             }
         }
-        None
+        Err(Error::MissingValidatorToVerifyVote(number))
     }
 }
 
@@ -174,9 +175,47 @@ mod test {
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{ETHHeader, EXTRA_SEAL, EXTRA_VANITY, VALIDATOR_BYTES_LENGTH};
     use crate::header::testdata::header_31297200;
-    use crate::header::validator_set::{ValidatorSet, ValidatorSets};
+    use crate::header::validator_set::{ValidatorRange, ValidatorRanges, ValidatorSet};
     use crate::misc::{ceil_div, Validators};
     use alloc::vec::Vec;
+
+    #[test]
+    pub fn test_get_to_verify_seal() {
+        let v1 = vec![vec![1]];
+        let r1 = ValidatorRange::new(2, 2, v1.clone());
+        let ranges = ValidatorRanges { inner: vec![r1] };
+
+        // success
+        let result = ranges.get_to_verify_seal(2).unwrap();
+        assert_eq!(*result, v1);
+
+        // error
+        match ranges.get_to_verify_seal(1).unwrap_err() {
+            Error::MissingValidatorToVerifySeal(n) => {
+                assert_eq!(n, 1);
+            }
+            err => unreachable!("err {:?}", err),
+        }
+    }
+
+    #[test]
+    pub fn test_get_to_verify_vote() {
+        let v1 = vec![vec![1]];
+        let r1 = ValidatorRange::new(2, 2, v1.clone());
+        let ranges = ValidatorRanges { inner: vec![r1] };
+
+        // success
+        let result = ranges.get_to_verify_vote(2).unwrap();
+        assert_eq!(*result, v1);
+
+        // error
+        match ranges.get_to_verify_vote(1).unwrap_err() {
+            Error::MissingValidatorToVerifyVote(n) => {
+                assert_eq!(n, 1);
+            }
+            err => unreachable!("err {:?}", err),
+        }
+    }
 
     #[test]
     pub fn test_success_new_validator_sets() {
@@ -184,117 +223,114 @@ mod test {
         let verify = |start, mut p_val: ValidatorSet, c_val| {
             p_val.trusted = true;
             let hs = create_headers(start, base.clone(), &p_val);
-            let mut verify_result = ValidatorSets::new(&hs, &p_val, &c_val).unwrap();
-            verify_result.validators.reverse();
+            let mut verify_result = ValidatorRanges::new(&hs, &p_val, &c_val).unwrap();
+            verify_result.inner.reverse();
             verify_result
         };
 
         let assert_before_checkpoint =
-            |result: ValidatorSets, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
+            |result: ValidatorRanges, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
                 let first = base.number + start;
                 let epoch = (first / BLOCKS_PER_EPOCH) * BLOCKS_PER_EPOCH;
-                assert_eq!(6, result.validators.len());
+                assert_eq!(6, result.inner.len());
+                assert_eq!(result.inner[0].min_number_to_verify_seal, first, "0-min");
+                assert_eq!(result.inner[0].validators, p_val.validators, "0-val");
                 assert_eq!(
-                    result.validators[0].min_number_to_verify_seal, first,
-                    "0-min"
-                );
-                assert_eq!(result.validators[0].validators.hash, p_val.hash, "0-val");
-                assert_eq!(
-                    result.validators[1].min_number_to_verify_seal,
+                    result.inner[1].min_number_to_verify_seal,
                     epoch + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[1].validators.hash, c_val.hash, "1-val");
+                assert_eq!(result.inner[1].validators, c_val.validators, "1-val");
                 assert_eq!(
-                    result.validators[2].min_number_to_verify_seal,
+                    result.inner[2].min_number_to_verify_seal,
                     epoch + BLOCKS_PER_EPOCH + c_val.checkpoint()
                 );
-                assert_eq!(result.validators[2].validators.hash, p_val.hash, "2-val");
+                assert_eq!(result.inner[2].validators, p_val.validators, "2-val");
                 assert_eq!(
-                    result.validators[3].min_number_to_verify_seal,
+                    result.inner[3].min_number_to_verify_seal,
                     epoch + 2 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[3].validators.hash, p_val.hash, "3-val");
+                assert_eq!(result.inner[3].validators, p_val.validators, "3-val");
                 assert_eq!(
-                    result.validators[4].min_number_to_verify_seal,
+                    result.inner[4].min_number_to_verify_seal,
                     epoch + 3 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[4].validators.hash, p_val.hash, "4-val");
+                assert_eq!(result.inner[4].validators, p_val.validators, "4-val");
                 assert_eq!(
-                    result.validators[5].min_number_to_verify_seal,
+                    result.inner[5].min_number_to_verify_seal,
                     epoch + 4 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[5].validators.hash, p_val.hash, "5-val");
+                assert_eq!(result.inner[5].validators, p_val.validators, "5-val");
             };
 
         let assert_eq_checkpoint =
-            |result: ValidatorSets, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
+            |result: ValidatorRanges, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
                 let first = base.number + start;
                 let epoch = (first / BLOCKS_PER_EPOCH) * BLOCKS_PER_EPOCH;
-                assert_eq!(5, result.validators.len());
+                assert_eq!(5, result.inner.len());
                 assert_eq!(
-                    result.validators[0].min_number_to_verify_seal,
+                    result.inner[0].min_number_to_verify_seal,
                     epoch + p_val.checkpoint(),
                     "0-min"
                 );
-                assert_eq!(result.validators[0].validators.hash, c_val.hash, "0-val");
+                assert_eq!(result.inner[0].validators, c_val.validators, "0-val");
                 assert_eq!(
-                    result.validators[1].min_number_to_verify_seal,
+                    result.inner[1].min_number_to_verify_seal,
                     epoch + BLOCKS_PER_EPOCH + c_val.checkpoint()
                 );
-                assert_eq!(result.validators[1].validators.hash, p_val.hash, "1-val");
+                assert_eq!(result.inner[1].validators, p_val.validators, "1-val");
                 assert_eq!(
-                    result.validators[2].min_number_to_verify_seal,
+                    result.inner[2].min_number_to_verify_seal,
                     epoch + 2 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[2].validators.hash, p_val.hash, "2-val");
+                assert_eq!(result.inner[2].validators, p_val.validators, "2-val");
                 assert_eq!(
-                    result.validators[3].min_number_to_verify_seal,
+                    result.inner[3].min_number_to_verify_seal,
                     epoch + 3 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[3].validators.hash, p_val.hash, "3-val");
+                assert_eq!(result.inner[3].validators, p_val.validators, "3-val");
                 assert_eq!(
-                    result.validators[4].min_number_to_verify_seal,
+                    result.inner[4].min_number_to_verify_seal,
                     epoch + 4 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[4].validators.hash, p_val.hash, "4-val");
+                assert_eq!(result.inner[4].validators, p_val.validators, "4-val");
             };
 
         let assert_after_checkpoint =
-            |result: ValidatorSets, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
+            |result: ValidatorRanges, start: u64, p_val: ValidatorSet, c_val: ValidatorSet| {
                 let first = base.number + start;
                 let epoch = (first / BLOCKS_PER_EPOCH) * BLOCKS_PER_EPOCH;
-                assert_eq!(6, result.validators.len(), "block={}", first);
+                assert_eq!(6, result.inner.len(), "block={}", first);
                 assert_eq!(
-                    result.validators[0].min_number_to_verify_seal,
+                    result.inner[0].min_number_to_verify_seal,
                     epoch + p_val.checkpoint(),
                     "0-min"
                 );
-                assert_eq!(result.validators[0].validators.hash, c_val.hash, "0-val");
+                assert_eq!(result.inner[0].validators, c_val.validators, "0-val");
                 assert_eq!(
-                    result.validators[1].min_number_to_verify_seal,
+                    result.inner[1].min_number_to_verify_seal,
                     epoch + BLOCKS_PER_EPOCH + c_val.checkpoint()
                 );
-                assert_eq!(result.validators[1].validators.hash, p_val.hash, "1-val");
+                assert_eq!(result.inner[1].validators, p_val.validators, "1-val");
                 assert_eq!(
-                    result.validators[2].min_number_to_verify_seal,
+                    result.inner[2].min_number_to_verify_seal,
                     epoch + 2 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[2].validators.hash, p_val.hash, "2-val");
+                assert_eq!(result.inner[2].validators, p_val.validators, "2-val");
                 assert_eq!(
-                    result.validators[3].min_number_to_verify_seal,
+                    result.inner[3].min_number_to_verify_seal,
                     epoch + 3 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[3].validators.hash, p_val.hash, "3-val");
+                assert_eq!(result.inner[3].validators, p_val.validators, "3-val");
                 assert_eq!(
-                    result.validators[4].min_number_to_verify_seal,
+                    result.inner[4].min_number_to_verify_seal,
                     epoch + 4 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[4].validators.hash, p_val.hash, "4-val");
+                assert_eq!(result.inner[4].validators, p_val.validators, "4-val");
                 assert_eq!(
-                    result.validators[5].min_number_to_verify_seal,
+                    result.inner[5].min_number_to_verify_seal,
                     epoch + 5 * BLOCKS_PER_EPOCH + p_val.checkpoint()
                 );
-                assert_eq!(result.validators[5].validators.hash, p_val.hash, "5-val");
+                assert_eq!(result.inner[5].validators, p_val.validators, "5-val");
             };
 
         let gen = |p, c| {
@@ -367,7 +403,7 @@ mod test {
         let base = header_31297200();
         let (p_val, c_val) = gen(21, 21);
         let hs = create_headers(0, base, &p_val);
-        let result = ValidatorSets::new(&hs, &p_val, &c_val).unwrap_err();
+        let result = ValidatorRanges::new(&hs, &p_val, &c_val).unwrap_err();
         match result {
             Error::ValidatorNotTrusted(h) => {
                 assert_eq!(h, c_val.hash);

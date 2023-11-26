@@ -74,6 +74,8 @@ pub enum Error {
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
     ValidatorNotTrusted(Hash),
+    MissingValidatorToVerifySeal(BlockNumber),
+    MissingValidatorToVerifyVote(BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -283,6 +285,12 @@ impl core::fmt::Display for Error {
             }
             Error::MissingNextValidatorSet(e1) => {
                 write!(f, "MissingNextValidatorSet : {:?}", e1)
+            }
+            Error::MissingValidatorToVerifySeal(e1) => {
+                write!(f, "MissingValidatorToVerifySeal : {:?}", e1)
+            }
+            Error::MissingValidatorToVerifyVote(e1) => {
+                write!(f, "MissingValidatorToVerifyVote : {:?}", e1)
             }
         }
     }

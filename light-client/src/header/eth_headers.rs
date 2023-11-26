@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::{ValidatorSet, ValidatorSets};
+use crate::header::validator_set::{ValidatorRanges, ValidatorSet};
 
 use crate::misc::{ChainId, Validators};
 
@@ -30,13 +30,13 @@ impl ETHHeaders {
             }
         }
 
-        let validator_sets =
-            ValidatorSets::new(&self.all, previous_validators, current_validators)?;
+        let validator_ranges =
+            ValidatorRanges::new(&self.all, previous_validators, current_validators)?;
 
         // Ensure valid seals
         for h in &self.all {
-            let val = validator_sets.get_for_verify_seal(h.number).unwrap();
-            h.verify_seal(val.validators()?, chain_id)?;
+            let val = validator_ranges.get_to_verify_seal(h.number)?;
+            h.verify_seal(val, chain_id)?;
         }
 
         // Ensure target is finalized
@@ -44,9 +44,9 @@ impl ETHHeaders {
 
         // Ensure BLS signature is collect
         for h in headers_for_finalize {
-            let val = validator_sets.get_for_verify_vote(h.number).unwrap();
+            let val = validator_ranges.get_to_verify_vote(h.number)?;
             let vote = h.get_vote_attestation()?;
-            vote.verify(h.number, val.validators()?)?;
+            vote.verify(h.number, val)?;
         }
         Ok(())
     }
