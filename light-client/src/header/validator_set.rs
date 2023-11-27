@@ -109,10 +109,10 @@ impl ValidatorRanges {
                 p_val.validators()?.clone(),
             ));
         }
-        let mut current_saved = false;
+        let mut is_first_header_in_checkpoint = true;
         for h in hs {
             if h.number >= checkpoint {
-                if !current_saved {
+                if is_first_header_in_checkpoint {
                     c_val.trust(p_val.validators()?);
                     validators.push(ValidatorRange::new(
                         checkpoint,
@@ -120,7 +120,7 @@ impl ValidatorRanges {
                         checkpoint + 1,
                         c_val.validators()?.clone(),
                     ));
-                    current_saved = true;
+                    is_first_header_in_checkpoint = false;
                 }
 
                 let next_epoch = epoch + BLOCKS_PER_EPOCH;
@@ -131,7 +131,7 @@ impl ValidatorRanges {
                         .into();
                     epoch = next_epoch;
                     checkpoint = next_epoch + c_val.checkpoint();
-                    current_saved = false;
+                    is_first_header_in_checkpoint = true;
                     p_val = c_val;
                     c_val = n_val;
                 }
