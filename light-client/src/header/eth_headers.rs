@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::ValidatorSet;
 
-use crate::misc::{ChainId, Validators};
+use crate::misc::ChainId;
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -23,6 +23,20 @@ impl ETHHeaders {
         current_validators: &ValidatorSet,
         previous_validators: &ValidatorSet,
     ) -> Result<(), Error> {
+        let epoch = self.target.number / BLOCKS_PER_EPOCH;
+
+        // Ensure the header after the next checkpoint must not exist.
+        let next_epoch_checkpoint =
+            (epoch + 1) * BLOCKS_PER_EPOCH + current_validators.checkpoint();
+        for h in self.all.iter() {
+            if h.number >= next_epoch_checkpoint {
+                return Err(Error::UnexpectedNextCheckpointHeader(
+                    self.target.number,
+                    h.number,
+                ));
+            }
+        }
+
         // Ensure all the headers are successfully chained.
         for (i, header) in self.all.iter().enumerate() {
             if i < self.all.len() - 1 {
@@ -32,12 +46,10 @@ impl ETHHeaders {
         }
 
         // Ensure valid seals
-        let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_validators.checkpoint();
         let previous_validators = previous_validators.validators()?;
         for h in self.all.iter() {
             if h.number >= checkpoint {
-                //TODO error if h.number reaches next checkpoint
                 h.verify_seal(current_validators.validators()?, chain_id)?;
             } else {
                 h.verify_seal(previous_validators, chain_id)?;
@@ -141,6 +153,7 @@ fn verify_finalized(
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
+    use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::*;
     use crate::header::validator_set::ValidatorSet;
@@ -335,6 +348,47 @@ mod test {
             }
             e => unreachable!("{:?}", e),
         }
+    }
+
+    #[test]
+    fn test_error_next_checkpoint_header_found() {
+        let f = |mut headers: ETHHeaders, c_val: ValidatorSet, p_val: ValidatorSet| {
+            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
+            let next_epoch_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + c_val.checkpoint();
+            loop {
+                let last = headers.all.last().unwrap();
+                if last.number >= next_epoch_checkpoint {
+                    break;
+                }
+                let mut next = last.clone();
+                next.number = last.number + 1;
+                headers.all.push(next);
+            }
+            match headers.verify(&mainnet(), &c_val, &p_val).unwrap_err() {
+                Error::UnexpectedNextCheckpointHeader(e1, e2) => {
+                    assert_eq!(e1, headers.target.number);
+                    assert_eq!(e2, next_epoch_checkpoint);
+                }
+                err => unreachable!("err {:?}", err),
+            };
+        };
+        let headers = create_after_checkpoint_headers();
+        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
+        f(headers, c_val, trust(empty()));
+
+        let headers = create_before_checkpoint_headers();
+        let p_val = ValidatorSet::from(validators_in_31297000());
+        let c_val = trust(ValidatorSet::from(
+            header_31297200().get_validator_bytes().unwrap(),
+        ));
+        f(headers, c_val, p_val);
+
+        let headers = create_across_checkpoint_headers();
+        let p_val = ValidatorSet::from(validators_in_31297000());
+        let c_val = trust(ValidatorSet::from(
+            header_31297200().get_validator_bytes().unwrap(),
+        ));
+        f(headers, c_val, p_val);
     }
 
     fn create_before_checkpoint_headers() -> ETHHeaders {

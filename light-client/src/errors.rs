@@ -76,6 +76,7 @@ pub enum Error {
     ValidatorNotTrusted(Hash),
     MissingValidatorToVerifySeal(BlockNumber),
     MissingValidatorToVerifyVote(BlockNumber),
+    UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -291,6 +292,9 @@ impl core::fmt::Display for Error {
             }
             Error::MissingValidatorToVerifyVote(e1) => {
                 write!(f, "MissingValidatorToVerifyVote : {:?}", e1)
+            }
+            Error::UnexpectedNextCheckpointHeader(e1, e2) => {
+                write!(f, "UnexpectedNextCheckpointHeader : {} {}", e1, e2)
             }
         }
     }
