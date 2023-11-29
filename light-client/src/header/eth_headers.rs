@@ -3,11 +3,12 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::{ValidatorRanges, ValidatorSet};
+use crate::header::validator_set::ValidatorSet;
 
-use crate::misc::ChainId;
+use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;
+use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -30,23 +31,31 @@ impl ETHHeaders {
             }
         }
 
-        let validator_ranges =
-            ValidatorRanges::new(&self.all, previous_validators, current_validators)?;
-
         // Ensure valid seals
-        for h in &self.all {
-            let val = validator_ranges.get_to_verify_seal(h.number)?;
-            h.verify_seal(val, chain_id)?;
+        let epoch = self.target.number / BLOCKS_PER_EPOCH;
+        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_validators.checkpoint();
+        let previous_validators = previous_validators.validators()?;
+        for h in self.all.iter() {
+            if h.number >= checkpoint {
+                //TODO error if h.number reaches next checkpoint
+                h.verify_seal(current_validators.validators()?, chain_id)?;
+            } else {
+                h.verify_seal(previous_validators, chain_id)?;
+            }
         }
 
         // Ensure target is finalized
         let headers_for_finalize = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
+        // At the just checkpoint BLS signature uses previous validator set.
         for h in headers_for_finalize {
-            let val = validator_ranges.get_to_verify_vote(h.number)?;
             let vote = h.get_vote_attestation()?;
-            vote.verify(h.number, val)?;
+            if h.number > checkpoint {
+                vote.verify(h.number, current_validators.validators()?)?;
+            } else {
+                vote.verify(h.number, previous_validators)?;
+            }
         }
         Ok(())
     }
@@ -286,7 +295,7 @@ mod test {
     }
 
     #[test]
-    fn test_error_verify_untrusted_current_validators() {
+    fn test_error_verify_too_many_headers_to_seal() {
         let v = vec![
             header_31297200(),
             header_31297201(),
@@ -307,8 +316,8 @@ mod test {
 
         // success ( untrusted validator not used )
         let p_val = trust(validators_in_31297000().into());
-        let c_val = empty();
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let untrusted_c_val = validators_in_31297000().into();
+        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -317,13 +326,12 @@ mod test {
             e => unreachable!("{:?}", e),
         }
 
-        // error (c_val doesn't contains any p_val)
+        // error
         headers.all.push(header_31297211());
-        let c_val = vec![vec![1]].into();
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
         match result.unwrap_err() {
             Error::ValidatorNotTrusted(e1) => {
-                assert_eq!(e1, c_val.hash);
+                assert_eq!(e1, untrusted_c_val.hash);
             }
             e => unreachable!("{:?}", e),
         }

@@ -119,6 +119,9 @@ fn verify_validator_set(
                 consensus_state.current_validators_hash,
             ));
         }
+
+        // Try set trust by previous trusted validators
+        current_validators.trust(previous_validators.validators()?)
     } else {
         if header_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
@@ -406,8 +409,14 @@ pub(crate) mod test {
     }
 
     fn to_validator_set(h: Hash) -> ValidatorSet {
-        let validators: Validators = vec![];
+        let validators: Validators = vec![vec![1]];
         let mut v: ValidatorSet = validators.into();
+        v.hash = h;
+        v
+    }
+
+    fn to_validator_set_with_validators(h: Hash, v: Validators) -> ValidatorSet {
+        let mut v: ValidatorSet = v.into();
         v.hash = h;
         v
     }
@@ -423,6 +432,8 @@ pub(crate) mod test {
 
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 201);
+
+        // Same validator set as previous
         let current_validators = &mut to_validator_set([3u8; 32]);
         let previous_validators = &mut to_validator_set(cs.current_validators_hash);
         verify_validator_set(
@@ -434,6 +445,21 @@ pub(crate) mod test {
             current_validators,
         )
         .unwrap();
+        assert!(current_validators.trusted);
+
+        let current_validators = &mut to_validator_set([3u8; 32]);
+        let previous_validators =
+            &mut to_validator_set_with_validators(cs.current_validators_hash, vec![vec![2]]);
+        verify_validator_set(
+            &cs,
+            true,
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap();
+        assert!(!current_validators.trusted);
 
         let height = new_height(0, 599);
         let trusted_height = new_height(0, 400);
