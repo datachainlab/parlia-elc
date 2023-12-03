@@ -10,6 +10,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::header::validator_set::ValidatorSet;
 
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -262,6 +263,13 @@ impl ETHHeader {
                 .map(|s| s.into())
                 .collect(),
         )
+    }
+
+    pub fn get_validator_set(&self) -> Result<ValidatorSet, Error> {
+        Ok(self
+            .get_validator_bytes()
+            .ok_or_else(|| Error::MissingValidatorInEpochBlock(self.number))?
+            .into())
     }
 
     pub fn is_epoch(&self) -> bool {

@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::ValidatorSet;
 
-use crate::misc::ChainId;
+use crate::misc::{ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -23,44 +23,11 @@ impl ETHHeaders {
         current_validators: &ValidatorSet,
         previous_validators: &ValidatorSet,
     ) -> Result<(), Error> {
+        // Ensure the header after the next or next checkpoint must not exist.
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_validators.checkpoint();
-        let mut maybe_next_validators: Option<ValidatorSet> = None;
-
-        // Ensure the header after the next checkpoint must not exist.
-        for h in self.all.iter() {
-            // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
-            if self.target.is_epoch() {
-                if h.number >= next_checkpoint {
-                    return Err(Error::UnexpectedNextCheckpointHeader(
-                        self.target.number,
-                        h.number,
-                    ));
-                }
-            } else {
-                // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
-                if h.is_epoch() {
-                    let mut next_validators: ValidatorSet = h
-                        .get_validator_bytes()
-                        .ok_or_else(|| Error::MissingValidatorInEpochBlock(h.number))?
-                        .into();
-                    next_validators.trust(current_validators.validators()?);
-                    maybe_next_validators = Some(next_validators);
-                } else if h.number >= next_checkpoint {
-                    let next_validators = maybe_next_validators
-                        .as_mut()
-                        .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
-                    let next_next_checkpoint =
-                        (epoch + 2) * BLOCKS_PER_EPOCH + next_validators.checkpoint();
-                    if h.number >= next_next_checkpoint {
-                        return Err(Error::UnexpectedNextNextCheckpointHeader(
-                            self.target.number,
-                            h.number,
-                        ));
-                    }
-                }
-            }
-        }
+        let maybe_next_validators =
+            self.verify_header_size(epoch, next_checkpoint, current_validators)?;
 
         // Ensure all the headers are successfully chained.
         for (i, header) in self.all.iter().enumerate() {
@@ -75,10 +42,9 @@ impl ETHHeaders {
         let previous_validators = previous_validators.validators()?;
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
-                let next_validators = maybe_next_validators
-                    .as_ref()
-                    .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
-                h.verify_seal(next_validators.validators()?, chain_id)?;
+                let next_validators =
+                    get_next_validators(h.number, maybe_next_validators.as_ref())?;
+                h.verify_seal(next_validators, chain_id)?;
             } else if h.number >= checkpoint {
                 h.verify_seal(current_validators.validators()?, chain_id)?;
             } else {
@@ -94,10 +60,9 @@ impl ETHHeaders {
         for h in headers_for_finalize {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
-                let next_validators = maybe_next_validators
-                    .as_ref()
-                    .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
-                vote.verify(h.number, next_validators.validators()?)?;
+                let next_validators =
+                    get_next_validators(h.number, maybe_next_validators.as_ref())?;
+                vote.verify(h.number, next_validators)?;
             } else if h.number > checkpoint {
                 vote.verify(h.number, current_validators.validators()?)?;
             } else {
@@ -138,6 +103,47 @@ impl ETHHeaders {
             self.all.len(),
             last_error.map(alloc::boxed::Box::new),
         ))
+    }
+
+    fn verify_header_size(
+        &self,
+        epoch: u64,
+        next_checkpoint: u64,
+        current_validators: &ValidatorSet,
+    ) -> Result<Option<ValidatorSet>, Error> {
+        let mut maybe_next_validators: Option<ValidatorSet> = None;
+
+        for h in self.all.iter() {
+            // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
+            if self.target.is_epoch() {
+                if h.number >= next_checkpoint {
+                    return Err(Error::UnexpectedNextCheckpointHeader(
+                        self.target.number,
+                        h.number,
+                    ));
+                }
+            } else {
+                // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
+                if h.is_epoch() {
+                    let mut next_validators: ValidatorSet = h.get_validator_set()?;
+                    next_validators.trust(current_validators.validators()?);
+                    maybe_next_validators = Some(next_validators);
+                } else if h.number >= next_checkpoint {
+                    let next_validators = maybe_next_validators
+                        .as_mut()
+                        .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
+                    let next_next_checkpoint =
+                        (epoch + 2) * BLOCKS_PER_EPOCH + next_validators.checkpoint();
+                    if h.number >= next_next_checkpoint {
+                        return Err(Error::UnexpectedNextNextCheckpointHeader(
+                            self.target.number,
+                            h.number,
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(maybe_next_validators)
     }
 }
 
@@ -183,6 +189,11 @@ fn verify_finalized(
         ));
     }
     Ok(())
+}
+
+fn get_next_validators(number: u64, v: Option<&ValidatorSet>) -> Result<&Validators, Error> {
+    v.ok_or_else(|| Error::MissingNextValidatorSet(number))?
+        .validators()
 }
 
 #[cfg(test)]
