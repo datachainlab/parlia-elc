@@ -77,6 +77,7 @@ pub enum Error {
     MissingValidatorToVerifySeal(BlockNumber),
     MissingValidatorToVerifyVote(BlockNumber),
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
+    UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -295,6 +296,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedNextCheckpointHeader(e1, e2) => {
                 write!(f, "UnexpectedNextCheckpointHeader : {} {}", e1, e2)
+            }
+            Error::UnexpectedNextNextCheckpointHeader(e1, e2) => {
+                write!(f, "UnexpectedNextNextCheckpointHeader : {} {}", e1, e2)
             }
         }
     }
