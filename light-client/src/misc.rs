@@ -102,3 +102,38 @@ pub fn keccak_256_vec(targets: &[Vec<u8>]) -> Hash {
     let flatten: Vec<u8> = targets.iter().flat_map(|x| x.clone()).collect();
     keccak_256(flatten.as_slice())
 }
+
+pub fn ceil_div(x: usize, y: usize) -> usize {
+    if y == 0 {
+        return 0;
+    }
+    (x + y - 1) / y
+}
+
+#[cfg(test)]
+mod test {
+    use crate::misc::ceil_div;
+
+    #[test]
+    fn ceil_div_test() {
+        assert_eq!(ceil_div(0, 0), 0);
+
+        // 1/2
+        assert_eq!(ceil_div(1, 2), 1);
+        assert_eq!(ceil_div(7, 2), 4);
+        assert_eq!(ceil_div(8, 2), 4);
+        assert_eq!(ceil_div(21, 2), 11);
+
+        // 1/3
+        assert_eq!(ceil_div(1, 3), 1);
+        assert_eq!(ceil_div(7, 3), 3);
+        assert_eq!(ceil_div(8, 3), 3);
+        assert_eq!(ceil_div(21, 3), 7);
+
+        // 2/3
+        assert_eq!(ceil_div(2, 3), 1);
+        assert_eq!(ceil_div(7 * 2, 3), 5);
+        assert_eq!(ceil_div(8 * 2, 3), 6);
+        assert_eq!(ceil_div(21 * 2, 3), 14);
+    }
+}

@@ -1,5 +1,5 @@
 use crate::errors::Error;
-use crate::misc::{rlp_as_val, BlockNumber, Hash, RlpIterator, Validators};
+use crate::misc::{ceil_div, rlp_as_val, BlockNumber, Hash, RlpIterator, Validators};
 use alloc::vec::Vec;
 use milagro_bls::PublicKey;
 
@@ -64,7 +64,7 @@ impl VoteAttestation {
             voted_addr.push(bls_pub_key);
         }
 
-        let required = Self::ceil_div(validators.len() * 2, 3);
+        let required = ceil_div(validators.len() * 2, 3);
         if voted_addr.len() < required {
             return Err(Error::InsufficientValidatorCount(
                 number,
@@ -83,13 +83,6 @@ impl VoteAttestation {
             ));
         }
         Ok(())
-    }
-
-    fn ceil_div(x: usize, y: usize) -> usize {
-        if y == 0 {
-            return 0;
-        }
-        (x + y - 1) / y
     }
 }
 

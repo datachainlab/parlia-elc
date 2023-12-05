@@ -69,10 +69,15 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
+    MissingNextValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
     ValidatorNotTrusted(Hash),
+    MissingValidatorToVerifySeal(BlockNumber),
+    MissingValidatorToVerifyVote(BlockNumber),
+    UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
+    UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -279,6 +284,21 @@ impl core::fmt::Display for Error {
             }
             Error::ValidatorNotTrusted(e1) => {
                 write!(f, "ValidatorNotTrusted : {:?}", e1)
+            }
+            Error::MissingNextValidatorSet(e1) => {
+                write!(f, "MissingNextValidatorSet : {:?}", e1)
+            }
+            Error::MissingValidatorToVerifySeal(e1) => {
+                write!(f, "MissingValidatorToVerifySeal : {:?}", e1)
+            }
+            Error::MissingValidatorToVerifyVote(e1) => {
+                write!(f, "MissingValidatorToVerifyVote : {:?}", e1)
+            }
+            Error::UnexpectedNextCheckpointHeader(e1, e2) => {
+                write!(f, "UnexpectedNextCheckpointHeader : {} {}", e1, e2)
+            }
+            Error::UnexpectedNextNextCheckpointHeader(e1, e2) => {
+                write!(f, "UnexpectedNextNextCheckpointHeader : {} {}", e1, e2)
             }
         }
     }
