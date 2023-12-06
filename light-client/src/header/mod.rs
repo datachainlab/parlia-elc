@@ -10,7 +10,7 @@ use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
 
 use crate::header::eth_headers::ETHHeaders;
-use crate::header::validator_set::ValidatorSet;
+use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
@@ -67,6 +67,35 @@ impl Header {
         self.current_validators.hash
     }
 
+    pub fn block_hash(&self) -> &Hash {
+        &self.headers.target.hash
+    }
+
+    pub fn verify_validator_set(&self, consensus_state: &ConsensusState) -> Result<VerifiableHeader, Error> {
+        let (c_val, p_val) = verify_validator_set(
+            consensus_state,
+            self.headers.target.is_epoch(),
+            self.height(),
+            self.trusted_height,
+            &self.previous_validators,
+            &self.current_validators,
+        )?;
+        Ok(VerifiableHeader {
+            headers: &self.headers,
+            current_validators: c_val,
+            previous_validators: p_val,
+        })
+    }
+}
+
+struct VerifiableHeader<'a> {
+    headers: &'a ETHHeaders,
+    current_validators: VerifiedValidatorSet<'a>,
+    previous_validators: TrustedValidatorSet<'a>,
+}
+
+impl <'a> VerifiableHeader<'a> {
+
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
@@ -75,30 +104,17 @@ impl Header {
         )
     }
 
-    pub fn block_hash(&self) -> &Hash {
-        &self.headers.target.hash
-    }
-
-    pub fn verify_validator_set(&mut self, consensus_state: &ConsensusState) -> Result<(), Error> {
-        verify_validator_set(
-            consensus_state,
-            self.headers.target.is_epoch(),
-            self.height(),
-            self.trusted_height,
-            &mut self.previous_validators,
-            &mut self.current_validators,
-        )
-    }
 }
 
-fn verify_validator_set(
+
+fn verify_validator_set<'a>(
     consensus_state: &ConsensusState,
     is_epoch: bool,
     height: Height,
     trusted_height: Height,
-    previous_validators: &mut ValidatorSet,
-    current_validators: &mut ValidatorSet,
-) -> Result<(), Error> {
+    previous_validators: &'a ValidatorSet,
+    current_validators: &'a ValidatorSet,
+) -> Result<(VerifiedValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
     let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
     let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
 
@@ -109,9 +125,9 @@ fn verify_validator_set(
                 height.revision_height(),
             ));
         }
-        previous_validators.trusted =
+        let previous_trusted =
             previous_validators.hash == consensus_state.current_validators_hash;
-        if !previous_validators.trusted {
+        if !previous_trusted {
             return Err(Error::UnexpectedPreviousValidatorsHash(
                 trusted_height,
                 height,
@@ -120,8 +136,10 @@ fn verify_validator_set(
             ));
         }
 
-        // Try set trust by previous trusted validators
-        current_validators.trust(previous_validators.validators()?)
+        Ok((
+            VerifiedValidatorSet::Untrusted(UntrustedValidatorSet::new(current_validators)),
+            TrustedValidatorSet::new(previous_validators)
+        ))
     } else {
         if header_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
@@ -129,9 +147,9 @@ fn verify_validator_set(
                 height.revision_height(),
             ));
         }
-        previous_validators.trusted =
+        let previous_trusted =
             previous_validators.hash == consensus_state.previous_validators_hash;
-        if !previous_validators.trusted {
+        if !previous_trusted {
             return Err(Error::UnexpectedPreviousValidatorsHash(
                 trusted_height,
                 height,
@@ -139,9 +157,9 @@ fn verify_validator_set(
                 consensus_state.previous_validators_hash,
             ));
         }
-        current_validators.trusted =
+        let current_trusted =
             current_validators.hash == consensus_state.current_validators_hash;
-        if !current_validators.trusted {
+        if !current_trusted {
             return Err(Error::UnexpectedCurrentValidatorsHash(
                 trusted_height,
                 height,
@@ -149,8 +167,11 @@ fn verify_validator_set(
                 consensus_state.current_validators_hash,
             ));
         }
+        Ok((
+            VerifiedValidatorSet::Trusted(TrustedValidatorSet::new(current_validators)),
+            TrustedValidatorSet::new(previous_validators),
+        ))
     }
-    Ok(())
 }
 
 impl TryFrom<RawHeader> for Header {

@@ -3,7 +3,8 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::ValidatorSet;
+use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
+use crate::header::validator_set::VerifiedValidatorSet::{Trusted, Untrusted};
 
 use crate::misc::{ChainId, Validators};
 
@@ -20,14 +21,14 @@ impl ETHHeaders {
     pub fn verify(
         &self,
         chain_id: &ChainId,
-        current_validators: &ValidatorSet,
-        previous_validators: &ValidatorSet,
+        current_validators: &VerifiedValidatorSet,
+        previous_validators: &TrustedValidatorSet,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_validators.checkpoint();
-        let maybe_next_validators =
-            self.verify_header_size(epoch, next_checkpoint, current_validators)?;
+        let (c_val, n_val) =
+            self.verify_header_size(epoch, next_checkpoint, previous_validators, current_validators)?;
 
         // Ensure all the headers are successfully chained.
         for (i, header) in self.all.iter().enumerate() {
@@ -39,7 +40,7 @@ impl ETHHeaders {
 
         // Ensure valid seals
         let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_validators.checkpoint();
-        let previous_validators = previous_validators.validators()?;
+        let previous_validators = previous_validators.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
                 let next_validators =
@@ -53,11 +54,11 @@ impl ETHHeaders {
         }
 
         // Ensure target is finalized
-        let headers_for_finalize = self.verify_finalized()?;
+        let (child, grand_child) = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
-        for h in headers_for_finalize {
+        for h in vec![child, grand_child] {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
                 let next_validators =
@@ -72,7 +73,7 @@ impl ETHHeaders {
         Ok(())
     }
 
-    fn verify_finalized(&self) -> Result<Vec<&ETHHeader>, Error> {
+    fn verify_finalized(&self) -> Result<(&ETHHeader, &ETHHeader), Error> {
         if self.all.len() < 3 {
             return Err(Error::InvalidVerifyingHeaderLength(
                 self.target.number,
@@ -81,8 +82,7 @@ impl ETHHeaders {
         }
         let mut last_error: Option<Error> = None;
         let headers = &self.all[..self.all.len() - 2];
-        for (i, _header) in headers.iter().enumerate() {
-            let header = &self.all[i];
+        for (i, header) in headers.iter().enumerate() {
             let child = &self.all[i + 1];
             let grand_child = &self.all[i + 2];
             match verify_finalized(header, child, grand_child) {
@@ -94,7 +94,7 @@ impl ETHHeaders {
                             self.all.len(),
                         ));
                     }
-                    return Ok(vec![child, grand_child]);
+                    return Ok((child, grand_child));
                 }
             }
         }
@@ -105,45 +105,62 @@ impl ETHHeaders {
         ))
     }
 
-    fn verify_header_size(
+    fn verify_header_size<'a>(
         &self,
         epoch: u64,
         next_checkpoint: u64,
-        current_validators: &ValidatorSet,
-    ) -> Result<Option<ValidatorSet>, Error> {
-        let mut maybe_next_validators: Option<ValidatorSet> = None;
+        previous_validators: &TrustedValidatorSet,
+        current_validators: &'a VerifiedValidatorSet,
+    ) -> Result<(Option<&'a Validators>, Option<Validators>), Error> {
 
-        for h in self.all.iter() {
-            // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
-            if self.target.is_epoch() {
-                if h.number >= next_checkpoint {
-                    return Err(Error::UnexpectedNextCheckpointHeader(
-                        self.target.number,
-                        h.number,
-                    ));
-                }
-            } else {
-                // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
-                if h.is_epoch() {
-                    let mut next_validators: ValidatorSet = h.get_validator_set()?;
-                    next_validators.trust(current_validators.validators()?);
-                    maybe_next_validators = Some(next_validators);
-                } else if h.number >= next_checkpoint {
-                    let next_validators = maybe_next_validators
-                        .as_mut()
-                        .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
-                    let next_next_checkpoint =
-                        (epoch + 2) * BLOCKS_PER_EPOCH + next_validators.checkpoint();
-                    if h.number >= next_next_checkpoint {
-                        return Err(Error::UnexpectedNextNextCheckpointHeader(
+        match current_validators {
+            Untrusted(untrusted) => {
+                // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
+                let mut c_val : Option<&'a Validators> = None;
+                for h in self.all.iter() {
+                    if h.number >= checkpoint && c_val.is_none() {
+                       c_val = Some(untrusted.try_borrow(previous_validators)?);
+                    }
+                    if h.number >= next_checkpoint {
+                        return Err(Error::UnexpectedNextCheckpointHeader(
                             self.target.number,
                             h.number,
                         ));
                     }
                 }
+                return Ok((c_val, None))
+            },
+            Trusted(c_val) => {
+                // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
+                let mut untrusted_n_val: Option<UntrustedValidatorSet> = None;
+                let mut n_val: Option<&ValidatorSet> = None;
+
+                for h in self.all.iter() {
+                    if h.is_epoch() {
+                        untrusted_n_val = Some(UntrustedValidatorSet::new(h.get_validator_set()?));
+                    } else if h.number >= next_checkpoint {
+                        match n_val {
+                            None => {
+                                let untrusted_n_val = untrusted_n_val.ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
+                                n_val = Some(untrusted_n_val.try_borrow(c_val)?.into());
+                            },
+                            Some(v) => {
+                                let next_next_checkpoint =
+                                    (epoch + 2) * BLOCKS_PER_EPOCH + v.checkpoint();
+                                if h.number >= next_next_checkpoint {
+                                    return Err(Error::UnexpectedNextNextCheckpointHeader(
+                                        self.target.number,
+                                        h.number,
+                                    ));
+                                }
+                            }
+                        }
+
+                    }
+                }
+                Ok((Some(c_val.validators()), n_val.map(|v| v.validators)))
             }
         }
-        Ok(maybe_next_validators)
     }
 }
 

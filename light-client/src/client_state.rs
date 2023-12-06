@@ -121,10 +121,10 @@ impl ClientState {
         }
 
         // Ensure validator set is
-        header.verify_validator_set(cs)?;
+        let verifiable_header = header.verify_validator_set(cs)?;
 
         // Ensure header is valid
-        header.verify(&self.chain_id)
+        verifiable_header.verify(&self.chain_id)
     }
 }
 

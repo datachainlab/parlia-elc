@@ -3,11 +3,77 @@ use alloc::vec::Vec;
 
 use crate::misc::{ceil_div, keccak_256_vec, Hash, Validators};
 
+pub struct TrustedValidatorSet<'a> {
+    inner: &'a ValidatorSet
+}
+
+impl <'a> TrustedValidatorSet<'a> {
+
+    pub fn validators(&self) -> &Validators {
+        &self.inner.validators
+    }
+
+    pub fn new(inner: &'a ValidatorSet) -> Self<'a> {
+        Self {
+            inner,
+        }
+    }
+
+}
+
+impl <'a> TrustedValidatorSet<'a> {
+
+    pub fn validators(&self, others: &TrustedValidatorSet) -> &Validators {
+        //TODO
+        &self.validators.validators
+    }
+
+    pub fn new(inner: &'a ValidatorSet) -> Self<'a> {
+        Self {
+            inner,
+        }
+    }
+
+}
+
+pub struct UntrustedValidatorSet<'a> {
+    inner: &'a ValidatorSet
+}
+
+impl <'a> UntrustedValidatorSet<'a> {
+    pub fn try_borrow(&'a self, trusted_validators: &TrustedValidatorSet) -> Result<&'a Validators, Error> {
+        let (trusted, _, _) = self.trustable(trusted_validators.validators());
+        if trusted {
+            return Ok(&self.inner.validators)
+        }
+        return Err(Error::ValidatorNotTrusted(self.inner.hash))
+    }
+
+    fn check(&self, trusted_validators: &Validators) -> (bool, usize, usize) {
+        let mut trusted_validator_count = 0;
+        for x1 in &self.validators {
+            if trusted_validators.contains(x1) {
+                trusted_validator_count += 1;
+            }
+        }
+        let required = ceil_div(trusted_validators.len(), 3);
+        (
+            trusted_validator_count >= required,
+            trusted_validator_count,
+            required,
+        )
+    }
+}
+
+pub enum VerifiedValidatorSet<'a> {
+    Trusted(TrustedValidatorSet<'a>),
+    Untrusted(UntrustedValidatorSet<'a>)
+}
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ValidatorSet {
-    validators: Validators,
+    pub validators: Validators,
     pub hash: Hash,
-    pub trusted: bool,
 }
 
 impl ValidatorSet {
@@ -17,13 +83,6 @@ impl ValidatorSet {
     pub fn checkpoint(&self) -> u64 {
         let validator_size = self.validators.len() as u64;
         validator_size / 2 + 1
-    }
-
-    pub fn validators(&self) -> Result<&Validators, Error> {
-        if !self.trusted {
-            return Err(Error::ValidatorNotTrusted(self.hash));
-        }
-        Ok(&self.validators)
     }
 
     pub fn trust(&mut self, trusted_validators: &Validators) {
@@ -56,7 +115,6 @@ impl From<Vec<Vec<u8>>> for ValidatorSet {
         Self {
             validators: value as Validators,
             hash,
-            trusted: false,
         }
     }
 }
