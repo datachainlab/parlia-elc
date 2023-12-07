@@ -10,7 +10,7 @@ use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
 
 use crate::header::eth_headers::ETHHeaders;
-use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
+use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, CurrentValidatorSet};
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
@@ -71,7 +71,7 @@ impl Header {
         &self.headers.target.hash
     }
 
-    pub fn verify_validator_set(&self, consensus_state: &ConsensusState) -> Result<VerifiableHeader, Error> {
+    pub fn verify(&self, chain_id: &ChainId, consensus_state: &ConsensusState) -> Result<(), Error> {
         let (c_val, p_val) = verify_validator_set(
             consensus_state,
             self.headers.target.is_epoch(),
@@ -80,26 +80,10 @@ impl Header {
             &self.previous_validators,
             &self.current_validators,
         )?;
-        Ok(VerifiableHeader {
-            headers: &self.headers,
-            current_validators: c_val,
-            previous_validators: p_val,
-        })
-    }
-}
-
-pub struct VerifiableHeader<'a> {
-    headers: &'a ETHHeaders,
-    current_validators: VerifiedValidatorSet<'a>,
-    previous_validators: TrustedValidatorSet<'a>,
-}
-
-impl <'a> VerifiableHeader<'a> {
-    pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
-            &self.current_validators,
-            &self.previous_validators,
+            &c_val,
+            &p_val,
         )
     }
 }
@@ -111,7 +95,7 @@ fn verify_validator_set<'a>(
     trusted_height: Height,
     previous_validators: &'a ValidatorSet,
     current_validators: &'a ValidatorSet,
-) -> Result<(VerifiedValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
+) -> Result<(CurrentValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
     let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
     let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
 
@@ -134,7 +118,7 @@ fn verify_validator_set<'a>(
         }
 
         Ok((
-            VerifiedValidatorSet::Untrusted(UntrustedValidatorSet::new(current_validators)),
+            CurrentValidatorSet::Untrusted(UntrustedValidatorSet::new(current_validators)),
             TrustedValidatorSet::new(previous_validators)
         ))
     } else {
@@ -165,7 +149,7 @@ fn verify_validator_set<'a>(
             ));
         }
         Ok((
-            VerifiedValidatorSet::Trusted(TrustedValidatorSet::new(current_validators)),
+            CurrentValidatorSet::Trusted(TrustedValidatorSet::new(current_validators)),
             TrustedValidatorSet::new(previous_validators),
         ))
     }
@@ -254,7 +238,7 @@ pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297200, header_31297201};
-    use crate::header::validator_set::{ValidatorSet, VerifiedValidatorSet};
+    use crate::header::validator_set::{ValidatorSet, CurrentValidatorSet};
     use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
@@ -460,7 +444,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            VerifiedValidatorSet::Untrusted(r)  => {
+            CurrentValidatorSet::Untrusted(r)  => {
                 let validators = r.try_borrow(&p_val).unwrap();
                 assert_eq!(*validators, current_validators.validators);
             },
@@ -479,7 +463,7 @@ pub(crate) mod test {
             current_validators,
         ).unwrap();
         match c_val {
-            VerifiedValidatorSet::Untrusted(r)  => {
+            CurrentValidatorSet::Untrusted(r)  => {
                 assert!(r.try_borrow(&p_val).is_err());
             },
             _ => unreachable!("unexpected trusted")
@@ -499,7 +483,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            VerifiedValidatorSet::Trusted(r)  => {
+            CurrentValidatorSet::Trusted(r)  => {
                 assert_eq!(*r.validators(), current_validators.validators);
             },
             _ => unreachable!("unexpected untrusted")

@@ -120,11 +120,9 @@ impl ClientState {
             ));
         }
 
-        // Ensure validator set is
-        let verifiable_header = header.verify_validator_set(cs)?;
-
         // Ensure header is valid
-        verifiable_header.verify(&self.chain_id)
+        header.verify(&self.chain_id, cs)
+
     }
 }
 

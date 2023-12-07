@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
-use crate::header::validator_set::VerifiedValidatorSet::{Trusted, Untrusted};
+use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, CurrentValidatorSet};
+use crate::header::validator_set::CurrentValidatorSet::{Trusted, Untrusted};
 
 use crate::misc::{ChainId, Validators};
 
@@ -21,7 +21,7 @@ impl ETHHeaders {
     pub fn verify(
         &self,
         chain_id: &ChainId,
-        current_validators: &VerifiedValidatorSet,
+        current_validators: &CurrentValidatorSet,
         previous_validators: &TrustedValidatorSet,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
@@ -107,15 +107,15 @@ impl ETHHeaders {
         checkpoint: u64,
         next_checkpoint: u64,
         previous_validators: &TrustedValidatorSet,
-        current_validators: &'a VerifiedValidatorSet,
+        current_validators: &'a CurrentValidatorSet,
     ) -> Result<(Option<&'a Validators>, Option<Validators>), Error> {
         match current_validators {
-            Untrusted(untrusted) => {
-                // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
+            Untrusted(untrusted_c_val ) => {
+                // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
                 let mut c_val : Option<&'a Validators> = None;
                 for h in self.all.iter() {
                     if h.number >= checkpoint && c_val.is_none() {
-                       c_val = Some(untrusted.try_borrow(previous_validators)?);
+                       c_val = Some(untrusted_c_val.try_borrow(previous_validators)?);
                     }
                     if h.number >= next_checkpoint {
                         return Err(Error::UnexpectedNextCheckpointHeader(
@@ -127,7 +127,7 @@ impl ETHHeaders {
                 return Ok((c_val, None))
             },
             Trusted(c_val) => {
-                // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
+                // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
                 let mut n_val: Option<ValidatorSet> = None;
                 let mut next_next_checkpoint : Option<u64>= None;
 
@@ -205,12 +205,13 @@ fn verify_finalized(
 
 #[cfg(test)]
 mod test {
+    use std::prelude::rust_2015::Vec;
     use crate::errors::Error;
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::*;
-    use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
+    use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, CurrentValidatorSet};
     use crate::header::Header;
     use crate::misc::Validators;
     use hex_literal::hex;
@@ -236,7 +237,17 @@ mod test {
         let p_val = validators_in_31297000().into();
         let p_val = trust(&p_val);
         let c_val = empty();
-        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
+        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
+
+        // from epoch
+        let headers :ETHHeaders = vec![
+            header_31297200(),
+            header_31297201(),
+            header_31297202()
+        ].into();
+        let c_val = empty();
+        let c_val = CurrentValidatorSet::Untrusted(untrust(&c_val));
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
@@ -246,7 +257,7 @@ mod test {
         let p_val = validators_in_31297000().into();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
@@ -256,7 +267,7 @@ mod test {
         let p_val = empty();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
@@ -273,7 +284,7 @@ mod test {
         let p_val = validators.into();
         let p_val = trust(&p_val);
         let c_val = empty();
-        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        let c_val = CurrentValidatorSet::Untrusted(untrust(&c_val));
         let result = header.verify(mainnet, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
@@ -290,7 +301,7 @@ mod test {
             v[0] = i as u8;
         }
         let c_val = c_val.into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         let p_val = validators_in_31297000().into();
         let p_val = trust(&p_val);
 
@@ -315,7 +326,7 @@ mod test {
         let p_val = empty();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(e1, e2, _, _, _, _) => {
@@ -333,7 +344,7 @@ mod test {
         let p_val = empty();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
@@ -351,7 +362,7 @@ mod test {
         let p_val = empty();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
@@ -403,7 +414,7 @@ mod test {
             header_31297210(),
         ];
         let c_val = v.first().unwrap().get_validator_set().unwrap();
-        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        let c_val = CurrentValidatorSet::Untrusted(untrust(&c_val));
         let mut headers = ETHHeaders {
             target: v[0].clone(),
             all: v,
@@ -424,7 +435,7 @@ mod test {
     #[test]
     fn test_error_next_checkpoint_header_found_target_epoch() {
         let f = |mut headers: ETHHeaders,
-                 c_val: &VerifiedValidatorSet,
+                 c_val: &CurrentValidatorSet,
                  p_val: &TrustedValidatorSet,
                  include_limit: bool| {
             let epoch = headers.target.number / BLOCKS_PER_EPOCH;
@@ -467,7 +478,7 @@ mod test {
         let p_val = validators_in_31297000().into();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        let c_val = CurrentValidatorSet::Untrusted(untrust(&c_val));
         f(headers.clone(), &c_val, &p_val, true);
         f(headers.clone(), &c_val, &p_val, false);
     }
@@ -475,7 +486,7 @@ mod test {
     #[test]
     fn test_error_next_next_checkpoint_header_found() {
         let f = |mut headers: ETHHeaders,
-                 c_val: &VerifiedValidatorSet,
+                 c_val: &CurrentValidatorSet,
                  p_val: &TrustedValidatorSet,
                  n_val_header: ETHHeader,
                  include_limit: bool| {
@@ -514,7 +525,7 @@ mod test {
         };
         let headers = create_after_checkpoint_headers();
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         let p_val = empty();
         let p_val = trust(&p_val);
         let n_val_header = header_31297200();
@@ -531,7 +542,7 @@ mod test {
         let p_val = validators_in_31297000().into();
         let p_val = trust(&p_val);
         let c_val = header_31297200().get_validator_bytes().unwrap().into();
-        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let c_val = CurrentValidatorSet::Trusted(trust(&c_val));
         f(
             headers.clone(),
             &c_val,
@@ -559,34 +570,35 @@ mod test {
     }
 
     fn create_before_checkpoint_headers() -> ETHHeaders {
-        let v = vec![header_31297208(), header_31297209(), header_31297210()];
-        ETHHeaders {
-            target: v[0].clone(),
-            all: v,
-        }
+        vec![
+            header_31297208(),
+            header_31297209(),
+            header_31297210()
+        ].into()
     }
 
     fn create_across_checkpoint_headers() -> ETHHeaders {
-        let v = vec![
+        vec![
             header_31297210(),
             header_31297211(), // checkpoint
             header_31297212(),
-        ];
-        ETHHeaders {
-            target: v[0].clone(),
-            all: v,
-        }
+        ].into()
     }
 
     fn create_after_checkpoint_headers() -> ETHHeaders {
-        let v = vec![
+        vec![
             header_31297211(), // checkpoint
             header_31297212(),
             header_31297213(),
-        ];
-        ETHHeaders {
-            target: v[0].clone(),
-            all: v,
+        ].into()
+    }
+
+    impl From<Vec<ETHHeader>> for ETHHeaders {
+        fn from(value: Vec<ETHHeader>) -> Self {
+            Self {
+                target: value[0].clone(),
+                all: value,
+            }
         }
     }
 }
