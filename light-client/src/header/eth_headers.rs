@@ -26,9 +26,10 @@ impl ETHHeaders {
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
+        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_validators.checkpoint();
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_validators.checkpoint();
         let (c_val, n_val) =
-            self.verify_header_size(epoch, next_checkpoint, previous_validators, current_validators)?;
+            self.verify_header_size(epoch, checkpoint, next_checkpoint, previous_validators, current_validators)?;
 
         // Ensure all the headers are successfully chained.
         for (i, header) in self.all.iter().enumerate() {
@@ -39,17 +40,14 @@ impl ETHHeaders {
         }
 
         // Ensure valid seals
-        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_validators.checkpoint();
-        let previous_validators = previous_validators.validators();
+        let p_val = previous_validators.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
-                let next_validators =
-                    get_next_validators(h.number, maybe_next_validators.as_ref())?;
-                h.verify_seal(next_validators, chain_id)?;
+                h.verify_seal(n_val.as_ref().ok_or(Error::MissingNextValidatorSet(h.number))?, chain_id)?;
             } else if h.number >= checkpoint {
-                h.verify_seal(current_validators.validators()?, chain_id)?;
+                h.verify_seal(c_val.ok_or(Error::MissingCurrentValidatorSet(h.number))?, chain_id)?;
             } else {
-                h.verify_seal(previous_validators, chain_id)?;
+                h.verify_seal(p_val, chain_id)?;
             }
         }
 
@@ -61,13 +59,11 @@ impl ETHHeaders {
         for h in vec![child, grand_child] {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
-                let next_validators =
-                    get_next_validators(h.number, maybe_next_validators.as_ref())?;
-                vote.verify(h.number, next_validators)?;
+                vote.verify(h.number, n_val.as_ref().ok_or(Error::MissingNextValidatorSet(h.number))?)?;
             } else if h.number > checkpoint {
-                vote.verify(h.number, current_validators.validators()?)?;
+                vote.verify(h.number, c_val.ok_or(Error::MissingCurrentValidatorSet(h.number))?)?;
             } else {
-                vote.verify(h.number, previous_validators)?;
+                vote.verify(h.number, p_val)?;
             }
         }
         Ok(())
@@ -108,11 +104,11 @@ impl ETHHeaders {
     fn verify_header_size<'a>(
         &self,
         epoch: u64,
+        checkpoint: u64,
         next_checkpoint: u64,
         previous_validators: &TrustedValidatorSet,
         current_validators: &'a VerifiedValidatorSet,
     ) -> Result<(Option<&'a Validators>, Option<Validators>), Error> {
-
         match current_validators {
             Untrusted(untrusted) => {
                 // t=200 then  200 <= h < 411 (c_val(200) can be trusted by p_val)
@@ -132,22 +128,21 @@ impl ETHHeaders {
             },
             Trusted(c_val) => {
                 // t=201 then  201 <= h < 611 (n_val(400) can be trusted by c_val(200))
-                let mut untrusted_n_val: Option<UntrustedValidatorSet> = None;
-                let mut n_val: Option<&ValidatorSet> = None;
+                let mut n_val: Option<ValidatorSet> = None;
+                let mut next_next_checkpoint : Option<u64>= None;
 
                 for h in self.all.iter() {
                     if h.is_epoch() {
-                        untrusted_n_val = Some(UntrustedValidatorSet::new(h.get_validator_set()?));
+                        n_val = Some(h.get_validator_set()?);
                     } else if h.number >= next_checkpoint {
-                        match n_val {
+                        match next_next_checkpoint {
                             None => {
-                                let untrusted_n_val = untrusted_n_val.ok_or_else(|| Error::MissingNextValidatorSet(h.number))?;
-                                n_val = Some(untrusted_n_val.try_borrow(c_val)?.into());
+                                let untrusted_n_val = n_val.as_ref().ok_or_else(|| Error::MissingValidatorInEpochBlock(h.number))?;
+                                next_next_checkpoint = Some((epoch + 2) * BLOCKS_PER_EPOCH + untrusted_n_val.checkpoint());
+                                UntrustedValidatorSet::new(untrusted_n_val).try_borrow(c_val)?;
                             },
                             Some(v) => {
-                                let next_next_checkpoint =
-                                    (epoch + 2) * BLOCKS_PER_EPOCH + v.checkpoint();
-                                if h.number >= next_next_checkpoint {
+                                if h.number >= v {
                                     return Err(Error::UnexpectedNextNextCheckpointHeader(
                                         self.target.number,
                                         h.number,
@@ -208,11 +203,6 @@ fn verify_finalized(
     Ok(())
 }
 
-fn get_next_validators(number: u64, v: Option<&ValidatorSet>) -> Result<&Validators, Error> {
-    v.ok_or_else(|| Error::MissingNextValidatorSet(number))?
-        .validators()
-}
-
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
@@ -220,16 +210,19 @@ mod test {
     use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::*;
-    use crate::header::validator_set::ValidatorSet;
+    use crate::header::validator_set::{TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet, VerifiedValidatorSet};
     use crate::header::Header;
     use crate::misc::Validators;
     use hex_literal::hex;
     use light_client::types::Any;
     use std::vec;
 
-    fn trust(mut v: ValidatorSet) -> ValidatorSet {
-        v.trusted = true;
-        v
+    fn trust(v: &ValidatorSet) -> TrustedValidatorSet {
+        TrustedValidatorSet::new(&v)
+    }
+
+    fn untrust(v: &ValidatorSet) -> UntrustedValidatorSet {
+        UntrustedValidatorSet::new(&v)
     }
 
     fn empty() -> ValidatorSet {
@@ -240,23 +233,31 @@ mod test {
     #[test]
     fn test_success_verify_before_checkpoint() {
         let headers = create_before_checkpoint_headers();
-        let p_val = trust(validators_in_31297000().into());
-        headers.verify(&mainnet(), &empty(), &p_val).unwrap();
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
+        let c_val = empty();
+        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
     #[test]
     fn test_success_verify_across_checkpoint() {
         let headers = create_across_checkpoint_headers();
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let p_val = trust(validators_in_31297000().into());
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
     #[test]
     fn test_success_verify_after_checkpoint() {
         let headers = create_after_checkpoint_headers();
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        headers.verify(&mainnet(), &c_val, &trust(empty())).unwrap();
+        let p_val = empty();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
 
     #[test]
@@ -269,8 +270,11 @@ mod test {
         for v in validators.iter_mut() {
             v.remove(0);
         }
-        let previous_validator_set = trust(validators.into());
-        let result = header.verify(mainnet, &empty(), &previous_validator_set);
+        let p_val = validators.into();
+        let p_val = trust(&p_val);
+        let c_val = empty();
+        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        let result = header.verify(mainnet, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 assert_eq!(number, header.target.number)
@@ -281,18 +285,20 @@ mod test {
 
     #[test]
     fn test_error_verify_across_checkpoint() {
-        let mut new_validators: Validators = header_31297200().get_validator_bytes().unwrap();
-        for (i, v) in new_validators.iter_mut().enumerate() {
+        let mut c_val: Validators = header_31297200().get_validator_bytes().unwrap();
+        for (i, v) in c_val.iter_mut().enumerate() {
             v[0] = i as u8;
         }
-        let new_validator_set = trust(new_validators.into());
-        let previous_validator_set = trust(validators_in_31297000().into());
+        let c_val = c_val.into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
 
         let mainnet = &mainnet();
 
         // last block uses new empty validator set
         let header = create_across_checkpoint_headers();
-        let result = header.verify(mainnet, &new_validator_set, &previous_validator_set);
+        let result = header.verify(mainnet, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 //25428811 uses next validator
@@ -306,8 +312,11 @@ mod test {
     fn test_error_verify_non_continuous_header() {
         let mut headers = create_after_checkpoint_headers();
         headers.all[1] = headers.all[0].clone();
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
+        let p_val = empty();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(e1, e2, _, _, _, _) => {
                 assert_eq!(e1, headers.target.number);
@@ -321,8 +330,11 @@ mod test {
     fn test_error_verify_too_many_headers_to_finalize() {
         let mut headers = create_after_checkpoint_headers();
         headers.all.push(header_31297214());
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
+        let p_val = empty();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -336,8 +348,11 @@ mod test {
     fn test_error_verify_invalid_header_size() {
         let mut headers = create_after_checkpoint_headers();
         headers.all.pop();
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let result = headers.verify(&mainnet(), &c_val, &trust(empty()));
+        let p_val = empty();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -387,29 +402,20 @@ mod test {
             header_31297209(),
             header_31297210(),
         ];
+        let c_val = v.first().unwrap().get_validator_set().unwrap();
+        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
         let mut headers = ETHHeaders {
             target: v[0].clone(),
             all: v,
         };
 
-        // success ( untrusted validator not used )
-        let p_val = trust(validators_in_31297000().into());
-        let untrusted_c_val = validators_in_31297000().into();
-        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
+        let result = headers.verify(&mainnet(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
                 assert_eq!(e2, headers.all.len(), "header size");
-            }
-            e => unreachable!("{:?}", e),
-        }
-
-        // error
-        headers.all.push(header_31297211());
-        let result = headers.verify(&mainnet(), &untrusted_c_val, &p_val);
-        match result.unwrap_err() {
-            Error::ValidatorNotTrusted(e1) => {
-                assert_eq!(e1, untrusted_c_val.hash);
             }
             e => unreachable!("{:?}", e),
         }
@@ -418,8 +424,8 @@ mod test {
     #[test]
     fn test_error_next_checkpoint_header_found_target_epoch() {
         let f = |mut headers: ETHHeaders,
-                 c_val: ValidatorSet,
-                 p_val: ValidatorSet,
+                 c_val: &VerifiedValidatorSet,
+                 p_val: &TrustedValidatorSet,
                  include_limit: bool| {
             let epoch = headers.target.number / BLOCKS_PER_EPOCH;
             let next_epoch_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + c_val.checkpoint();
@@ -433,7 +439,7 @@ mod test {
                 next.number = last.number + 1;
                 headers.all.push(next);
             }
-            let result = headers.verify(&mainnet(), &c_val, &p_val).unwrap_err();
+            let result = headers.verify(&mainnet(), c_val, p_val).unwrap_err();
             if include_limit {
                 match result {
                     Error::UnexpectedNextCheckpointHeader(e1, e2) => {
@@ -451,26 +457,26 @@ mod test {
         };
         let v = vec![
             header_31297200(),
-            header_31297201(), // checkpoint
+            header_31297201(),
             header_31297202(),
         ];
         let headers = ETHHeaders {
             target: v[0].clone(),
             all: v,
         };
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let p_val = trust(validators_in_31297000().into());
-        f(headers.clone(), c_val, p_val.clone(), true);
-
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        f(headers, c_val, p_val, false);
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Untrusted(untrust(&c_val));
+        f(headers.clone(), &c_val, &p_val, true);
+        f(headers.clone(), &c_val, &p_val, false);
     }
 
     #[test]
     fn test_error_next_next_checkpoint_header_found() {
         let f = |mut headers: ETHHeaders,
-                 c_val: ValidatorSet,
-                 p_val: ValidatorSet,
+                 c_val: &VerifiedValidatorSet,
+                 p_val: &TrustedValidatorSet,
                  n_val_header: ETHHeader,
                  include_limit: bool| {
             let n_val: ValidatorSet = n_val_header.get_validator_bytes().unwrap().into();
@@ -490,7 +496,7 @@ mod test {
                 }
                 headers.all.push(next);
             }
-            let result = headers.verify(&mainnet(), &c_val, &p_val).unwrap_err();
+            let result = headers.verify(&mainnet(), c_val, p_val).unwrap_err();
             if include_limit {
                 match result {
                     Error::UnexpectedNextNextCheckpointHeader(e1, e2) => {
@@ -507,34 +513,36 @@ mod test {
             }
         };
         let headers = create_after_checkpoint_headers();
-        let c_val = trust(header_31297200().get_validator_bytes().unwrap().into());
-        let p_val = trust(empty());
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
+        let p_val = empty();
+        let p_val = trust(&p_val);
         let n_val_header = header_31297200();
         f(
             headers.clone(),
-            c_val.clone(),
-            p_val.clone(),
+            &c_val,
+            &p_val,
             n_val_header.clone(),
             true,
         );
-        f(headers, c_val, p_val, n_val_header.clone(), false);
+        f(headers, &c_val, &p_val, n_val_header.clone(), false);
 
         let headers = create_before_checkpoint_headers();
-        let p_val = ValidatorSet::from(validators_in_31297000());
-        let c_val = trust(ValidatorSet::from(
-            header_31297200().get_validator_bytes().unwrap(),
-        ));
+        let p_val = validators_in_31297000().into();
+        let p_val = trust(&p_val);
+        let c_val = header_31297200().get_validator_bytes().unwrap().into();
+        let c_val = VerifiedValidatorSet::Trusted(trust(&c_val));
         f(
             headers.clone(),
-            c_val.clone(),
-            p_val.clone(),
+            &c_val,
+            &p_val,
             n_val_header.clone(),
             true,
         );
         f(
             headers,
-            c_val.clone(),
-            p_val.clone(),
+            &c_val,
+            &p_val,
             header_31297200(),
             false,
         );
@@ -542,12 +550,12 @@ mod test {
         let headers = create_across_checkpoint_headers();
         f(
             headers.clone(),
-            c_val.clone(),
-            p_val.clone(),
+            &c_val,
+            &p_val,
             n_val_header.clone(),
             true,
         );
-        f(headers, c_val, p_val, n_val_header, false);
+        f(headers, &c_val, &p_val, n_val_header, false);
     }
 
     fn create_before_checkpoint_headers() -> ETHHeaders {

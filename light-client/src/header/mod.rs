@@ -88,14 +88,13 @@ impl Header {
     }
 }
 
-struct VerifiableHeader<'a> {
+pub struct VerifiableHeader<'a> {
     headers: &'a ETHHeaders,
     current_validators: VerifiedValidatorSet<'a>,
     previous_validators: TrustedValidatorSet<'a>,
 }
 
 impl <'a> VerifiableHeader<'a> {
-
     pub fn verify(&self, chain_id: &ChainId) -> Result<(), Error> {
         self.headers.verify(
             chain_id,
@@ -103,9 +102,7 @@ impl <'a> VerifiableHeader<'a> {
             &self.previous_validators,
         )
     }
-
 }
-
 
 fn verify_validator_set<'a>(
     consensus_state: &ConsensusState,
@@ -257,7 +254,7 @@ pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297200, header_31297201};
-    use crate::header::validator_set::ValidatorSet;
+    use crate::header::validator_set::{ValidatorSet, VerifiedValidatorSet};
     use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
@@ -371,9 +368,7 @@ pub(crate) mod test {
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
         };
-        let mut result = Header::try_from(raw.clone()).unwrap();
-        result.previous_validators.trusted = true;
-        result.current_validators.trusted = true;
+        let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
         assert_eq!(
             result.trusted_height.revision_height(),
@@ -384,11 +379,11 @@ pub(crate) mod test {
             trusted_height.revision_number
         );
         assert_eq!(
-            result.previous_validators.validators().unwrap(),
+            &result.previous_validators.validators,
             &raw.previous_validators
         );
         assert_eq!(
-            result.current_validators.validators().unwrap(),
+            &result.current_validators.validators,
             &h.get_validator_bytes().unwrap()
         );
     }
@@ -408,8 +403,6 @@ pub(crate) mod test {
             previous_validators: vec![h.coinbase.clone()],
         };
         let mut result = Header::try_from(raw.clone()).unwrap();
-        result.previous_validators.trusted = true;
-        result.current_validators.trusted = true;
         assert_eq!(result.headers.target, *h);
         assert_eq!(
             result.trusted_height.revision_height(),
@@ -420,11 +413,11 @@ pub(crate) mod test {
             trusted_height.revision_number
         );
         assert_eq!(
-            result.previous_validators.validators().unwrap(),
+            &result.previous_validators.validators,
             &raw.previous_validators
         );
         assert_eq!(
-            result.current_validators.validators().unwrap(),
+            &result.current_validators.validators,
             &raw.current_validators
         );
     }
@@ -457,7 +450,7 @@ pub(crate) mod test {
         // Same validator set as previous
         let current_validators = &mut to_validator_set([3u8; 32]);
         let previous_validators = &mut to_validator_set(cs.current_validators_hash);
-        verify_validator_set(
+        let (c_val, p_val) = verify_validator_set(
             &cs,
             true,
             height,
@@ -466,27 +459,37 @@ pub(crate) mod test {
             current_validators,
         )
         .unwrap();
-        assert!(current_validators.trusted);
+        match c_val {
+            VerifiedValidatorSet::Untrusted(r)  => {
+                let validators = r.try_borrow(&p_val).unwrap();
+                assert_eq!(*validators, current_validators.validators);
+            },
+            _ => unreachable!("unexpected trusted")
+        }
 
         let current_validators = &mut to_validator_set([3u8; 32]);
         let previous_validators =
             &mut to_validator_set_with_validators(cs.current_validators_hash, vec![vec![2]]);
-        verify_validator_set(
+        let (c_val, p_val) = verify_validator_set(
             &cs,
             true,
             height,
             trusted_height,
             previous_validators,
             current_validators,
-        )
-        .unwrap();
-        assert!(!current_validators.trusted);
+        ).unwrap();
+        match c_val {
+            VerifiedValidatorSet::Untrusted(r)  => {
+                assert!(r.try_borrow(&p_val).is_err());
+            },
+            _ => unreachable!("unexpected trusted")
+        }
 
         let height = new_height(0, 599);
         let trusted_height = new_height(0, 400);
         let current_validators = &mut to_validator_set(cs.current_validators_hash);
         let previous_validators = &mut to_validator_set(cs.previous_validators_hash);
-        verify_validator_set(
+        let (c_val, p_val) = verify_validator_set(
             &cs,
             false,
             height,
@@ -495,6 +498,12 @@ pub(crate) mod test {
             current_validators,
         )
         .unwrap();
+        match c_val {
+            VerifiedValidatorSet::Trusted(r)  => {
+                assert_eq!(*r.validators(), current_validators.validators);
+            },
+            _ => unreachable!("unexpected untrusted")
+        }
     }
 
     #[test]
