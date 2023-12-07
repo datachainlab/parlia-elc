@@ -122,7 +122,6 @@ impl ClientState {
 
         // Ensure header is valid
         header.verify(&self.chain_id, cs)
-
     }
 }
 

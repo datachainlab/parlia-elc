@@ -283,8 +283,12 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
-            Error::InsufficientTrustedValidatorsInUntrustedValidators(e1, e2,e3) => {
-                write!(f, "InsufficientTrustedValidatorsInUntrustedValidators : {:?} {} {}", e1, e2, e3)
+            Error::InsufficientTrustedValidatorsInUntrustedValidators(e1, e2, e3) => {
+                write!(
+                    f,
+                    "InsufficientTrustedValidatorsInUntrustedValidators : {:?} {} {}",
+                    e1, e2, e3
+                )
             }
             Error::MissingNextValidatorSet(e1) => {
                 write!(f, "MissingNextValidatorSet : {}", e1)
@@ -304,7 +308,6 @@ impl core::fmt::Display for Error {
             Error::UnexpectedNextNextCheckpointHeader(e1, e2) => {
                 write!(f, "UnexpectedNextNextCheckpointHeader : {} {}", e1, e2)
             }
-
         }
     }
 }

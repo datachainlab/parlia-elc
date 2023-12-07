@@ -5,11 +5,10 @@ use crate::misc::{ceil_div, keccak_256_vec, Hash, Validators};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrustedValidatorSet<'a> {
-    inner: &'a ValidatorSet
+    inner: &'a ValidatorSet,
 }
 
-impl <'a> TrustedValidatorSet<'a> {
-
+impl<'a> TrustedValidatorSet<'a> {
     pub fn validators(&self) -> &Validators {
         &self.inner.validators
     }
@@ -19,33 +18,35 @@ impl <'a> TrustedValidatorSet<'a> {
     }
 
     pub fn new(inner: &'a ValidatorSet) -> Self {
-        Self {
-            inner,
-        }
+        Self { inner }
     }
-
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UntrustedValidatorSet<'a> {
-    inner: &'a ValidatorSet
+    inner: &'a ValidatorSet,
 }
 
-impl <'a> UntrustedValidatorSet<'a> {
+impl<'a> UntrustedValidatorSet<'a> {
     pub fn new(inner: &'a ValidatorSet) -> Self {
-        Self {
-            inner,
-        }
+        Self { inner }
     }
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
     }
-    pub fn try_borrow(&'a self, trusted_validators: &TrustedValidatorSet) -> Result<&'a Validators, Error> {
-        let (result, found , required) = self.contains(trusted_validators);
+    pub fn try_borrow(
+        &'a self,
+        trusted_validators: &TrustedValidatorSet,
+    ) -> Result<&'a Validators, Error> {
+        let (result, found, required) = self.contains(trusted_validators);
         if result {
-            return Ok(&self.inner.validators)
+            return Ok(&self.inner.validators);
         }
-        return Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(self.inner.hash,found, required))
+        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
+            self.inner.hash,
+            found,
+            required,
+        ))
     }
 
     fn contains(&self, trusted_validators: &TrustedValidatorSet) -> (bool, usize, usize) {
@@ -68,14 +69,14 @@ impl <'a> UntrustedValidatorSet<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum CurrentValidatorSet<'a> {
     Trusted(TrustedValidatorSet<'a>),
-    Untrusted(UntrustedValidatorSet<'a>)
+    Untrusted(UntrustedValidatorSet<'a>),
 }
 
-impl <'a> CurrentValidatorSet<'a> {
+impl<'a> CurrentValidatorSet<'a> {
     pub fn checkpoint(&self) -> u64 {
         match self {
             CurrentValidatorSet::Trusted(v) => v.checkpoint(),
-            CurrentValidatorSet::Untrusted(v) => v.checkpoint()
+            CurrentValidatorSet::Untrusted(v) => v.checkpoint(),
         }
     }
 }
@@ -114,7 +115,7 @@ mod test {
     #[test]
     pub fn test_untrusted_validator_set_try_borrow() {
         let mut _assert_trusted = |x, y, c_val_borrowable| {
-            let trusted_validators : ValidatorSet = vec![
+            let trusted_validators: ValidatorSet = vec![
                 vec![1],
                 vec![2],
                 vec![3],
@@ -122,7 +123,8 @@ mod test {
                 vec![5],
                 vec![6],
                 vec![7],
-            ].into();
+            ]
+            .into();
             let trusted_validators = TrustedValidatorSet::new(&trusted_validators);
             let untrusted_validators = ValidatorSet {
                 validators: x,
@@ -137,17 +139,17 @@ mod test {
                 Ok(borrowed) => {
                     if c_val_borrowable {
                         assert_eq!(*borrowed, untrusted_validators.inner.validators);
-                    }else {
+                    } else {
                         unreachable!("unexpected borrowed")
                     }
-                },
+                }
                 Err(e) => {
                     if c_val_borrowable {
                         unreachable!("unexpected error {:?}", e);
-                    }else {
+                    } else {
                         match e {
-                            Error::InsufficientTrustedValidatorsInUntrustedValidators(_,_,_) => {}
-                            e => unreachable!("unexpected error type {:?}", e)
+                            Error::InsufficientTrustedValidatorsInUntrustedValidators(_, _, _) => {}
+                            e => unreachable!("unexpected error type {:?}", e),
                         }
                     }
                 }
