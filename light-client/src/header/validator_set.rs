@@ -67,16 +67,16 @@ impl<'a> UntrustedValidatorSet<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum CurrentValidatorSet<'a> {
+pub enum EitherValidatorSet<'a> {
     Trusted(TrustedValidatorSet<'a>),
     Untrusted(UntrustedValidatorSet<'a>),
 }
 
-impl<'a> CurrentValidatorSet<'a> {
+impl<'a> EitherValidatorSet<'a> {
     pub fn checkpoint(&self) -> u64 {
         match self {
-            CurrentValidatorSet::Trusted(v) => v.checkpoint(),
-            CurrentValidatorSet::Untrusted(v) => v.checkpoint(),
+            EitherValidatorSet::Trusted(v) => v.checkpoint(),
+            EitherValidatorSet::Untrusted(v) => v.checkpoint(),
         }
     }
 }

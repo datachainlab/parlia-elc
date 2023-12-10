@@ -11,7 +11,7 @@ use crate::consensus_state::ConsensusState;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::{
-    CurrentValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
+    EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
 };
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
@@ -97,7 +97,7 @@ fn verify_validator_set<'a>(
     trusted_height: Height,
     previous_validators: &'a ValidatorSet,
     current_validators: &'a ValidatorSet,
-) -> Result<(CurrentValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
+) -> Result<(EitherValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
     let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
     let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
 
@@ -119,7 +119,7 @@ fn verify_validator_set<'a>(
         }
 
         Ok((
-            CurrentValidatorSet::Untrusted(UntrustedValidatorSet::new(current_validators)),
+            EitherValidatorSet::Untrusted(UntrustedValidatorSet::new(current_validators)),
             TrustedValidatorSet::new(previous_validators),
         ))
     } else {
@@ -148,7 +148,7 @@ fn verify_validator_set<'a>(
             ));
         }
         Ok((
-            CurrentValidatorSet::Trusted(TrustedValidatorSet::new(current_validators)),
+            EitherValidatorSet::Trusted(TrustedValidatorSet::new(current_validators)),
             TrustedValidatorSet::new(previous_validators),
         ))
     }
@@ -237,7 +237,7 @@ pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297200, header_31297201};
-    use crate::header::validator_set::{CurrentValidatorSet, ValidatorSet};
+    use crate::header::validator_set::{EitherValidatorSet, ValidatorSet};
     use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
@@ -443,7 +443,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            CurrentValidatorSet::Untrusted(r) => {
+            EitherValidatorSet::Untrusted(r) => {
                 let validators = r.try_borrow(&p_val).unwrap();
                 assert_eq!(*validators, current_validators.validators);
             }
@@ -463,7 +463,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            CurrentValidatorSet::Untrusted(r) => {
+            EitherValidatorSet::Untrusted(r) => {
                 assert!(r.try_borrow(&p_val).is_err());
             }
             _ => unreachable!("unexpected trusted"),
@@ -483,7 +483,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            CurrentValidatorSet::Trusted(r) => {
+            EitherValidatorSet::Trusted(r) => {
                 assert_eq!(*r.validators(), current_validators.validators);
             }
             _ => unreachable!("unexpected untrusted"),
