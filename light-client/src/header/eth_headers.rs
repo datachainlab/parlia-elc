@@ -8,7 +8,7 @@ use crate::header::validator_set::{
     CurrentValidatorSet, TrustedValidatorSet, UntrustedValidatorSet,
 };
 
-use crate::misc::{ChainId, Validators};
+use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -50,17 +50,9 @@ impl ETHHeaders {
         let p_val = previous_validators.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
-                h.verify_seal(
-                    n_val
-                        .as_ref()
-                        .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?,
-                    chain_id,
-                )?;
+                h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
             } else if h.number >= checkpoint {
-                h.verify_seal(
-                    c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(h.number))?,
-                    chain_id,
-                )?;
+                h.verify_seal(unwrap_c_val(h.number, &c_val)?, chain_id)?;
             } else {
                 h.verify_seal(p_val, chain_id)?;
             }
@@ -74,17 +66,9 @@ impl ETHHeaders {
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
-                vote.verify(
-                    h.number,
-                    n_val
-                        .as_ref()
-                        .ok_or_else(|| Error::MissingNextValidatorSet(h.number))?,
-                )?;
+                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?)?;
             } else if h.number > checkpoint {
-                vote.verify(
-                    h.number,
-                    c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(h.number))?,
-                )?;
+                vote.verify(h.number, unwrap_c_val(h.number, &c_val)?)?;
             } else {
                 vote.verify(h.number, p_val)?;
             }
@@ -159,13 +143,14 @@ impl ETHHeaders {
                     None => return Ok((Some(c_val.validators()), None)),
                 };
 
+                // Finish if no headers over next checkpoint were found
                 let hs: Vec<&&ETHHeader> =
                     hs.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if hs.is_empty() {
                     return Ok((Some(c_val.validators()), None));
                 }
 
-                // Ensure n_val(400) can be borrowed by c_val(200
+                // Ensure n_val(400) can be borrowed by c_val(200)
                 let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + n_val.checkpoint();
                 UntrustedValidatorSet::new(&n_val).try_borrow(c_val)?;
 
@@ -224,6 +209,19 @@ fn verify_finalized(
         ));
     }
     Ok(())
+}
+
+fn unwrap_n_val(n: BlockNumber, n_val: &Option<Validators>) -> Result<&Validators, Error> {
+    n_val
+        .as_ref()
+        .ok_or_else(|| Error::MissingNextValidatorSet(n))
+}
+
+fn unwrap_c_val<'a>(
+    n: BlockNumber,
+    c_val: &'a Option<&'a Validators>,
+) -> Result<&'a Validators, Error> {
+    c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(n))
 }
 
 #[cfg(test)]
