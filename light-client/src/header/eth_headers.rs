@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::CurrentValidatorSet::{Trusted, Untrusted};
 use crate::header::validator_set::{
-    CurrentValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
+    CurrentValidatorSet, TrustedValidatorSet, UntrustedValidatorSet,
 };
 
 use crate::misc::{ChainId, Validators};
@@ -132,54 +132,51 @@ impl ETHHeaders {
         previous_validators: &TrustedValidatorSet,
         current_validators: &'a CurrentValidatorSet,
     ) -> Result<(Option<&'a Validators>, Option<Validators>), Error> {
+        let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
         match current_validators {
+            // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
             Untrusted(untrusted_c_val) => {
-                // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
-                let mut c_val: Option<&'a Validators> = None;
-                for h in self.all.iter() {
-                    if h.number >= checkpoint && c_val.is_none() {
-                        c_val = Some(untrusted_c_val.try_borrow(previous_validators)?);
-                    }
-                    if h.number >= next_checkpoint {
-                        return Err(Error::UnexpectedNextCheckpointHeader(
-                            self.target.number,
-                            h.number,
-                        ));
-                    }
+                // Ensure headers are before the next_checkpoint
+                if hs.iter().any(|h| h.number >= next_checkpoint) {
+                    return Err(Error::UnexpectedNextCheckpointHeader(
+                        self.target.number,
+                        next_checkpoint,
+                    ));
                 }
-                Ok((c_val, None))
-            }
-            Trusted(c_val) => {
-                // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
-                let mut n_val: Option<ValidatorSet> = None;
-                let mut next_next_checkpoint: Option<u64> = None;
 
-                for h in self.all.iter() {
-                    if h.is_epoch() {
-                        n_val = Some(h.get_validator_set()?);
-                    } else if h.number >= next_checkpoint {
-                        match next_next_checkpoint {
-                            None => {
-                                let untrusted_n_val = n_val
-                                    .as_ref()
-                                    .ok_or_else(|| Error::MissingValidatorInEpochBlock(h.number))?;
-                                next_next_checkpoint = Some(
-                                    (epoch + 2) * BLOCKS_PER_EPOCH + untrusted_n_val.checkpoint(),
-                                );
-                                UntrustedValidatorSet::new(untrusted_n_val).try_borrow(c_val)?;
-                            }
-                            Some(v) => {
-                                if h.number >= v {
-                                    return Err(Error::UnexpectedNextNextCheckpointHeader(
-                                        self.target.number,
-                                        h.number,
-                                    ));
-                                }
-                            }
-                        }
-                    }
+                // Ensure c_val is validated by trusted p_val when the checkpoint header is found
+                if hs.is_empty() {
+                    Ok((None, None))
+                } else {
+                    Ok((Some(untrusted_c_val.try_borrow(previous_validators)?), None))
                 }
-                Ok((Some(c_val.validators()), n_val.map(|v| v.validators)))
+            }
+            // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
+            Trusted(c_val) => {
+                // Get n_val if epoch after checkpoint ex) 400
+                let n_val = match hs.iter().find(|h| h.is_epoch()) {
+                    Some(h) => h.get_validator_set()?,
+                    None => return Ok((Some(c_val.validators()), None)),
+                };
+
+                let hs: Vec<&&ETHHeader> =
+                    hs.iter().filter(|h| h.number >= next_checkpoint).collect();
+                if hs.is_empty() {
+                    return Ok((Some(c_val.validators()), None));
+                }
+
+                // Ensure n_val(400) can be borrowed by c_val(200
+                let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + n_val.checkpoint();
+                UntrustedValidatorSet::new(&n_val).try_borrow(c_val)?;
+
+                // Ensure headers are before the next_next_checkpoint
+                if hs.iter().any(|h| h.number >= next_next_checkpoint) {
+                    return Err(Error::UnexpectedNextNextCheckpointHeader(
+                        self.target.number,
+                        next_next_checkpoint,
+                    ));
+                }
+                Ok((Some(c_val.validators()), Some(n_val.validators)))
             }
         }
     }
