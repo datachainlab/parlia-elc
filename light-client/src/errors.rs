@@ -70,10 +70,11 @@ pub enum Error {
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
+    MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
-    ValidatorNotTrusted(Hash),
+    InsufficientTrustedValidatorsInUntrustedValidators(Hash, usize, usize),
     MissingValidatorToVerifySeal(BlockNumber),
     MissingValidatorToVerifyVote(BlockNumber),
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
@@ -282,11 +283,18 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
-            Error::ValidatorNotTrusted(e1) => {
-                write!(f, "ValidatorNotTrusted : {:?}", e1)
+            Error::InsufficientTrustedValidatorsInUntrustedValidators(e1, e2, e3) => {
+                write!(
+                    f,
+                    "InsufficientTrustedValidatorsInUntrustedValidators : {:?} {} {}",
+                    e1, e2, e3
+                )
             }
             Error::MissingNextValidatorSet(e1) => {
-                write!(f, "MissingNextValidatorSet : {:?}", e1)
+                write!(f, "MissingNextValidatorSet : {}", e1)
+            }
+            Error::MissingCurrentValidatorSet(e1) => {
+                write!(f, "MissingCurrentValidatorSet : {}", e1)
             }
             Error::MissingValidatorToVerifySeal(e1) => {
                 write!(f, "MissingValidatorToVerifySeal : {:?}", e1)
