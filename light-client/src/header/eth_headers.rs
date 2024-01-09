@@ -4,9 +4,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
 use crate::header::validator_set::EitherValidatorSet::{Trusted, Untrusted};
-use crate::header::validator_set::{
-    EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet,
-};
+use crate::header::validator_set::{EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
@@ -20,6 +18,45 @@ pub struct ETHHeaders {
 }
 
 impl ETHHeaders {
+    pub fn verify_non_neighboring_epoch(
+        &self,
+        chain_id: &ChainId,
+        checkpoint: u64,
+        next_validators: &Validators,
+    ) -> Result<(), Error> {
+        // Ensure all the headers are successfully chained.
+        for (i, header) in self.all.iter().enumerate() {
+            if i < self.all.len() - 1 {
+                let child = &self.all[i + 1];
+                child.verify_cascading_fields(header)?;
+            }
+        }
+
+        // Ensure valid seals
+        let hs: Vec<ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).map(|v| v.clone()).collect();
+        for h in hs.iter() {
+            if h.number >= checkpoint {
+                h.verify_seal(next_validators, chain_id)?;
+            }
+        }
+
+        let hs = ETHHeaders {
+            target: self.target.clone(),
+            all: hs,
+        };
+
+        // Ensure target is finalized
+        let (child, grand_child) = hs.verify_finalized()?;
+
+        // Ensure BLS signature is collect
+        // At the just checkpoint BLS signature uses previous validator set.
+        for h in &[child, grand_child] {
+            let vote = h.get_vote_attestation()?;
+            vote.verify(h.number, next_validators)?;
+        }
+        Ok(())
+    }
+
     pub fn verify(
         &self,
         chain_id: &ChainId,

@@ -8,12 +8,13 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
+use crate::header::eth_header::ETHHeader;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::{
     EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
 };
-use crate::misc::{new_height, new_timestamp, ChainId, Hash};
+use crate::misc::{new_height, new_timestamp, ChainId, Hash, Validators};
 
 use super::errors::Error;
 
@@ -35,6 +36,7 @@ pub struct Header {
     trusted_height: Height,
     previous_validators: ValidatorSet,
     current_validators: ValidatorSet,
+    trusted_current_validators: ValidatorSet
 }
 
 impl Header {
@@ -78,16 +80,50 @@ impl Header {
         chain_id: &ChainId,
         consensus_state: &ConsensusState,
     ) -> Result<(), Error> {
-        let (c_val, p_val) = verify_validator_set(
-            consensus_state,
-            self.headers.target.is_epoch(),
-            self.height(),
-            self.trusted_height,
-            &self.previous_validators,
-            &self.current_validators,
-        )?;
-        self.headers.verify(chain_id, &c_val, &p_val)
+
+        let trusted_epoch = self.trusted_height.revision_height() / BLOCKS_PER_EPOCH;
+        let target_epoch = self.height().revision_height() / BLOCKS_PER_EPOCH;
+        if self.headers.target.is_epoch() && trusted_epoch + 1 < target_epoch {
+            let n_val = self.headers.target.get_validator_set()?;
+            if self.trusted_current_validators.validators.is_empty() {
+                return Err(Error::MissingTrustedCurrentValidators(self.height().revision_height()));
+            }
+            verify_validator_set_non_neighbouring_epoch(consensus_state, self.height(), self.trusted_height, &self.trusted_current_validators,&n_val)?;
+            self.headers.verify_non_neighboring_epoch(chain_id, self.previous_validators.checkpoint(), &n_val.validators)
+        }else {
+            let (c_val, p_val) = verify_validator_set(
+                consensus_state,
+                self.headers.target.is_epoch(),
+                self.height(),
+                self.trusted_height,
+                &self.previous_validators,
+                &self.current_validators,
+            )?;
+            self.headers.verify(chain_id, &c_val, &p_val)
+        }
     }
+}
+
+fn verify_validator_set_non_neighbouring_epoch<'a>(
+    consensus_state: &ConsensusState,
+    height: Height,
+    trusted_height: Height,
+    trusted_validators: &ValidatorSet,
+    next_validators: &ValidatorSet
+)-> Result<(), Error> {
+    if consensus_state.current_validators_hash != trusted_validators.hash {
+        return Err(Error::UnexpectedCurrentValidatorsHash(
+            trusted_height,
+            height,
+            trusted_validators.hash,
+            consensus_state.previous_validators_hash,
+        ));
+    }
+
+    let c_val = TrustedValidatorSet::new(trusted_validators);
+    UntrustedValidatorSet::new(next_validators).try_borrow(&c_val)?;
+
+    Ok(())
 }
 
 fn verify_validator_set<'a>(
@@ -204,6 +240,7 @@ impl TryFrom<RawHeader> for Header {
             trusted_height,
             previous_validators: value.previous_validators.into(),
             current_validators: current_validators.into(),
+            trusted_current_validators: value.trusted_current_validators.into(),
         })
     }
 }
@@ -259,6 +296,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
+            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -280,6 +318,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
+            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -304,6 +343,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![],
+            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -327,6 +367,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
+            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -350,6 +391,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
+            trusted_current_validators: vec![],
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -384,6 +426,7 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![header_31297200().coinbase],
             previous_validators: vec![h.coinbase.clone()],
+            trusted_current_validators: vec![],
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
