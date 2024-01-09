@@ -314,7 +314,7 @@ mod test {
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: validators_in_31297000(),
-            trusted_current_validators: vec![]
+            trusted_current_validators: vec![],
         };
         let now = new_timestamp(h.timestamp + 1).unwrap();
         let invalid_header: Header = raw.clone().try_into().unwrap();
@@ -343,7 +343,7 @@ mod test {
             account_proof: vec![1],
             current_validators: vec![],
             previous_validators: validators_in_31297000(),
-            trusted_current_validators: vec![]
+            trusted_current_validators: vec![],
         };
         let valid_header: Header = raw.try_into().unwrap();
         let err = cs
@@ -370,7 +370,7 @@ mod test {
                 account_proof: vec![],
                 current_validators: vec![h[0].coinbase.clone()],
                 previous_validators: vec![h[0].coinbase.clone()],
-                trusted_current_validators: vec![]
+                trusted_current_validators: vec![],
             };
             raw.try_into().unwrap()
         };

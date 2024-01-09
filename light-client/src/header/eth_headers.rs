@@ -4,7 +4,9 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
 use crate::header::validator_set::EitherValidatorSet::{Trusted, Untrusted};
-use crate::header::validator_set::{EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet};
+use crate::header::validator_set::{
+    EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
+};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
@@ -22,22 +24,23 @@ impl ETHHeaders {
         &self,
         chain_id: &ChainId,
         checkpoint: u64,
-        next_validators: &Validators,
+        trusted_validators: TrustedValidatorSet,
+        next_validators: UntrustedValidatorSet,
     ) -> Result<(), Error> {
+        let n_val = next_validators.try_borrow(&trusted_validators)?;
+
         // Ensure all the headers are successfully chained.
-        for (i, header) in self.all.iter().enumerate() {
-            if i < self.all.len() - 1 {
-                let child = &self.all[i + 1];
-                child.verify_cascading_fields(header)?;
-            }
-        }
+        self.verify_cascading_fields()?;
 
         // Ensure valid seals
-        let hs: Vec<ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).map(|v| v.clone()).collect();
+        let hs: Vec<ETHHeader> = self
+            .all
+            .iter()
+            .filter(|h| h.number >= checkpoint)
+            .map(|v| v.clone())
+            .collect();
         for h in hs.iter() {
-            if h.number >= checkpoint {
-                h.verify_seal(next_validators, chain_id)?;
-            }
+            h.verify_seal(n_val, chain_id)?;
         }
 
         let hs = ETHHeaders {
@@ -52,7 +55,7 @@ impl ETHHeaders {
         // At the just checkpoint BLS signature uses previous validator set.
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
-            vote.verify(h.number, next_validators)?;
+            vote.verify(h.number, n_val)?;
         }
         Ok(())
     }
@@ -76,12 +79,7 @@ impl ETHHeaders {
         )?;
 
         // Ensure all the headers are successfully chained.
-        for (i, header) in self.all.iter().enumerate() {
-            if i < self.all.len() - 1 {
-                let child = &self.all[i + 1];
-                child.verify_cascading_fields(header)?;
-            }
-        }
+        self.verify_cascading_fields()?;
 
         // Ensure valid seals
         let p_val = previous_validators.validators();
@@ -108,6 +106,16 @@ impl ETHHeaders {
                 vote.verify(h.number, unwrap_c_val(h.number, &c_val)?)?;
             } else {
                 vote.verify(h.number, p_val)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn verify_cascading_fields(&self) -> Result<(), Error> {
+        for (i, header) in self.all.iter().enumerate() {
+            if i < self.all.len() - 1 {
+                let child = &self.all[i + 1];
+                child.verify_cascading_fields(header)?;
             }
         }
         Ok(())

@@ -86,7 +86,7 @@ mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![]
+            trusted_current_validators: vec![],
         }
     }
 

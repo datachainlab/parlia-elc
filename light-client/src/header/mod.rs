@@ -36,7 +36,7 @@ pub struct Header {
     trusted_height: Height,
     previous_validators: ValidatorSet,
     current_validators: ValidatorSet,
-    trusted_current_validators: ValidatorSet
+    trusted_current_validators: ValidatorSet,
 }
 
 impl Header {
@@ -80,17 +80,30 @@ impl Header {
         chain_id: &ChainId,
         consensus_state: &ConsensusState,
     ) -> Result<(), Error> {
-
         let trusted_epoch = self.trusted_height.revision_height() / BLOCKS_PER_EPOCH;
         let target_epoch = self.height().revision_height() / BLOCKS_PER_EPOCH;
         if self.headers.target.is_epoch() && trusted_epoch + 1 < target_epoch {
             let n_val = self.headers.target.get_validator_set()?;
             if self.trusted_current_validators.validators.is_empty() {
-                return Err(Error::MissingTrustedCurrentValidators(self.height().revision_height()));
+                return Err(Error::MissingTrustedCurrentValidators(
+                    self.height().revision_height(),
+                ));
             }
-            verify_validator_set_non_neighbouring_epoch(consensus_state, self.height(), self.trusted_height, &self.trusted_current_validators,&n_val)?;
-            self.headers.verify_non_neighboring_epoch(chain_id, self.previous_validators.checkpoint(), &n_val.validators)
-        }else {
+            if consensus_state.current_validators_hash != self.trusted_current_validators.hash {
+                return Err(Error::UnexpectedCurrentValidatorsHash(
+                    self.trusted_height,
+                    self.height(),
+                    self.trusted_current_validators.hash,
+                    consensus_state.previous_validators_hash,
+                ));
+            }
+            self.headers.verify_non_neighboring_epoch(
+                chain_id,
+                self.previous_validators.checkpoint(),
+                TrustedValidatorSet::new(&self.trusted_current_validators),
+                UntrustedValidatorSet::new(&n_val),
+            )
+        } else {
             let (c_val, p_val) = verify_validator_set(
                 consensus_state,
                 self.headers.target.is_epoch(),
@@ -109,8 +122,8 @@ fn verify_validator_set_non_neighbouring_epoch<'a>(
     height: Height,
     trusted_height: Height,
     trusted_validators: &ValidatorSet,
-    next_validators: &ValidatorSet
-)-> Result<(), Error> {
+    next_validators: &ValidatorSet,
+) -> Result<(), Error> {
     if consensus_state.current_validators_hash != trusted_validators.hash {
         return Err(Error::UnexpectedCurrentValidatorsHash(
             trusted_height,
@@ -119,9 +132,6 @@ fn verify_validator_set_non_neighbouring_epoch<'a>(
             consensus_state.previous_validators_hash,
         ));
     }
-
-    let c_val = TrustedValidatorSet::new(trusted_validators);
-    UntrustedValidatorSet::new(next_validators).try_borrow(&c_val)?;
 
     Ok(())
 }
