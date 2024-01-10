@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::header::validator_set::EitherValidatorSet::{Trusted, Untrusted};
 use crate::header::validator_set::{
-    EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
+    EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet,
 };
 
 use crate::misc::{BlockNumber, ChainId, Validators};
@@ -37,7 +37,7 @@ impl ETHHeaders {
             .all
             .iter()
             .filter(|h| h.number >= checkpoint)
-            .map(|v| v.clone())
+            .cloned()
             .collect();
         for h in hs.iter() {
             h.verify_seal(n_val, chain_id)?;
@@ -604,6 +604,142 @@ mod test {
         let headers = create_across_checkpoint_headers();
         f(headers.clone(), &c_val, &p_val, n_val_header.clone(), true);
         f(headers, &c_val, &p_val, n_val_header, false);
+    }
+
+    #[test]
+    fn test_success_verify_non_neighboring_epoch() {
+        let headers: ETHHeaders = vec![
+            header_31297200(),
+            header_31297201(),
+            header_31297202(),
+            header_31297203(),
+            header_31297204(),
+            header_31297205(),
+            header_31297206(),
+            header_31297207(),
+            header_31297208(),
+            header_31297209(),
+            header_31297210(),
+            header_31297211(),
+            header_31297212(),
+            header_31297213(),
+        ]
+        .into();
+
+        let checkpoint =
+            headers.target.number + ValidatorSet::from(validators_in_31297000()).checkpoint();
+        let n_val_raw = header_31297200().get_validator_bytes().unwrap().into();
+        let n_val = UntrustedValidatorSet::new(&n_val_raw);
+        let t_val_raw = validators_in_31297000().into();
+        let t_val = TrustedValidatorSet::new(&t_val_raw);
+        headers
+            .verify_non_neighboring_epoch(&mainnet(), checkpoint, t_val, n_val)
+            .unwrap();
+    }
+
+    #[test]
+    fn test_error_verify_non_neighboring_epoch() {
+        let headers: ETHHeaders = vec![header_31297200()].into();
+
+        // Insufficient trustedValidators
+        let checkpoint =
+            headers.target.number + ValidatorSet::from(validators_in_31297000()).checkpoint();
+        let n_val_raw = header_31297200().get_validator_bytes().unwrap().into();
+        let n_val = UntrustedValidatorSet::new(&n_val_raw);
+        let t_val_raw = vec![vec![0], vec![1], vec![2]].into();
+        let t_val = TrustedValidatorSet::new(&t_val_raw);
+        let err = headers
+            .verify_non_neighboring_epoch(&mainnet(), checkpoint, t_val, n_val)
+            .unwrap_err();
+        match err {
+            Error::InsufficientTrustedValidatorsInUntrustedValidators(_, found, required) => {
+                assert_eq!(found, 0);
+                assert_eq!(required, 1);
+            }
+            err => unreachable!("unexpected error type {:?}", err),
+        }
+
+        // illegal sequence
+        let headers: ETHHeaders = vec![header_31297200(), header_31297202()].into();
+        let n_val_raw = header_31297200().get_validator_bytes().unwrap().into();
+        let n_val = UntrustedValidatorSet::new(&n_val_raw);
+        let t_val_raw = validators_in_31297000().into();
+        let t_val = TrustedValidatorSet::new(&t_val_raw);
+        let err = headers
+            .verify_non_neighboring_epoch(&mainnet(), checkpoint, t_val, n_val)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedHeaderRelation(h1, h2, _, _, _, _) => {
+                assert_eq!(h1, 31297200);
+                assert_eq!(h2, 31297202);
+            }
+            err => unreachable!("unexpected error type {:?}", err),
+        }
+
+        // illegal sealer after checkpoint
+        let mut headers: ETHHeaders = vec![
+            header_31297200(),
+            header_31297201(),
+            header_31297202(),
+            header_31297203(),
+            header_31297204(),
+            header_31297205(),
+            header_31297206(),
+            header_31297207(),
+            header_31297208(),
+            header_31297209(),
+            header_31297210(),
+            header_31297211(),
+            header_31297212(),
+            header_31297213(),
+        ]
+        .into();
+        headers.all.last_mut().unwrap().coinbase = vec![];
+        let n_val_raw = header_31297200().get_validator_bytes().unwrap().into();
+        let n_val = UntrustedValidatorSet::new(&n_val_raw);
+        let t_val_raw = validators_in_31297000().into();
+        let t_val = TrustedValidatorSet::new(&t_val_raw);
+        let err = headers
+            .verify_non_neighboring_epoch(&mainnet(), checkpoint, t_val, n_val)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedCoinbase(h1) => {
+                assert_eq!(h1, 31297213);
+            }
+            err => unreachable!("unexpected error type {:?}", err),
+        }
+
+        // invalid header size
+        let headers: ETHHeaders = vec![
+            header_31297200(),
+            header_31297201(),
+            header_31297202(),
+            header_31297203(),
+            header_31297204(),
+            header_31297205(),
+            header_31297206(),
+            header_31297207(),
+            header_31297208(),
+            header_31297209(),
+            header_31297210(),
+            header_31297211(),
+            header_31297212(),
+        ]
+        .into();
+        let n_val_raw = header_31297200().get_validator_bytes().unwrap().into();
+        let n_val = UntrustedValidatorSet::new(&n_val_raw);
+        let t_val_raw = validators_in_31297000().into();
+        let t_val = TrustedValidatorSet::new(&t_val_raw);
+        let err = headers
+            .verify_non_neighboring_epoch(&mainnet(), checkpoint, t_val, n_val)
+            .unwrap_err();
+        match err {
+            Error::InvalidVerifyingHeaderLength(h1, size) => {
+                assert_eq!(h1, 31297200);
+                assert_eq!(size, 2);
+            }
+            err => unreachable!("unexpected error type {:?}", err),
+        }
     }
 
     fn create_before_checkpoint_headers() -> ETHHeaders {
