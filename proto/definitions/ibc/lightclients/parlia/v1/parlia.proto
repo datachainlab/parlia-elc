@@ -31,8 +31,6 @@ message Header {
   bytes account_proof = 3;
   repeated bytes current_validators = 4;
   repeated bytes previous_validators = 5;
-  // for non neighboring epoch only
-  repeated bytes trusted_current_validators = 6;
 }
 
 message ConsensusState {

@@ -43,11 +43,6 @@ pub struct Header {
     pub current_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(bytes = "vec", repeated, tag = "5")]
     pub previous_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    /// for non neighboring epoch only
-    #[prost(bytes = "vec", repeated, tag = "6")]
-    pub trusted_current_validators: ::prost::alloc::vec::Vec<
-        ::prost::alloc::vec::Vec<u8>,
-    >,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

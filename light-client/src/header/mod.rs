@@ -8,6 +8,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
+use crate::header::eth_header::ETHHeader;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::{
@@ -35,7 +36,6 @@ pub struct Header {
     trusted_height: Height,
     previous_validators: ValidatorSet,
     current_validators: ValidatorSet,
-    trusted_current_validators: ValidatorSet,
 }
 
 impl Header {
@@ -85,7 +85,7 @@ impl Header {
                 consensus_state,
                 self.height(),
                 self.trusted_height(),
-                &self.trusted_current_validators,
+                &self.current_validators,
                 &n_val,
             )?;
 
@@ -97,7 +97,7 @@ impl Header {
         } else {
             let (c_val, p_val) = verify_validator_set(
                 consensus_state,
-                self.headers.target.is_epoch(),
+                &self.headers.target,
                 self.height(),
                 self.trusted_height,
                 &self.previous_validators,
@@ -145,12 +145,13 @@ fn verify_validator_set_non_neighboring_epoch<'a>(
 
 fn verify_validator_set<'a>(
     consensus_state: &ConsensusState,
-    is_epoch: bool,
+    target: &ETHHeader,
     height: Height,
     trusted_height: Height,
     previous_validators: &'a ValidatorSet,
     current_validators: &'a ValidatorSet,
 ) -> Result<(EitherValidatorSet<'a>, TrustedValidatorSet<'a>), Error> {
+    let is_epoch = target.is_epoch();
     let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
     let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
 
@@ -168,6 +169,16 @@ fn verify_validator_set<'a>(
                 height,
                 previous_validators.hash,
                 consensus_state.current_validators_hash,
+            ));
+        }
+
+        let val_in_extra = target.get_validator_set()?;
+        if val_in_extra.hash != current_validators.hash {
+            return Err(Error::UnexpectedCurrentValidatorsHash(
+                trusted_height,
+                height,
+                val_in_extra.hash,
+                current_validators.hash,
             ));
         }
 
@@ -237,15 +248,10 @@ impl TryFrom<RawHeader> for Header {
         }
 
         // Epoch header contains validator set
-        let current_validators = if headers.target.is_epoch() {
-            headers
-                .target
-                .get_validator_bytes()
-                .ok_or_else(|| Error::MissingValidatorInEpochBlock(headers.target.number))?
-        } else {
-            value.current_validators
-        };
-        if current_validators.is_empty() {
+        // - not a epoch block: current epoch validators (which must be in trusted cons state)
+        // - non neighboring epoch header: validators in trusted cons state
+        // - neighboring epoch header: validators in extra data
+        if value.current_validators.is_empty() {
             return Err(Error::MissingCurrentTrustedValidators(
                 headers.target.number,
             ));
@@ -256,8 +262,7 @@ impl TryFrom<RawHeader> for Header {
             headers,
             trusted_height,
             previous_validators: value.previous_validators.into(),
-            current_validators: current_validators.into(),
-            trusted_current_validators: value.trusted_current_validators.into(),
+            current_validators: value.current_validators.into(),
         })
     }
 }
@@ -290,8 +295,9 @@ pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
     use crate::header::constant::BLOCKS_PER_EPOCH;
+
     use crate::header::eth_headers::ETHHeaders;
-    use crate::header::testdata::{header_31297200, header_31297201};
+    use crate::header::testdata::{header_31297200, header_31297201, validators_in_31297000};
     use crate::header::validator_set::{EitherValidatorSet, ValidatorSet};
     use crate::header::{verify_validator_set, verify_validator_set_non_neighboring_epoch, Header};
     use crate::misc::{new_height, Hash, Validators};
@@ -314,7 +320,6 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -336,7 +341,6 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -361,7 +365,6 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![],
-            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -385,7 +388,6 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![],
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -407,9 +409,8 @@ pub(crate) mod test {
             headers: vec![h.try_into().unwrap()],
             trusted_height: Some(trusted_height.clone()),
             account_proof: vec![],
-            current_validators: vec![],
-            previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![],
+            current_validators: header_31297200().get_validator_bytes().unwrap(),
+            previous_validators: validators_in_31297000(),
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -427,7 +428,7 @@ pub(crate) mod test {
         );
         assert_eq!(
             &result.current_validators.validators,
-            &h.get_validator_bytes().unwrap()
+            &raw.current_validators
         );
     }
 
@@ -444,7 +445,6 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![header_31297200().coinbase],
             previous_validators: vec![h.coinbase.clone()],
-            trusted_current_validators: vec![],
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -488,15 +488,14 @@ pub(crate) mod test {
             previous_validators_hash: [2u8; 32],
         };
 
+        // epoch
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 201);
-
-        // Same validator set as previous
-        let current_validators = &mut to_validator_set([3u8; 32]);
-        let previous_validators = &mut to_validator_set(cs.current_validators_hash);
+        let current_validators = &header_31297200().get_validator_set().unwrap();
+        let previous_validators = &to_validator_set(cs.current_validators_hash);
         let (c_val, p_val) = verify_validator_set(
             &cs,
-            true,
+            &header_31297200(),
             height,
             trusted_height,
             previous_validators,
@@ -505,38 +504,25 @@ pub(crate) mod test {
         .unwrap();
         match c_val {
             EitherValidatorSet::Untrusted(r) => {
-                let validators = r.try_borrow(&p_val).unwrap();
-                assert_eq!(*validators, current_validators.validators);
+                assert!(r.try_borrow(&p_val).is_err())
             }
             _ => unreachable!("unexpected trusted"),
         }
 
-        let current_validators = &mut to_validator_set([3u8; 32]);
-        let previous_validators =
-            &mut to_validator_set_with_validators(cs.current_validators_hash, vec![vec![2]]);
-        let (c_val, p_val) = verify_validator_set(
-            &cs,
-            true,
-            height,
-            trusted_height,
-            previous_validators,
-            current_validators,
-        )
-        .unwrap();
-        match c_val {
-            EitherValidatorSet::Untrusted(r) => {
-                assert!(r.try_borrow(&p_val).is_err());
-            }
-            _ => unreachable!("unexpected trusted"),
-        }
-
+        // not epoch
+        let cs = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: Time::now(),
+            current_validators_hash: [1u8; 32],
+            previous_validators_hash: [2u8; 32],
+        };
         let height = new_height(0, 599);
         let trusted_height = new_height(0, 400);
-        let current_validators = &mut to_validator_set(cs.current_validators_hash);
-        let previous_validators = &mut to_validator_set(cs.previous_validators_hash);
+        let current_validators = &to_validator_set(cs.current_validators_hash);
+        let previous_validators = &to_validator_set(cs.previous_validators_hash);
         let (c_val, _p_val) = verify_validator_set(
             &cs,
-            false,
+            &header_31297201(),
             height,
             trusted_height,
             previous_validators,
@@ -562,11 +548,11 @@ pub(crate) mod test {
 
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 199);
-        let current_validators = &mut to_validator_set([1u8; 32]);
-        let previous_validators = &mut to_validator_set([2u8; 32]);
+        let current_validators = &to_validator_set([1u8; 32]);
+        let previous_validators = &to_validator_set([2u8; 32]);
         let err = verify_validator_set(
             &cs,
-            true,
+            &header_31297200(),
             height,
             trusted_height,
             previous_validators,
@@ -582,10 +568,10 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 200);
-        let previous_validators = &mut to_validator_set([3u8; 32]);
+        let previous_validators = &to_validator_set([3u8; 32]);
         let err = verify_validator_set(
             &cs,
-            true,
+            &header_31297200(),
             height,
             trusted_height,
             previous_validators,
@@ -606,7 +592,7 @@ pub(crate) mod test {
         let trusted_height = new_height(0, 200);
         let err = verify_validator_set(
             &cs,
-            false,
+            &header_31297201(),
             height,
             trusted_height,
             previous_validators,
@@ -622,11 +608,11 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 400);
-        let current_validators = &mut to_validator_set([1u8; 32]);
-        let previous_validators = &mut to_validator_set([3u8; 32]);
+        let current_validators = &to_validator_set([1u8; 32]);
+        let previous_validators = &to_validator_set([3u8; 32]);
         let err = verify_validator_set(
             &cs,
-            false,
+            &header_31297201(),
             height,
             trusted_height,
             previous_validators,
@@ -644,11 +630,11 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 400);
-        let current_validators = &mut to_validator_set([3u8; 32]);
-        let previous_validators = &mut to_validator_set([2u8; 32]);
+        let current_validators = &to_validator_set([3u8; 32]);
+        let previous_validators = &to_validator_set([2u8; 32]);
         let err = verify_validator_set(
             &cs,
-            false,
+            &header_31297201(),
             height,
             trusted_height,
             previous_validators,
@@ -661,6 +647,38 @@ pub(crate) mod test {
                 assert_eq!(h, height);
                 assert_eq!(hash, current_validators.hash);
                 assert_eq!(cons_hash, cons_hash);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+
+        let cs = ConsensusState {
+            state_root: [0u8; 32],
+            timestamp: Time::now(),
+            current_validators_hash: [4u8; 32],
+            previous_validators_hash: [2u8; 32],
+        };
+        let height = new_height(0, 400);
+        let trusted_height = new_height(0, 399);
+        let current_validators = &to_validator_set([1u8; 32]);
+        let previous_validators = &to_validator_set([4u8; 32]);
+        let err = verify_validator_set(
+            &cs,
+            &header_31297200(),
+            height,
+            trusted_height,
+            previous_validators,
+            current_validators,
+        )
+        .unwrap_err();
+        match err {
+            Error::UnexpectedCurrentValidatorsHash(t, h, header_hash, request_hash) => {
+                assert_eq!(t, trusted_height);
+                assert_eq!(h, height);
+                assert_eq!(
+                    header_hash,
+                    header_31297200().get_validator_set().unwrap().hash
+                );
+                assert_eq!(request_hash, current_validators.hash);
             }
             _ => unreachable!("err {:?}", err),
         }
@@ -678,8 +696,8 @@ pub(crate) mod test {
         let height = new_height(0, 600);
         let trusted_height = new_height(0, 201);
 
-        let trusted_validators = &mut to_validator_set(cs.current_validators_hash);
-        let next_validators = &mut to_validator_set([4u8; 32]);
+        let trusted_validators = &to_validator_set(cs.current_validators_hash);
+        let next_validators = &to_validator_set([4u8; 32]);
         let (_c_val, _n_val) = verify_validator_set_non_neighboring_epoch(
             &cs,
             height,
@@ -703,14 +721,14 @@ pub(crate) mod test {
         let trusted_height = new_height(0, 201);
 
         // empty trusted validator
-        let mut trusted_validators = &mut to_validator_set(cs.current_validators_hash);
+        let mut trusted_validators = to_validator_set(cs.current_validators_hash);
         trusted_validators.validators = Validators::new();
-        let next_validators = &mut to_validator_set([4u8; 32]);
+        let next_validators = &to_validator_set([4u8; 32]);
         let err = verify_validator_set_non_neighboring_epoch(
             &cs,
             height,
             trusted_height,
-            trusted_validators,
+            &trusted_validators,
             next_validators,
         )
         .unwrap_err();
@@ -722,7 +740,7 @@ pub(crate) mod test {
         }
 
         // untrusted validator
-        let trusted_validators = &mut to_validator_set([5u8; 32]);
+        let trusted_validators = &to_validator_set([5u8; 32]);
         let err = verify_validator_set_non_neighboring_epoch(
             &cs,
             height,
@@ -753,7 +771,6 @@ pub(crate) mod test {
             trusted_height: new_height(0, 0),
             previous_validators: vec![].into(),
             current_validators: vec![].into(),
-            trusted_current_validators: vec![].into(),
         };
 
         // not epoch
