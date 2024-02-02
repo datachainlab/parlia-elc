@@ -138,7 +138,7 @@ fn verify_validator_set_non_neighboring_epoch<'a>(
         ));
     }
     Ok((
-        TrustedValidatorSet::new(trusted_current_validators),
+        TrustedValidatorSet::new(current_validators),
         UntrustedValidatorSet::new(next_validators),
     ))
 }
