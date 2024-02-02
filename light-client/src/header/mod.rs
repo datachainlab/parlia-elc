@@ -121,19 +121,19 @@ fn verify_validator_set_non_neighboring_epoch<'a>(
     consensus_state: &ConsensusState,
     height: Height,
     trusted_height: Height,
-    trusted_current_validators: &'a ValidatorSet,
+    current_validators: &'a ValidatorSet,
     next_validators: &'a ValidatorSet,
 ) -> Result<(TrustedValidatorSet<'a>, UntrustedValidatorSet<'a>), Error> {
-    if trusted_current_validators.validators.is_empty() {
+    if current_validators.validators.is_empty() {
         return Err(Error::MissingTrustedCurrentValidators(
             height.revision_height(),
         ));
     }
-    if consensus_state.current_validators_hash != trusted_current_validators.hash {
+    if consensus_state.current_validators_hash != current_validators.hash {
         return Err(Error::UnexpectedCurrentValidatorsHash(
             trusted_height,
             height,
-            trusted_current_validators.hash,
+            current_validators.hash,
             consensus_state.previous_validators_hash,
         ));
     }
