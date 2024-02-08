@@ -312,7 +312,11 @@ mod test {
                 revision_height: h.number - 1,
             }),
             account_proof: vec![],
-            current_validators: vec![],
+            current_validators: if h.is_epoch() {
+                h.get_validator_set().unwrap().validators
+            } else {
+                vec![]
+            },
             previous_validators: validators_in_31297000(),
         };
         let now = new_timestamp(h.timestamp + 1).unwrap();
@@ -340,7 +344,7 @@ mod test {
                 revision_height: h.number - 1,
             }),
             account_proof: vec![1],
-            current_validators: vec![],
+            current_validators: header_31297200().get_validator_bytes().unwrap(),
             previous_validators: validators_in_31297000(),
         };
         let valid_header: Header = raw.try_into().unwrap();
@@ -366,7 +370,11 @@ mod test {
                 headers: h.iter().map(|e| e.try_into().unwrap()).collect(),
                 trusted_height: Some(trusted_height),
                 account_proof: vec![],
-                current_validators: vec![h[0].coinbase.clone()],
+                current_validators: if h[0].is_epoch() {
+                    h[0].get_validator_set().unwrap().validators
+                } else {
+                    vec![h[0].coinbase.clone()]
+                },
                 previous_validators: vec![h[0].coinbase.clone()],
             };
             raw.try_into().unwrap()
