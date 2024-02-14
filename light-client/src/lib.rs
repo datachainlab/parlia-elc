@@ -12,6 +12,7 @@ pub mod commitment;
 pub mod consensus_state;
 pub mod errors;
 pub mod header;
+pub mod message;
 pub mod misbehaviour;
 pub mod misc;
 

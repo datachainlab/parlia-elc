@@ -22,6 +22,7 @@ pub enum Error {
     UnknownClientStateType(String),
     UnknownConsensusStateType(String),
     UnknownMisbehaviourType(String),
+    UnexpectedClientType(String),
 
     // ClientState error
     MissingLatestHeight,
@@ -311,6 +312,9 @@ impl core::fmt::Display for Error {
             }
             Error::MissingTrustedCurrentValidators(e1) => {
                 write!(f, "MissingTrustedCurrentValidators : {}", e1)
+            }
+            Error::UnexpectedClientType(e1) => {
+                write!(f, "UnexpectedClientType : {}", e1)
             }
         }
     }
