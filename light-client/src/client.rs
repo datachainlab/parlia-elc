@@ -2,13 +2,13 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use light_client::commitments::{
-    EmittedState, TrustingPeriodContext, UpdateClientMessage, VerifyMembershipMessage,
+    EmittedState, TrustingPeriodContext, UpdateStateProxyMessage, VerifyMembershipProxyMessage,
 };
 use light_client::{
     commitments::{gen_state_id_from_any, CommitmentPrefix, StateID, ValidationContext},
     types::{Any, ClientId, Height},
     CreateClientResult, Error as LightClientError, HostClientReader, LightClient,
-    UpdateClientResult, VerifyMembershipResult, VerifyNonMembershipResult,
+    UpdateClientResult, UpdateStateData, VerifyMembershipResult, VerifyNonMembershipResult,
 };
 use patricia_merkle_trie::keccak::keccak_256;
 
@@ -56,7 +56,7 @@ impl LightClient for ParliaLightClient {
 
         Ok(CreateClientResult {
             height,
-            message: UpdateClientMessage {
+            message: UpdateStateProxyMessage {
                 prev_state_id: None,
                 post_state_id,
                 emitted_states: vec![EmittedState(height, any_client_state)],
@@ -105,11 +105,11 @@ impl LightClient for ParliaLightClient {
         let prev_state_id = gen_state_id(client_state, trusted_consensus_state)?;
         let post_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
-        Ok(UpdateClientResult {
+        Ok(UpdateClientResult::UpdateState(UpdateStateData {
             new_any_client_state: new_client_state.try_into()?,
             new_any_consensus_state: new_consensus_state.try_into()?,
             height,
-            message: UpdateClientMessage {
+            message: UpdateStateProxyMessage {
                 prev_state_id: Some(prev_state_id),
                 post_state_id,
                 emitted_states: Default::default(),
@@ -122,10 +122,9 @@ impl LightClient for ParliaLightClient {
                     timestamp,
                     trusted_state_timestamp,
                 )),
-            }
-            .into(),
+            },
             prove: true,
-        })
+        }))
     }
 
     fn verify_membership(
@@ -150,14 +149,13 @@ impl LightClient for ParliaLightClient {
         )?;
 
         Ok(VerifyMembershipResult {
-            message: VerifyMembershipMessage::new(
+            message: VerifyMembershipProxyMessage::new(
                 prefix,
                 path,
                 Some(value),
                 proof_height,
                 state_id,
-            )
-            .into(),
+            ),
         })
     }
 
@@ -173,8 +171,7 @@ impl LightClient for ParliaLightClient {
         let state_id =
             self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
         Ok(VerifyNonMembershipResult {
-            message: VerifyMembershipMessage::new(prefix, path, None, proof_height, state_id)
-                .into(),
+            message: VerifyMembershipProxyMessage::new(prefix, path, None, proof_height, state_id),
         })
     }
 }
@@ -267,9 +264,10 @@ mod test {
     use hex_literal::hex;
     use light_client::types::{Any, ClientId, Height, Time};
 
-    use light_client::commitments::{Message, TrustingPeriodContext, ValidationContext};
+    use light_client::commitments::{ProxyMessage, TrustingPeriodContext, ValidationContext};
     use light_client::{
-        ClientReader, HostClientReader, HostContext, LightClient, VerifyMembershipResult,
+        ClientReader, HostClientReader, HostContext, LightClient, UpdateClientResult,
+        VerifyMembershipResult,
     };
 
     use patricia_merkle_trie::keccak::keccak_256;
@@ -386,7 +384,7 @@ mod test {
             .unwrap();
         assert_eq!(result.height.revision_height(), 32132891);
         match result.message {
-            Message::UpdateClient(data) => {
+            ProxyMessage::UpdateState(data) => {
                 assert_eq!(data.post_height, result.height);
 
                 let cs = ConsensusState::try_from(any_consensus_state).unwrap();
@@ -485,6 +483,10 @@ mod test {
         };
         match client.update_client(&ctx, client_id, any) {
             Ok(data) => {
+                let data = match data {
+                    UpdateClientResult::UpdateState(data) => data,
+                    _ => unreachable!("invalid client result"),
+                };
                 let new_client_state = ClientState::try_from(data.new_any_client_state).unwrap();
                 let new_consensus_state =
                     ConsensusState::try_from(data.new_any_consensus_state).unwrap();
@@ -503,34 +505,30 @@ mod test {
                     new_consensus_state.previous_validators_hash,
                     new_previous_validator_hash
                 );
-                match &data.message {
-                    Message::UpdateClient(data) => {
-                        assert_eq!(data.post_height, header.height());
-                        assert_eq!(data.emitted_states, vec![]);
-                        assert!(!data.post_state_id.to_vec().is_empty());
-                        assert_eq!(
-                            data.prev_height,
-                            Some(new_height(0, header.trusted_height().revision_height()))
+                let data = data.message;
+                assert_eq!(data.post_height, header.height());
+                assert_eq!(data.emitted_states, vec![]);
+                assert!(!data.post_state_id.to_vec().is_empty());
+                assert_eq!(
+                    data.prev_height,
+                    Some(new_height(0, header.trusted_height().revision_height()))
+                );
+                assert!(data.prev_state_id.is_some());
+                assert_eq!(data.timestamp, header.timestamp().unwrap());
+                match &data.context {
+                    ValidationContext::TrustingPeriod(actual) => {
+                        let expected = TrustingPeriodContext::new(
+                            cs.trusting_period,
+                            cs.max_clock_drift,
+                            header.timestamp().unwrap(),
+                            trusted_cs.timestamp,
                         );
-                        assert!(data.prev_state_id.is_some());
-                        assert_eq!(data.timestamp, header.timestamp().unwrap());
-                        match &data.context {
-                            ValidationContext::TrustingPeriod(actual) => {
-                                let expected = TrustingPeriodContext::new(
-                                    cs.trusting_period,
-                                    cs.max_clock_drift,
-                                    header.timestamp().unwrap(),
-                                    trusted_cs.timestamp,
-                                );
-                                assert_eq!(format!("{}", actual), format!("{}", expected));
-                            }
-                            _ => unreachable!("invalid commitment context {:?}", data.context),
-                        }
+                        assert_eq!(format!("{}", actual), format!("{}", expected));
                     }
-                    _ => unreachable!("invalid commitment {:?}", data.message),
+                    _ => unreachable!("invalid commitment context {:?}", data.context),
                 }
             }
-            Err(e) => unreachable!("error {:?}", e),
+            err => unreachable!("err {:?}", err),
         };
     }
 
@@ -645,14 +643,10 @@ mod test {
             false,
         )
         .unwrap();
-        match result.message {
-            Message::VerifyMembership(data) => {
-                assert_eq!(data.path, path);
-                assert_eq!(data.height, proof_height);
-                assert_eq!(data.value, Some(keccak_256(value.as_slice())));
-            }
-            _ => unreachable!("invalid state commitment {:?}", result.message),
-        };
+        let data = result.message;
+        assert_eq!(data.path, path);
+        assert_eq!(data.height, proof_height);
+        assert_eq!(data.value, Some(keccak_256(value.as_slice())));
     }
 
     #[test]
