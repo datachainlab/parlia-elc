@@ -89,19 +89,14 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        mut misbehaviour: Misbehaviour,
+        misbehaviour: &Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(
-        &self,
-        now: Time,
-        cs: &ConsensusState,
-        header: &mut Header,
-    ) -> Result<(), Error> {
+    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         validate_within_trusting_period(
             now,

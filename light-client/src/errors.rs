@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
+use light_client::commitments::Error as CommitmentError;
 use light_client::types::{ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
@@ -23,6 +24,7 @@ pub enum Error {
     UnknownConsensusStateType(String),
     UnknownMisbehaviourType(String),
     UnexpectedClientType(String),
+    LCPCommitmentError(CommitmentError),
 
     // ClientState error
     MissingLatestHeight,
@@ -315,6 +317,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedClientType(e1) => {
                 write!(f, "UnexpectedClientType : {}", e1)
+            }
+            Error::LCPCommitmentError(e1) => {
+                write!(f, "LCPCommitmentError : {}", e1)
             }
         }
     }

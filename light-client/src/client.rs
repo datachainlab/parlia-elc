@@ -2,7 +2,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use light_client::commitments::{
-    EmittedState, TrustingPeriodContext, UpdateStateProxyMessage, VerifyMembershipProxyMessage,
+    EmittedState, MisbehaviourProxyMessage, PrevState, TrustingPeriodContext,
+    UpdateStateProxyMessage, VerifyMembershipProxyMessage,
 };
 use light_client::{
     commitments::{gen_state_id_from_any, CommitmentPrefix, StateID, ValidationContext},
@@ -77,11 +78,20 @@ impl LightClient for ParliaLightClient {
         client_id: ClientId,
         any_message: Any,
     ) -> Result<UpdateClientResult, LightClientError> {
-        match ClientMessage::try_from(any_message)? {
-            ClientMessage::Header(header) => self.update_state(ctx, client_id, header),
+        match ClientMessage::try_from(any_message.clone())? {
+            ClientMessage::Header(header) => Ok(self.update_state(ctx, client_id, header)?.into()),
             ClientMessage::Misbehaviour(misbehavior) => {
-                let state = self.submit_misbehaviour(ctx, client_id, misbehavior);
-                todo!("change ret value")
+                let (client_state, prev_states, context) =
+                    self.submit_misbehaviour(ctx, client_id, misbehavior)?;
+                Ok(MisbehaviourData {
+                    new_any_client_state: client_state.try_into()?,
+                    message: MisbehaviourProxyMessage {
+                        prev_states,
+                        context,
+                        client_message: any_message,
+                    },
+                }
+                .into())
             }
         }
     }
@@ -141,7 +151,7 @@ impl ParliaLightClient {
         ctx: &dyn HostClientReader,
         client_id: ClientId,
         header: Header,
-    ) -> Result<UpdateClientResult, LightClientError> {
+    ) -> Result<UpdateStateData, LightClientError> {
         //Ensure header can be verified.
         let height = header.height();
         let timestamp = header.timestamp()?;
@@ -170,7 +180,7 @@ impl ParliaLightClient {
         let prev_state_id = gen_state_id(client_state, trusted_consensus_state)?;
         let post_state_id = gen_state_id(new_client_state.clone(), new_consensus_state.clone())?;
 
-        Ok(UpdateClientResult::UpdateState(UpdateStateData {
+        Ok(UpdateStateData {
             new_any_client_state: new_client_state.try_into()?,
             new_any_consensus_state: new_consensus_state.try_into()?,
             height,
@@ -189,7 +199,7 @@ impl ParliaLightClient {
                 )),
             },
             prove: true,
-        }))
+        })
     }
 
     pub fn submit_misbehaviour(
@@ -197,7 +207,7 @@ impl ParliaLightClient {
         ctx: &dyn HostClientReader,
         client_id: ClientId,
         misbehaviour: Misbehaviour,
-    ) -> Result<ClientState, LightClientError> {
+    ) -> Result<(ClientState, Vec<PrevState>, ValidationContext), LightClientError> {
         let any_client_state = ctx.client_state(&client_id)?;
         let any_consensus_state1 =
             ctx.consensus_state(&client_id, &misbehaviour.header_1.trusted_height())?;
@@ -215,9 +225,35 @@ impl ParliaLightClient {
             ctx.host_timestamp(),
             &trusted_consensus_state1,
             &trusted_consensus_state2,
-            misbehaviour,
+            &misbehaviour,
         )?;
-        Ok(new_client_state)
+
+        let prev_state = self.make_prev_states(
+            ctx,
+            &client_id,
+            &client_state,
+            vec![
+                misbehaviour.header_1.trusted_height(),
+                misbehaviour.header_2.trusted_height(),
+            ],
+        )?;
+        let context = ValidationContext::TrustingPeriod(TrustingPeriodContext::new(
+            client_state.trusting_period,
+            client_state.max_clock_drift,
+            misbehaviour.header_1.timestamp()?,
+            trusted_consensus_state1.timestamp.into(),
+        ))
+        .aggregate(ValidationContext::TrustingPeriod(
+            TrustingPeriodContext::new(
+                client_state.trusting_period,
+                client_state.max_clock_drift,
+                misbehaviour.header_2.timestamp()?,
+                trusted_consensus_state2.timestamp.into(),
+            ),
+        ))
+        .map_err(Error::LCPCommitmentError)?;
+
+        Ok((new_client_state, prev_state, context))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -255,6 +291,25 @@ impl ParliaLightClient {
         )?;
 
         gen_state_id(client_state, consensus_state)
+    }
+
+    fn make_prev_states(
+        &self,
+        ctx: &dyn HostClientReader,
+        client_id: &ClientId,
+        client_state: &ClientState,
+        heights: Vec<Height>,
+    ) -> Result<Vec<PrevState>, LightClientError> {
+        let mut prev_states = Vec::new();
+        for height in heights {
+            let consensus_state: ConsensusState =
+                ctx.consensus_state(client_id, &height)?.try_into()?;
+            prev_states.push(PrevState {
+                height,
+                state_id: gen_state_id(client_state.clone(), consensus_state)?,
+            });
+        }
+        Ok(prev_states)
     }
 }
 
