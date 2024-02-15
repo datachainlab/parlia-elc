@@ -1,5 +1,3 @@
-use alloc::borrow::ToOwned as _;
-use alloc::vec::Vec;
 use core::str::FromStr;
 
 use light_client::types::{Any, ClientId};

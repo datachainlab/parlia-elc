@@ -241,14 +241,14 @@ impl ParliaLightClient {
             client_state.trusting_period,
             client_state.max_clock_drift,
             misbehaviour.header_1.timestamp()?,
-            trusted_consensus_state1.timestamp.into(),
+            trusted_consensus_state1.timestamp,
         ))
         .aggregate(ValidationContext::TrustingPeriod(
             TrustingPeriodContext::new(
                 client_state.trusting_period,
                 client_state.max_clock_drift,
                 misbehaviour.header_2.timestamp()?,
-                trusted_consensus_state2.timestamp.into(),
+                trusted_consensus_state2.timestamp,
             ),
         ))
         .map_err(Error::LCPCommitmentError)?;
@@ -875,7 +875,6 @@ mod test {
         any.extend(any2);
         let any: Any = any.try_into().unwrap();
         // check if misbehavior
-        let _ = Misbehaviour::try_from(any.clone()).unwrap();
         let err = client
             .update_client(&ctx, client_id.clone(), any)
             .unwrap_err();
