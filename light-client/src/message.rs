@@ -4,6 +4,7 @@ use crate::misbehaviour::{Misbehaviour, PARLIA_MISBEHAVIOUR_TYPE_URL};
 use light_client::types::Any;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum ClientMessage {
     Header(Header),
     Misbehaviour(Misbehaviour),

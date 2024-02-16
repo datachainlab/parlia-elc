@@ -832,11 +832,16 @@ mod test {
         let result = client.update_client(&ctx, client_id.clone(), any);
         match result {
             Ok(UpdateClientResult::Misbehaviour(mdt)) => {
-                assert!(
-                    ClientState::try_from(mdt.new_any_client_state)
-                        .unwrap()
-                        .frozen
-                )
+                let expected_cs: ClientState = mdt.new_any_client_state.try_into().unwrap();
+                let prev_state = mdt.message.prev_states;
+                let context = mdt.message.context;
+                assert!(expected_cs.frozen);
+                assert_eq!(prev_state.len(), 2);
+                assert_eq!(prev_state[0].height, misbehavior.header_1.trusted_height());
+                assert_eq!(prev_state[1].height, misbehavior.header_2.trusted_height());
+                if let ValidationContext::Empty = context {
+                    unreachable!("invalid validation context");
+                }
             }
             other => unreachable!("err={:?}", other),
         };
