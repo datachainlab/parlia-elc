@@ -32,7 +32,13 @@ pub enum Error {
 
     // ConsensusState error
     AccountNotFound(Address),
-    UnexpectedStateValue(Hash, Vec<Vec<u8>>, Option<Vec<u8>>, Vec<u8>),
+    UnexpectedStateValue(
+        Hash,
+        Vec<Vec<u8>>,
+        Option<Vec<u8>>,
+        Vec<u8>,
+        Option<Vec<u8>>,
+    ),
     IllegalTimestamp(Time, Time),
     UnexpectedStateRoot(Vec<u8>),
     UnexpectedStorageRoot(Vec<u8>),
@@ -191,11 +197,11 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedSameBlockHash : {}", e1)
             }
             Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1),
-            Error::UnexpectedStateValue(e1, e2, e3, e4) => {
+            Error::UnexpectedStateValue(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedStateValue : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedStateValue : {:?} {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4, e5
                 )
             }
             Error::TrieError(e1) => {

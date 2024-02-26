@@ -54,13 +54,14 @@ pub fn verify_proof(
 
     let expected_value = expected_value
         .as_ref()
-        .map(|e| rlp::encode(&trim_left_zero(e).to_vec()).to_vec());
+        .map(|e| rlp::encode(&trim_left_zero(e)).to_vec());
     if value != expected_value {
         return Err(Error::UnexpectedStateValue(
             *root,
             proof.to_vec(),
             expected_value,
             key.to_vec(),
+            value,
         ));
     }
     Ok(())
@@ -96,6 +97,7 @@ mod test {
         calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, resolve_account,
         trim_left_zero, verify_proof,
     };
+    use crate::errors::Error;
     use crate::misc::{Account, Hash};
 
     #[test]
@@ -128,6 +130,30 @@ mod test {
         let expected = hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec();
         if let Err(e) = verify_proof(&storage_root, &storage_proof, &key, &Some(expected)) {
             unreachable!("{:?}", e);
+        }
+    }
+
+    #[test]
+    fn test_verify_error() {
+        let key = hex!("0000000000000000000000000000000000000000000000000000000000000000");
+        let root = hex!("c5bbc7e086abad66f3d4b49cc39c27e4864834ce3d21d91692c513481bf9de1b");
+        let proof = vec![
+            hex!("f8518080a051c7191217d318e27eed8b8f0b2c81df8ad258037ecdb3ee8808ab982623adba8080808080808080a028e886a776e1a5ccaf6819bc26ae7f83616639014e9751eb8d68eaaac54966448080808080").to_vec(),
+            hex!("f7a0390decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5639594ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").to_vec(),
+        ];
+        let expected = hex!("fbed59a7f647152af99ef0fd8e3f7e81bd7b1fd7");
+        match verify_proof(&root, &proof, &key, &Some(expected.to_vec())).unwrap_err() {
+            Error::UnexpectedStateValue(e1, e2, e3, e4, e5) => {
+                assert_eq!(root, e1);
+                assert_eq!(proof, e2);
+                assert_eq!(rlp::encode(&expected.as_slice()), e3.unwrap());
+                assert_eq!(key, e4.as_slice());
+                assert_eq!(
+                    rlp::encode(&hex!("ebed59a7f647152af99ef0fd8e3f7e81bd7b1fd7").as_slice()),
+                    e5.unwrap()
+                );
+            }
+            err => unreachable!("{:?}", err),
         }
     }
 
