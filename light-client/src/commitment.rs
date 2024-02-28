@@ -76,7 +76,7 @@ fn verify(root: &Hash, proof: &[Vec<u8>], key: &[u8]) -> Result<Option<Vec<u8>>,
 
 fn trim_left_zero(value: &[u8]) -> &[u8] {
     let mut pos = 0;
-    for v in value.iter() {
+    for v in value {
         if *v != 0 {
             break;
         }
@@ -377,11 +377,11 @@ mod test {
 
     #[test]
     fn test_trim_left_zero() {
-        assert_eq!(trim_left_zero(&[1, 2, 3, 4]), &vec![1, 2, 3, 4]);
-        assert_eq!(trim_left_zero(&[1, 2, 3, 0]), &vec![1, 2, 3, 0]);
-        assert_eq!(trim_left_zero(&[0, 2, 3, 0]), &vec![2, 3, 0]);
-        assert_eq!(trim_left_zero(&[0, 0, 3, 0]), &vec![3, 0]);
-        assert_eq!(trim_left_zero(&[0, 0, 0, 4]), &vec![4]);
+        assert_eq!(trim_left_zero(&[1, 2, 3, 4]), [1, 2, 3, 4]);
+        assert_eq!(trim_left_zero(&[1, 2, 3, 0]), [1, 2, 3, 0]);
+        assert_eq!(trim_left_zero(&[0, 2, 3, 0]), [2, 3, 0]);
+        assert_eq!(trim_left_zero(&[0, 0, 3, 0]), [3, 0]);
+        assert_eq!(trim_left_zero(&[0, 0, 0, 4]), [4]);
         assert!(trim_left_zero(&[0, 0, 0, 0]).is_empty());
         assert!(trim_left_zero(&[]).is_empty());
     }
