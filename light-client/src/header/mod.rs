@@ -1,4 +1,6 @@
 use alloc::vec::Vec;
+use k256::sha2::digest::core_api::Block;
+use std::collections::BTreeMap;
 
 use light_client::types::{Any, Height, Time};
 use prost::Message as _;
@@ -14,7 +16,8 @@ use crate::header::eth_headers::ETHHeaders;
 use crate::header::validator_set::{
     EitherValidatorSet, TrustedValidatorSet, UntrustedValidatorSet, ValidatorSet,
 };
-use crate::misc::{new_height, new_timestamp, ChainId, Hash};
+use crate::header::vote_attestation::VoteAttestation;
+use crate::misc::{new_height, new_timestamp, BlockNumber, ChainId, Hash};
 
 use super::errors::Error;
 
@@ -72,6 +75,16 @@ impl Header {
 
     pub fn block_hash(&self) -> &Hash {
         &self.headers.target.hash
+    }
+
+    pub fn votes(&self) -> Vec<(BlockNumber, VoteAttestation)> {
+        let mut votes = vec![];
+        for h in self.headers.all.iter() {
+            if let Ok(vote) = h.get_vote_attestation() {
+                votes.push((h.number, vote));
+            }
+        }
+        votes
     }
 
     pub fn verify(

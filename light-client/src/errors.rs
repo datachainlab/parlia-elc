@@ -2,6 +2,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Formatter;
 
+use crate::header::vote_attestation::{VoteAttestation, VoteData};
 use k256::ecdsa::signature;
 use light_client::commitments::Error as CommitmentError;
 use light_client::types::{ClientId, Height, Time, TimeError};
@@ -110,7 +111,8 @@ pub enum Error {
     MissingHeader2,
     UnexpectedClientId(String),
     UnexpectedDifferentHeight(Height, Height),
-    UnexpectedSameBlockHash(Height),
+    UnexpectedSameBlockHash(Height, Height, Hash),
+    UnexpectedHonestVote(Height, Height),
     TrieError(BoxedTrieError),
 }
 
@@ -196,8 +198,11 @@ impl core::fmt::Display for Error {
             Error::UnexpectedDifferentHeight(e1, e2) => {
                 write!(f, "UnexpectedDifferentHeight : {} {}", e1, e2)
             }
-            Error::UnexpectedSameBlockHash(e1) => {
-                write!(f, "UnexpectedSameBlockHash : {}", e1)
+            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
+                write!(f, "UnexpectedSameBlockHash : {} {} {:?}", e1, e2, e3)
+            }
+            Error::UnexpectedHonestVote(e1, e2) => {
+                write!(f, "UnexpectedHonestVote : {} {}", e1, e2)
             }
             Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1),
             Error::UnexpectedStateValue(e1, e2, e3, e4, e5) => {

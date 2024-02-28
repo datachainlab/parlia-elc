@@ -7,7 +7,9 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehaviour;
 
 use crate::errors::Error;
+use crate::header::vote_attestation::VoteAttestation;
 use crate::header::Header;
+use crate::misc::BlockNumber;
 
 pub const PARLIA_MISBEHAVIOUR_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Misbehaviour";
 
@@ -16,6 +18,57 @@ pub struct Misbehaviour {
     pub client_id: ClientId,
     pub header_1: Header,
     pub header_2: Header,
+}
+
+impl Misbehaviour {
+    pub fn verify(&self) -> Result<(), Error> {
+        let h1 = &self.header_1;
+        let h2 = &self.header_2;
+        if h1.height() == h2.height() {
+            // exactly same block is not misbehavior
+            if h1.block_hash() == h2.block_hash() {
+                return Err(Error::UnexpectedSameBlockHash(
+                    h1.height(),
+                    h2.height(),
+                    *h1.block_hash(),
+                ));
+            }
+            return Ok(());
+        }
+        let _ = self.verify_malicious_vote()?;
+        Ok(())
+    }
+
+    fn verify_malicious_vote(
+        &self,
+    ) -> Result<(BlockNumber, VoteAttestation, BlockNumber, VoteAttestation), Error> {
+        let h1 = &self.header_1;
+        let h2 = &self.header_2;
+        for (h1_num, v1) in h1.votes() {
+            for (h2_num, v2) in h2.votes() {
+                if h1_num == h2_num {
+                    continue;
+                }
+                if v1.data.source_number == v2.data.source_number {
+                    //TODO log
+                    return Ok((h1_num, v1, h2_num, v2));
+                }
+                if v1.data.target_number == v2.data.target_number {
+                    //TODO log
+                    return Ok((h1_num, v1, h2_num, v2));
+                }
+                if (v1.data.source_number
+                    < v2.data.source_number & v2.data.target_number & v1.data.target_number)
+                    || (v2.data.source_number
+                        < v1.data.source_number & v1.data.target_number & v2.data.target_number)
+                {
+                    //TODO log
+                    return Ok((h1_num, v1, h2_num, v2));
+                }
+            }
+        }
+        Err(Error::UnexpectedHonestVote(h1.height(), h2.height()))
+    }
 }
 
 impl TryFrom<RawMisbehaviour> for Misbehaviour {
@@ -28,14 +81,6 @@ impl TryFrom<RawMisbehaviour> for Misbehaviour {
         let header_1 = Header::try_from(value.header_1.ok_or(Error::MissingHeader1)?)?;
         let header_2 = Header::try_from(value.header_2.ok_or(Error::MissingHeader2)?)?;
 
-        let h1_height = header_1.height();
-        let h2_height = header_2.height();
-        if h1_height != h2_height {
-            return Err(Error::UnexpectedDifferentHeight(h1_height, h2_height));
-        }
-        if header_1.block_hash() == header_2.block_hash() {
-            return Err(Error::UnexpectedSameBlockHash(h1_height));
-        }
         Ok(Self {
             client_id,
             header_1,
@@ -138,7 +183,11 @@ mod test {
             header_2: Some(to_raw(&h1)),
         };
         match Misbehaviour::try_from(src).unwrap_err() {
-            Error::UnexpectedSameBlockHash(height) => assert_eq!(height, new_height(0, h1.number)),
+            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
+                assert_eq!(e1, new_height(0, h1.number));
+                assert_eq!(e2, new_height(0, h1.number));
+                assert_eq!(e3, h1.hash);
+            }
             err => unreachable!("{:?}", err),
         }
     }
