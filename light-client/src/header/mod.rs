@@ -473,12 +473,6 @@ pub(crate) mod test {
         v
     }
 
-    fn to_validator_set_with_validators(h: Hash, v: Validators) -> ValidatorSet {
-        let mut v: ValidatorSet = v.into();
-        v.hash = h;
-        v
-    }
-
     #[test]
     fn test_success_verify_validator_set() {
         let cs = ConsensusState {

@@ -53,10 +53,10 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        mut header: Header,
+        header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &mut header)?;
+        self.check_header(now, trusted_consensus_state, &header)?;
 
         let mut new_client_state = self.clone();
         let header_height = header.height();
@@ -89,19 +89,14 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        mut misbehaviour: Misbehaviour,
+        misbehaviour: &Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(
-        &self,
-        now: Time,
-        cs: &ConsensusState,
-        header: &mut Header,
-    ) -> Result<(), Error> {
+    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         validate_within_trusting_period(
             now,
@@ -400,8 +395,8 @@ mod test {
         let h = header_31297200();
         let now = new_timestamp(h.timestamp - 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let mut header = header_fn(0, vec![h]);
-        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        let header = header_fn(0, vec![h]);
+        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::HeaderFromFuture(_, _, _) => {}
             err => unreachable!("{:?}", err),
@@ -411,8 +406,8 @@ mod test {
         let h = header_31297200();
         let now = new_timestamp(h.timestamp + 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let mut header = header_fn(1, vec![h]);
-        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        let header = header_fn(1, vec![h]);
+        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedHeaderRevision(n1, n2) => {
                 assert_eq!(cs.chain_id.version(), n1);
@@ -423,8 +418,8 @@ mod test {
 
         // fail: verify_validator_set
         let h = header_31297200();
-        let mut header = header_fn(0, vec![h.clone()]);
-        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        let header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedPreviousValidatorsHash(h1, h2, _, _) => {
                 assert_eq!(h1.revision_height(), h.number - 1);
@@ -436,8 +431,8 @@ mod test {
         // fail: header.verify
         let h = header_31297200();
         cons_state.current_validators_hash = keccak_256_vec(&[h.coinbase.clone()]);
-        let mut header = header_fn(0, vec![h.clone()]);
-        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
+        let header = header_fn(0, vec![h.clone()]);
+        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedCoinbase(number) => {
                 assert_eq!(number, h.number);
