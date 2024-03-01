@@ -53,10 +53,13 @@ impl Misbehaviour {
                     //TODO log
                     return Ok((h1_num, v1, h2_num, v2));
                 }
+                // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP126.md#411-validator-vote-rules
+                // Check rule 1
                 if v1.data.target_number == v2.data.target_number {
                     //TODO log
                     return Ok((h1_num, v1, h2_num, v2));
                 }
+                // Check rule 2
                 if (v1.data.source_number
                     < v2.data.source_number & v2.data.target_number & v1.data.target_number)
                     || (v2.data.source_number
