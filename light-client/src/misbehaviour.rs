@@ -7,7 +7,7 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehaviour;
 
 use crate::errors::Error;
-use crate::header::vote_attestation::VoteAttestation;
+use crate::header::vote_attestation::{VoteAttestation, VoteData};
 use crate::header::Header;
 use crate::misc::BlockNumber;
 
@@ -18,6 +18,13 @@ pub struct Misbehaviour {
     pub client_id: ClientId,
     pub header_1: Header,
     pub header_2: Header,
+}
+
+#[derive(Debug)]
+pub enum VerifyVoteResult {
+    SourceNumber(BlockNumber, BlockNumber, BlockNumber),
+    TargetNumber(BlockNumber, BlockNumber, BlockNumber),
+    Range(BlockNumber, VoteData, BlockNumber, VoteData),
 }
 
 impl Misbehaviour {
@@ -39,9 +46,7 @@ impl Misbehaviour {
         Ok(())
     }
 
-    fn verify_malicious_vote(
-        &self,
-    ) -> Result<(BlockNumber, VoteAttestation, BlockNumber, VoteAttestation), Error> {
+    fn verify_malicious_vote(&self) -> Result<VerifyVoteResult, Error> {
         let h1 = &self.header_1;
         let h2 = &self.header_2;
         for (h1_num, v1) in h1.votes() {
@@ -49,24 +54,30 @@ impl Misbehaviour {
                 if h1_num == h2_num {
                     continue;
                 }
+                // source number is unique in finalized blocks
                 if v1.data.source_number == v2.data.source_number {
-                    //TODO log
-                    return Ok((h1_num, v1, h2_num, v2));
+                    return Ok(VerifyVoteResult::SourceNumber(
+                        h1_num,
+                        h2_num,
+                        v1.data.source_number,
+                    ));
                 }
                 // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP126.md#411-validator-vote-rules
                 // Check rule 1
                 if v1.data.target_number == v2.data.target_number {
-                    //TODO log
-                    return Ok((h1_num, v1, h2_num, v2));
+                    return Ok(VerifyVoteResult::SourceNumber(
+                        h1_num,
+                        h2_num,
+                        v1.data.target_number,
+                    ));
                 }
                 // Check rule 2
-                if (v1.data.source_number
-                    < v2.data.source_number & v2.data.target_number & v1.data.target_number)
-                    || (v2.data.source_number
-                        < v1.data.source_number & v1.data.target_number & v2.data.target_number)
+                if (v1.data.source_number < v2.data.source_number
+                    && v2.data.target_number < v1.data.target_number)
+                    || (v2.data.source_number < v1.data.source_number
+                        && v1.data.target_number < v2.data.target_number)
                 {
-                    //TODO log
-                    return Ok((h1_num, v1, h2_num, v2));
+                    return Ok(VerifyVoteResult::Range(h1_num, v1.data, h2_num, v2.data));
                 }
             }
         }
@@ -178,42 +189,6 @@ mod test {
     }
 
     #[test]
-    fn test_error_try_from_same_block() {
-        let h1 = header_31297201();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h1)),
-        };
-        match Misbehaviour::try_from(src).unwrap_err() {
-            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
-                assert_eq!(e1, new_height(0, h1.number));
-                assert_eq!(e2, new_height(0, h1.number));
-                assert_eq!(e3, h1.hash);
-            }
-            err => unreachable!("{:?}", err),
-        }
-    }
-
-    #[test]
-    fn test_error_try_from_different_height() {
-        let h1 = header_31297201();
-        let h2 = header_31297202();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
-        };
-        match Misbehaviour::try_from(src).unwrap_err() {
-            Error::UnexpectedDifferentHeight(h1_height, h2_height) => {
-                assert_eq!(h1_height, new_height(0, h1.number));
-                assert_eq!(h2_height, new_height(0, h2.number))
-            }
-            err => unreachable!("{:?}", err),
-        }
-    }
-
-    #[test]
     fn test_success_try_from() {
         let h1 = header_31297201();
         let mut h2 = header_31297201();
@@ -227,5 +202,71 @@ mod test {
         assert_eq!(misbehaviour.client_id.as_str(), "xx-parlia-1");
         assert_eq!(misbehaviour.header_1.height(), new_height(0, h1.number));
         assert_eq!(misbehaviour.header_2.height(), new_height(0, h2.number));
+    }
+
+    #[test]
+    fn test_error_verify_same_block() {
+        let h1 = header_31297201();
+        let src = RawMisbehaviour {
+            client_id: "xx-parlia-1".to_string(),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h1)),
+        };
+        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        match misbehaviour.verify().unwrap_err() {
+            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
+                assert_eq!(e1, new_height(0, h1.number));
+                assert_eq!(e2, new_height(0, h1.number));
+                assert_eq!(e3, h1.hash);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_success_verify_same_height() {
+        let h1 = header_31297201();
+        let mut h2 = header_31297201();
+        h2.coinbase = header_31297202().coinbase;
+        let src = RawMisbehaviour {
+            client_id: "xx-parlia-1".to_string(),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h2)),
+        };
+        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        misbehaviour.verify().unwrap();
+    }
+
+    #[test]
+    fn test_error_verify_other_height() {
+        let h1 = header_31297201();
+        let h2 = header_31297202();
+        let src = RawMisbehaviour {
+            client_id: "xx-parlia-1".to_string(),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h2)),
+        };
+        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        match misbehaviour.verify().unwrap_err() {
+            Error::UnexpectedHonestVote(e1, e2) => {
+                assert_eq!(e1.revision_height(), h1.number);
+                assert_eq!(e2.revision_height(), h2.number);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_success_verify_other_height() {
+        let h1 = header_31297201();
+        let mut h2 = header_31297202();
+        h2.extra_data = h1.extra_data.clone();
+        let src = RawMisbehaviour {
+            client_id: "xx-parlia-1".to_string(),
+            header_1: Some(to_raw(&h1)),
+            header_2: Some(to_raw(&h2)),
+        };
+        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        misbehaviour.verify().unwrap();
     }
 }
