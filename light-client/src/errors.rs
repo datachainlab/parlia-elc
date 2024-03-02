@@ -2,7 +2,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Formatter;
 
-use crate::header::vote_attestation::{VoteAttestation, VoteData};
 use k256::ecdsa::signature;
 use light_client::commitments::Error as CommitmentError;
 use light_client::types::{ClientId, Height, Time, TimeError};

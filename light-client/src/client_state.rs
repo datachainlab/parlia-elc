@@ -11,10 +11,9 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::header::vote_attestation::VoteAttestation;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
-use crate::misc::{new_height, Address, BlockNumber, ChainId, Hash};
+use crate::misc::{new_height, Address, ChainId, Hash};
 
 pub const PARLIA_CLIENT_STATE_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.ClientState";
 
@@ -97,7 +96,7 @@ impl ClientState {
 
         misbehaviour.verify()?;
 
-        return Ok(self.clone().freeze());
+        Ok(self.clone().freeze())
     }
 
     fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
