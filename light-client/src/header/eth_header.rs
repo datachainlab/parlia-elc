@@ -35,6 +35,8 @@ const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
 const EMPTY_MIX_HASH: Hash =
     hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
+const CONSECUTIVE_BLOCKS: u64 = 1;
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
     pub parent_hash: Vec<u8>,
@@ -181,9 +183,31 @@ impl ETHHeader {
             return Err(Error::MissingSignerInValidator(self.number, signer));
         }
 
-        // Don't check that the difficulty corresponds to the turn-ness of the signer
+        // Ensure that the difficulty corresponds to the turn-ness of the signer
+        self.verify_validator_rotation(validator_set)?;
 
         Ok(signer)
+    }
+
+    fn verify_validator_rotation(&self, validators: &Validators) -> Result<(), Error> {
+        let offset = (self.number / CONSECUTIVE_BLOCKS) as usize % validators.len();
+        let inturn_validator = &validators[offset][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN];
+        if inturn_validator == self.coinbase {
+            if self.difficulty != DIFFICULTY_INTURN {
+                return Err(Error::UnexpectedDifficultyInTurn(
+                    self.number,
+                    self.difficulty,
+                    offset,
+                ));
+            }
+        } else if self.difficulty != DIFFICULTY_NOTURN {
+            return Err(Error::UnexpectedDifficultyNoTurn(
+                self.number,
+                self.difficulty,
+                offset,
+            ));
+        }
+        Ok(())
     }
 
     pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
@@ -393,7 +417,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_header::{
-        ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
+        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
+        PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
     };
 
     use rlp::RlpStream;
@@ -695,6 +720,38 @@ pub(crate) mod test {
             ) => {
                 assert_eq!(parent.number - 1, source);
                 assert_eq!(parent.number, parent_target);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_verify_validator_rotation_inturn() {
+        let mut header = header_31297201();
+        header.difficulty = DIFFICULTY_NOTURN;
+        let vals = validators_in_31297000();
+        match header.verify_validator_rotation(&vals).unwrap_err() {
+            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
+                assert_eq!(e3, 19);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_error_verify_validator_rotation_noturn() {
+        let mut header = header_31297201();
+        header.difficulty = DIFFICULTY_INTURN;
+        header.coinbase =
+            validators_in_31297000()[0][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].to_vec();
+        let vals = validators_in_31297000();
+        match header.verify_validator_rotation(&vals).unwrap_err() {
+            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
+                assert_eq!(e3, 19);
             }
             err => unreachable!("{:?}", err),
         }
