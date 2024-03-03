@@ -547,6 +547,85 @@ pub(crate) mod test {
     }
 
     #[test]
+    fn test_success_try_from_with_bep336_field() {
+        let base_fn = || {
+            let header = header_31297200();
+            let mut stream = RlpStream::new();
+            stream.begin_unbounded_list();
+            stream.append(&header.parent_hash);
+            stream.append(&header.uncle_hash);
+            stream.append(&header.coinbase);
+            stream.append(&header.root.to_vec());
+            stream.append(&header.tx_hash);
+            stream.append(&header.receipt_hash);
+            stream.append(&header.bloom);
+            stream.append(&header.difficulty);
+            stream.append(&header.number);
+            stream.append(&header.gas_limit);
+            stream.append(&header.gas_used);
+            stream.append(&header.timestamp);
+            stream.append(&header.extra_data);
+            stream.append(&header.mix_digest);
+            stream.append(&header.nonce);
+            stream
+        };
+
+        let mut stream = base_fn();
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        let v = ETHHeader::try_from(raw).unwrap();
+        assert_eq!(v.hash, header_31297200().hash);
+
+        // with base_fee_per_gas
+        let base_fee_per_gas: u64 = 2;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with withdrawals_hash
+        let withdrawals_hash = header_31297200().tx_hash;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with blob_gas_used
+        let blob_gas_used: u64 = 3;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.append(&blob_gas_used);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with excess_blob_gas
+        let excess_blob_gas: u64 = 4;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.append(&blob_gas_used);
+        stream.append(&excess_blob_gas);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+    }
+
+    #[test]
     fn test_success_verify_seal() {
         let validators = validators_in_31297000();
         let blocks = vec![
