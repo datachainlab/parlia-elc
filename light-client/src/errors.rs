@@ -89,6 +89,8 @@ pub enum Error {
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
     UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
     MissingTrustedCurrentValidators(BlockNumber),
+    UnexpectedDifficultyInTurn(BlockNumber, u64, usize),
+    UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -326,6 +328,12 @@ impl core::fmt::Display for Error {
             }
             Error::LCPCommitmentError(e1) => {
                 write!(f, "LCPCommitmentError : {}", e1)
+            }
+            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyInTurn : {} {} {}", e1, e2, e3)
+            }
+            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyNoTurn : {} {} {}", e1, e2, e3)
             }
         }
     }
