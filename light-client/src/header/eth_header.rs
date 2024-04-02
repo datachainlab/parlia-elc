@@ -303,6 +303,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let mix_digest: Vec<u8> = rlp.try_next_as_val()?;
         let nonce: Vec<u8> = rlp.try_next_as_val()?;
         let base_fee_per_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let withdrawals_hash: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -341,11 +344,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // create block hash
-        let mut size = 15;
-        if base_fee_per_gas.is_some() {
-            size += 1;
-        }
-        let mut stream = RlpStream::new_list(size);
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
         stream.append(&parent_hash);
         stream.append(&uncle_hash);
         stream.append(&coinbase);
@@ -361,10 +361,40 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
-        //https://github.com/bnb-chain/bsc/blob/bb6bdc055d1a7f1f049c924028ad8aaf04291b3b/core/types/gen_header_rlp.go#L43
-        if let Some(v) = base_fee_per_gas {
-            stream.append(&v);
+        // https://github.com/bnb-chain/bsc/blob/4b45c5993c87d12c520a89e0d3d059e4d6b6eb9c/core/types/gen_header_rlp.go#L57
+        if base_fee_per_gas.is_some()
+            || withdrawals_hash.is_some()
+            || blob_gas_used.is_some()
+            || excess_blob_gas.is_some()
+        {
+            if let Some(v) = base_fee_per_gas {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
         }
+        if withdrawals_hash.is_some() || blob_gas_used.is_some() || excess_blob_gas.is_some() {
+            if let Some(v) = withdrawals_hash {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if blob_gas_used.is_some() || excess_blob_gas.is_some() {
+            if let Some(v) = blob_gas_used {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if excess_blob_gas.is_some() {
+            if let Some(v) = excess_blob_gas {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        stream.finalize_unbounded_list();
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
@@ -514,6 +544,85 @@ pub(crate) mod test {
             }
             err => unreachable!("{:?}", err),
         };
+    }
+
+    #[test]
+    fn test_success_try_from_with_bep336_field() {
+        let base_fn = || {
+            let header = header_31297200();
+            let mut stream = RlpStream::new();
+            stream.begin_unbounded_list();
+            stream.append(&header.parent_hash);
+            stream.append(&header.uncle_hash);
+            stream.append(&header.coinbase);
+            stream.append(&header.root.to_vec());
+            stream.append(&header.tx_hash);
+            stream.append(&header.receipt_hash);
+            stream.append(&header.bloom);
+            stream.append(&header.difficulty);
+            stream.append(&header.number);
+            stream.append(&header.gas_limit);
+            stream.append(&header.gas_used);
+            stream.append(&header.timestamp);
+            stream.append(&header.extra_data);
+            stream.append(&header.mix_digest);
+            stream.append(&header.nonce);
+            stream
+        };
+
+        let mut stream = base_fn();
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        let v = ETHHeader::try_from(raw).unwrap();
+        assert_eq!(v.hash, header_31297200().hash);
+
+        // with base_fee_per_gas
+        let base_fee_per_gas: u64 = 2;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with withdrawals_hash
+        let withdrawals_hash = header_31297200().tx_hash;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with blob_gas_used
+        let blob_gas_used: u64 = 3;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.append(&blob_gas_used);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
+
+        // with excess_blob_gas
+        let excess_blob_gas: u64 = 4;
+        let mut stream = base_fn();
+        stream.append(&base_fee_per_gas);
+        stream.append(&withdrawals_hash);
+        stream.append(&blob_gas_used);
+        stream.append(&excess_blob_gas);
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        ETHHeader::try_from(raw).unwrap();
     }
 
     #[test]
