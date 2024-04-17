@@ -303,7 +303,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let mix_digest: Vec<u8> = rlp.try_next_as_val()?;
         let nonce: Vec<u8> = rlp.try_next_as_val()?;
         let base_fee_per_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
-        let withdrawals_hash: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let withdrawals_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
@@ -425,6 +425,7 @@ pub(crate) mod test {
     use crate::header::eth_header::{
         ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
     };
+    use hex_literal::hex;
 
     use rlp::RlpStream;
 
@@ -623,6 +624,52 @@ pub(crate) mod test {
             header: stream.out().to_vec(),
         };
         ETHHeader::try_from(raw).unwrap();
+
+        // testnet after Typcho
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
+        stream.append(
+            &hex!("bc7d1149db8ecb83b784b9418511e9997e12a0acf419ca344b952da42b25209a").to_vec(),
+        );
+        stream.append(
+            &hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").to_vec(),
+        );
+        stream.append(&hex!("53387f3321fd69d1e030bb921230dfb188826aff").to_vec());
+        stream.append(
+            &hex!("6b295725152189db64d8afe76ebbc78d04ad3452ee5c0613d2cdde234aae6518").to_vec(),
+        );
+        stream.append(
+            &hex!("b49a9e69547c01e22100afa0dac47ad573a73c8a456d368aa78a20a1be3b8f61").to_vec(),
+        );
+        stream.append(
+            &hex!("3f1e435e6e4833d5ce8ff9fbdb1e8fc61b71c75f03de98e1dd96662363230fb4").to_vec(),
+        );
+        stream.append(&hex!("000020000000080100900040a00001000000400000020000000440002020081000001002000000000000000000000001020000040004100000111001000c60000240000100020008020100880000000020100000040400000000010000000000002c0020220200000006000028000800082200000000088000002010100008000040400482000000080080001000000008100400280000000040008000000020000080004000062008000010020000000000000000000020000080080000002080021012040028040002000002000000400000000408064000104002000060001200000010000000010040340000110020008040000420004000080000000000").to_vec());
+        stream.append(&u64::from_str_radix("1", 16).unwrap());
+        stream.append(&u64::from_str_radix("25b7469", 16).unwrap());
+        stream.append(&u64::from_str_radix("42c1d80", 16).unwrap());
+        stream.append(&u64::from_str_radix("14c285", 16).unwrap());
+        stream.append(&u64::from_str_radix("661fc104", 16).unwrap());
+        stream.append(&hex!("d883010405846765746888676f312e32312e36856c696e7578000000821df8b9f8b381f7b860881105fa9e628179b4be7c807d56d7f83e0354604a31a3a0610dc2cfd312f089cca6cf0dc22e0a675179cafcdd0fcd5309257163c6c53b48404671f1cbdb5d4c38de16ffc0e0951c4d3141de1748399ddf4fa51b4fadfbe0201b4d30a2b7fffef84c84025b7467a0dd8f3ec7f7613d048271569ed3b3712b1a8c91a9039ab0e15395b345a76459fa84025b7468a0bc7d1149db8ecb83b784b9418511e9997e12a0acf419ca344b952da42b25209a80174ffd16859a8984cb5c4420784ac48f5df3c5be2225f009d3f78a26ab8766fa05589316bb3d657c8b5f0796afcef09bb284c4bbef83d89d980fe6958022906e01").to_vec());
+        stream.append(
+            &hex!("0000000000000000000000000000000000000000000000000000000000000000").to_vec(),
+        );
+        stream.append(&hex!("0000000000000000").to_vec());
+        stream.append(&u64::from_str_radix("0", 16).unwrap());
+        stream.append(
+            &hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").to_vec(),
+        );
+        stream.append(&u64::from_str_radix("0", 16).unwrap());
+        stream.append(&u64::from_str_radix("0", 16).unwrap());
+        stream.finalize_unbounded_list();
+        let raw = RawETHHeader {
+            header: stream.out().to_vec(),
+        };
+        let hash = ETHHeader::try_from(raw).unwrap().hash;
+        assert_eq!(
+            hash,
+            hex!("6de91bc2b08a30d2082b7d3077e6ad381d040373b706d231cff899b096322972")
+        )
     }
 
     #[test]
