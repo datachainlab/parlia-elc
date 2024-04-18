@@ -625,7 +625,7 @@ pub(crate) mod test {
         };
         ETHHeader::try_from(raw).unwrap();
 
-        // testnet after Typcho
+        // testnet after Tycho
         let mut stream = RlpStream::new();
         stream.begin_unbounded_list();
         stream.append(
