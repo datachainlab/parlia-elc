@@ -819,8 +819,11 @@ mod test {
         let misbehavior = Misbehaviour::try_from(any.clone()).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
         let trusted_cs = ConsensusState {
-            current_validators_hash: misbehavior.header_1.current_validators_hash(),
-            previous_validators_hash: misbehavior.header_1.previous_validators_hash(),
+            current_validators_hash: misbehavior
+                .header_1
+                .current_epoch_validators_hash()
+                .unwrap(),
+            previous_validators_hash: misbehavior.header_1.previous_epoch_validators_hash(),
             ..Default::default()
         };
         mock_consensus_state.insert(misbehavior.header_1.trusted_height(), trusted_cs);
