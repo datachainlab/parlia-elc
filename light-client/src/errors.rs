@@ -50,8 +50,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
-    MissingPreviousEpochValidators(BlockNumber),
-    MissingCurrentEpochOrTrustedForNonNeighboringEpochValidators(BlockNumber),
+    MissingPreviousValidators(BlockNumber),
+    MissingCurrentValidators(BlockNumber),
     OutOfTrustingPeriod(Time, Time),
     HeaderFromFuture(Time, core::time::Duration, Time),
     MissingTrustedHeight,
@@ -254,15 +254,11 @@ impl core::fmt::Display for Error {
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
             }
-            Error::MissingPreviousEpochValidators(e1) => {
-                write!(f, "MissingPreviousEpochValidators : {:?}", e1)
+            Error::MissingPreviousValidators(e1) => {
+                write!(f, "MissingPreviousValidators : {:?}", e1)
             }
-            Error::MissingCurrentEpochOrTrustedForNonNeighboringEpochValidators(e1) => {
-                write!(
-                    f,
-                    "MissingCurrentEpochOrTrustedForNonNeighboringEpochValidators : {:?}",
-                    e1
-                )
+            Error::MissingCurrentValidators(e1) => {
+                write!(f, "MissingCurrentValidators : {:?}", e1)
             }
             Error::UnexpectedMixHash(e1) => {
                 write!(f, "UnexpectedMixHash : {:?}", e1)

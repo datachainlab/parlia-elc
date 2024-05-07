@@ -70,6 +70,8 @@ impl Header {
         self.previous_validators.hash
     }
 
+    /// In non-adjacent epochs, current_validators contains the validator set of trusted_height,
+    /// so you need to use the validator set of extra_data of target.
     pub fn current_epoch_validators_hash(&self) -> Result<Hash, Error> {
         if self.headers.target.is_epoch() {
             return Ok(self.headers.target.get_validator_set()?.hash);
@@ -88,7 +90,7 @@ impl Header {
     ) -> Result<(), Error> {
         if self.is_non_neighboring_epoch() {
             let n_val = self.headers.target.get_validator_set()?;
-            // 'current_validators' are trusted validators in non non-neighboring epoch verification.
+            // 'current_validators' are trusted validators in non-neighboring epoch verification.
             let t_val = &self.current_validators;
             let (t_val, n_val) = verify_validator_set_non_neighboring_epoch(
                 consensus_state,
@@ -251,15 +253,11 @@ impl TryFrom<RawHeader> for Header {
         }
 
         if value.previous_validators.is_empty() {
-            return Err(Error::MissingPreviousEpochValidators(headers.target.number));
+            return Err(Error::MissingPreviousValidators(headers.target.number));
         }
 
         if value.current_validators.is_empty() {
-            return Err(
-                Error::MissingCurrentEpochOrTrustedForNonNeighboringEpochValidators(
-                    headers.target.number,
-                ),
-            );
+            return Err(Error::MissingCurrentValidators(headers.target.number));
         }
 
         Ok(Self {
@@ -373,7 +371,7 @@ pub(crate) mod test {
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
-            Error::MissingPreviousEpochValidators(number) => {
+            Error::MissingPreviousValidators(number) => {
                 assert_eq!(number, h.number);
             }
             err => unreachable!("{:?}", err),
@@ -396,7 +394,7 @@ pub(crate) mod test {
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
-            Error::MissingCurrentEpochOrTrustedForNonNeighboringEpochValidators(number) => {
+            Error::MissingCurrentValidators(number) => {
                 assert_eq!(number, h.number);
             }
             err => unreachable!("{:?}", err),
