@@ -35,6 +35,10 @@ pub struct Header {
     headers: ETHHeaders,
     trusted_height: Height,
     previous_validators: ValidatorSet,
+    /// validator set
+    /// - not a epoch block: current epoch validators (which must be in trusted cons state)
+    /// - non neighboring epoch header: validators in trusted cons state
+    /// - neighboring epoch header: validators in extra data
     current_validators: ValidatorSet,
 }
 
@@ -62,12 +66,17 @@ impl Header {
         &self.headers.target.root
     }
 
-    pub fn previous_validators_hash(&self) -> Hash {
+    pub fn previous_epoch_validators_hash(&self) -> Hash {
         self.previous_validators.hash
     }
 
-    pub fn current_validators_hash(&self) -> Hash {
-        self.current_validators.hash
+    /// In non-adjacent epochs, current_validators contains the validator set of trusted_height,
+    /// so you need to use the validator set of extra_data of target.
+    pub fn current_epoch_validators_hash(&self) -> Result<Hash, Error> {
+        if self.headers.target.is_epoch() {
+            return Ok(self.headers.target.get_validator_set()?.hash);
+        }
+        Ok(self.current_validators.hash)
     }
 
     pub fn block_hash(&self) -> &Hash {
@@ -81,11 +90,13 @@ impl Header {
     ) -> Result<(), Error> {
         if self.is_non_neighboring_epoch() {
             let n_val = self.headers.target.get_validator_set()?;
+            // 'current_validators' are trusted validators in non-neighboring epoch verification.
+            let t_val = &self.current_validators;
             let (t_val, n_val) = verify_validator_set_non_neighboring_epoch(
                 consensus_state,
                 self.height(),
                 self.trusted_height(),
-                &self.current_validators,
+                t_val,
                 &n_val,
             )?;
 
@@ -242,19 +253,11 @@ impl TryFrom<RawHeader> for Header {
         }
 
         if value.previous_validators.is_empty() {
-            return Err(Error::MissingPreviousTrustedValidators(
-                headers.target.number,
-            ));
+            return Err(Error::MissingPreviousValidators(headers.target.number));
         }
 
-        // Epoch header contains validator set
-        // - not a epoch block: current epoch validators (which must be in trusted cons state)
-        // - non neighboring epoch header: validators in trusted cons state
-        // - neighboring epoch header: validators in extra data
         if value.current_validators.is_empty() {
-            return Err(Error::MissingCurrentTrustedValidators(
-                headers.target.number,
-            ));
+            return Err(Error::MissingCurrentValidators(headers.target.number));
         }
 
         Ok(Self {
@@ -368,7 +371,7 @@ pub(crate) mod test {
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
-            Error::MissingPreviousTrustedValidators(number) => {
+            Error::MissingPreviousValidators(number) => {
                 assert_eq!(number, h.number);
             }
             err => unreachable!("{:?}", err),
@@ -391,7 +394,7 @@ pub(crate) mod test {
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
-            Error::MissingCurrentTrustedValidators(number) => {
+            Error::MissingCurrentValidators(number) => {
                 assert_eq!(number, h.number);
             }
             err => unreachable!("{:?}", err),

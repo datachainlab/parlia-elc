@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "parlia-elc"
-version = "0.3.0"
+version = "0.2.9"
 dependencies = [
  "elliptic-curve",
  "hex-literal",
