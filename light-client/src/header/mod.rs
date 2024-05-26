@@ -241,6 +241,7 @@ impl TryFrom<Any> for Header {
 
 #[cfg(test)]
 pub(crate) mod testdata;
+mod epoch;
 
 #[cfg(test)]
 pub(crate) mod test {
