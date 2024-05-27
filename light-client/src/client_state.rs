@@ -271,14 +271,27 @@ mod test {
     use parlia_ibc_proto::ibc::core::client::v1::Height;
 
     use crate::consensus_state::ConsensusState;
+    use crate::header::epoch::Epoch;
     use crate::header::eth_header::ETHHeader;
     use crate::header::testdata::{
         header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
     };
+    use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
-    use crate::misc::{keccak_256_vec, new_timestamp, ChainId};
+    use crate::misc::{keccak_256_vec, new_timestamp, ChainId, Hash};
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+
+    fn make_cs_hash(hash: Hash) -> Hash {
+        Epoch::new(
+            ValidatorSet {
+                validators: vec![],
+                hash,
+            },
+            1,
+        )
+        .hash()
+    }
 
     #[test]
     fn test_error_check_header_and_update_state() {
@@ -297,8 +310,8 @@ mod test {
         let cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(h.timestamp).unwrap(),
-            current_validators_hash: keccak_256_vec(&validators_in_31297000()),
-            previous_validators_hash: keccak_256_vec(&validators_in_31297000()),
+            current_validators_hash: make_cs_hash(keccak_256_vec(&validators_in_31297000())),
+            previous_validators_hash: make_cs_hash(keccak_256_vec(&validators_in_31297000())),
         };
         let raw = RawHeader {
             headers: vec![h.try_into().unwrap()],
@@ -393,8 +406,8 @@ mod test {
         let mut cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(0).unwrap(),
-            current_validators_hash: [0u8; 32],
-            previous_validators_hash: [0u8; 32],
+            current_validators_hash: make_cs_hash([0u8; 32]),
+            previous_validators_hash: make_cs_hash([0u8; 32]),
         };
 
         // fail: validate_trusting_period
@@ -436,7 +449,7 @@ mod test {
 
         // fail: header.verify
         let h = header_31297200();
-        cons_state.current_validators_hash = keccak_256_vec(&[h.coinbase.clone()]);
+        cons_state.current_validators_hash = make_cs_hash(keccak_256_vec(&[h.coinbase.clone()]));
         let header = header_fn(0, vec![h.clone()]);
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {

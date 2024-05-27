@@ -28,6 +28,8 @@ pub mod eth_headers;
 pub mod validator_set;
 pub mod vote_attestation;
 
+pub mod epoch;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
     account_proof: Vec<u8>,
@@ -246,7 +248,6 @@ impl TryFrom<Any> for Header {
     }
 }
 
-mod epoch;
 #[cfg(test)]
 pub(crate) mod testdata;
 
