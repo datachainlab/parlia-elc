@@ -87,7 +87,7 @@ mod test {
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
             previous_turn_term: 1,
-            current_turn_term: 1
+            current_turn_term: 1,
         }
     }
 

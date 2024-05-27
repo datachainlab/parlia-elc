@@ -1,13 +1,13 @@
-use patricia_merkle_trie::keccak::keccak_256;
 use crate::errors::Error;
 use crate::header::validator_set::ValidatorSet;
 use crate::misc::{ceil_div, Hash, Validators};
+use patricia_merkle_trie::keccak::keccak_256;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Epoch {
     validator_set: ValidatorSet,
     turn_term: u8,
-    hash: Hash
+    hash: Hash,
 }
 
 impl Epoch {
@@ -16,11 +16,11 @@ impl Epoch {
         Self {
             validator_set,
             turn_term,
-            hash: keccak_256(&seed)
+            hash: keccak_256(&seed),
         }
     }
     pub fn checkpoint(&self) -> u64 {
-       self.validator_set.checkpoint(self.turn_term)
+        self.validator_set.checkpoint(self.turn_term)
     }
 
     pub fn hash(&self) -> Hash {
@@ -67,10 +67,7 @@ impl<'a> UntrustedEpoch<'a> {
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
     }
-    pub fn try_borrow(
-        &'a self,
-        trusted_epoch: &TrustedEpoch,
-    ) -> Result<&'a Validators, Error> {
+    pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Validators, Error> {
         let (result, found, required) = self.contains(trusted_epoch);
         if result {
             return Ok(&self.inner.validators());
@@ -114,7 +111,6 @@ impl<'a> EitherEpoch<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
@@ -132,13 +128,16 @@ mod test {
                 vec![6],
                 vec![7],
             ]
-                .into();
+            .into();
             let trusted_epoch = Epoch::new(trusted_validators, 1);
             let trusted_epoch = TrustedEpoch::new(&trusted_epoch);
-            let untrusted_epoch= Epoch::new(ValidatorSet {
-                validators: x,
-                hash: [0; 32],
-            }, 1);
+            let untrusted_epoch = Epoch::new(
+                ValidatorSet {
+                    validators: x,
+                    hash: [0; 32],
+                },
+                1,
+            );
             let untrusted_epoch = UntrustedEpoch::new(&untrusted_epoch);
             let (result, count, required) = untrusted_epoch.contains(&trusted_epoch);
             assert_eq!(result, c_val_borrowable);

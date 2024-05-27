@@ -119,11 +119,14 @@ fn verify_epoch<'a>(
         }
 
         let val_in_extra = target.get_validator_set()?;
-        if val_in_extra.hash != current_epoch.hash() {
+        //TODO get turn_term from extra_data
+        let turn_term_in_extra = 1;
+        let epoch_in_extra_hash = Epoch::new(val_in_extra, turn_term_in_extra).hash();
+        if epoch_in_extra_hash != current_epoch.hash() {
             return Err(Error::UnexpectedCurrentValidatorsHash(
                 trusted_height,
                 height,
-                val_in_extra.hash,
+                epoch_in_extra_hash,
                 current_epoch.hash(),
             ));
         }
@@ -208,7 +211,10 @@ impl TryFrom<RawHeader> for Header {
             account_proof: value.account_proof,
             headers,
             trusted_height,
-            previous_epoch: Epoch::new(value.previous_validators.into(), value.previous_turn_term as u8),
+            previous_epoch: Epoch::new(
+                value.previous_validators.into(),
+                value.previous_turn_term as u8,
+            ),
             current_epoch: Epoch::new(current_validators.into(), value.current_turn_term as u8),
         })
     }
@@ -234,15 +240,16 @@ impl TryFrom<Any> for Header {
     }
 }
 
+mod epoch;
 #[cfg(test)]
 pub(crate) mod testdata;
-mod epoch;
 
 #[cfg(test)]
 pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
 
+    use crate::header::epoch::{EitherEpoch, Epoch};
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297200, header_31297201, validators_in_31297000};
     use crate::header::validator_set::ValidatorSet;
@@ -251,7 +258,6 @@ pub(crate) mod test {
     use light_client::types::Time;
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
-    use crate::header::epoch::{EitherEpoch, Epoch};
 
     impl Header {
         pub(crate) fn eth_header(&self) -> &ETHHeaders {
@@ -269,7 +275,7 @@ pub(crate) mod test {
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -292,7 +298,7 @@ pub(crate) mod test {
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -318,7 +324,7 @@ pub(crate) mod test {
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![],
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -343,7 +349,7 @@ pub(crate) mod test {
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -368,7 +374,7 @@ pub(crate) mod test {
             current_validators: header_31297200().get_validator_bytes().unwrap(),
             previous_validators: validators_in_31297000(),
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -380,14 +386,8 @@ pub(crate) mod test {
             result.trusted_height.revision_number(),
             trusted_height.revision_number
         );
-        assert_eq!(
-            result.previous_epoch.validators(),
-            &raw.previous_validators
-        );
-        assert_eq!(
-            result.current_epoch.validators(),
-            &raw.current_validators
-        );
+        assert_eq!(result.previous_epoch.validators(), &raw.previous_validators);
+        assert_eq!(result.current_epoch.validators(), &raw.current_validators);
     }
 
     #[test]
@@ -404,7 +404,7 @@ pub(crate) mod test {
             current_validators: vec![header_31297200().coinbase],
             previous_validators: vec![h.coinbase.clone()],
             current_turn_term: 1,
-            previous_turn_term: 1
+            previous_turn_term: 1,
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -416,14 +416,8 @@ pub(crate) mod test {
             result.trusted_height.revision_number(),
             trusted_height.revision_number
         );
-        assert_eq!(
-            result.previous_epoch.validators(),
-            &raw.previous_validators
-        );
-        assert_eq!(
-            result.current_epoch.validators(),
-            &raw.current_validators
-        );
+        assert_eq!(result.previous_epoch.validators(), &raw.previous_validators);
+        assert_eq!(result.current_epoch.validators(), &raw.current_validators);
     }
 
     fn to_validator_set(h: Hash) -> ValidatorSet {
@@ -438,15 +432,15 @@ pub(crate) mod test {
         let cs = ConsensusState {
             state_root: [0u8; 32],
             timestamp: Time::now(),
-            current_validators_hash: [1u8; 32],
-            previous_validators_hash: [2u8; 32],
+            current_validators_hash: Epoch::new(to_validator_set([1u8; 32]), 1).hash(),
+            previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
 
         // epoch
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 201);
-        let current_epoch= &Epoch::new(header_31297200().get_validator_set().unwrap(), 1);
-        let previous_epoch= &Epoch::new(to_validator_set(cs.current_validators_hash), 1);
+        let current_epoch = &Epoch::new(header_31297200().get_validator_set().unwrap(), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let (c_val, p_val) = verify_epoch(
             &cs,
             &header_31297200(),
@@ -467,13 +461,13 @@ pub(crate) mod test {
         let cs = ConsensusState {
             state_root: [0u8; 32],
             timestamp: Time::now(),
-            current_validators_hash: [1u8; 32],
-            previous_validators_hash: [2u8; 32],
+            current_validators_hash: Epoch::new(to_validator_set([1u8; 32]), 1).hash(),
+            previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
         let height = new_height(0, 599);
         let trusted_height = new_height(0, 400);
-        let current_epoch= &Epoch::new(to_validator_set(cs.current_validators_hash), 1);
-        let previous_epoch= &Epoch::new(to_validator_set(cs.previous_validators_hash), 1);
+        let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let (c_val, _p_val) = verify_epoch(
             &cs,
             &header_31297201(),
@@ -496,14 +490,14 @@ pub(crate) mod test {
         let cs = ConsensusState {
             state_root: [0u8; 32],
             timestamp: Time::now(),
-            current_validators_hash: [1u8; 32],
-            previous_validators_hash: [2u8; 32],
+            current_validators_hash: Epoch::new(to_validator_set([1u8; 32]), 1).hash(),
+            previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
 
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 199);
-        let current_epoch= &Epoch::new(to_validator_set([1u8; 32]), 1);
-        let previous_epoch= &Epoch::new(to_validator_set([2u8; 32]), 1);
+        let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &header_31297200(),
@@ -562,8 +556,8 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 400);
-        let current_epoch= &Epoch::new(to_validator_set([1u8; 32]), 1);
-        let previous_epoch= &Epoch::new(to_validator_set([3u8; 32]), 1);
+        let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &header_31297201(),
@@ -584,8 +578,8 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 400);
-        let current_epoch= &Epoch::new(to_validator_set([3u8; 32]), 1);
-        let previous_epoch= &Epoch::new(to_validator_set([2u8; 32]), 1);
+        let current_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &header_31297201(),
@@ -608,13 +602,13 @@ pub(crate) mod test {
         let cs = ConsensusState {
             state_root: [0u8; 32],
             timestamp: Time::now(),
-            current_validators_hash: [4u8; 32],
-            previous_validators_hash: [2u8; 32],
+            current_validators_hash: Epoch::new(to_validator_set([4u8; 32]), 1).hash(),
+            previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 399);
-        let current_epoch= &Epoch::new(to_validator_set([1u8; 32]), 1);
-        let previous_epoch= &Epoch::new(to_validator_set([4u8; 32]), 1);
+        let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
+        let previous_epoch = &Epoch::new(to_validator_set([4u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &header_31297200(),
@@ -630,7 +624,7 @@ pub(crate) mod test {
                 assert_eq!(h, height);
                 assert_eq!(
                     header_hash,
-                    header_31297200().get_validator_set().unwrap().hash
+                    Epoch::new(header_31297200().get_validator_set().unwrap(), 1).hash()
                 );
                 assert_eq!(request_hash, current_epoch.hash());
             }

@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
+use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::validator_set::ValidatorSet;
 
 use crate::misc::{BlockNumber, ChainId, Validators};
@@ -142,9 +142,9 @@ impl ETHHeaders {
             // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
             Trusted(trusted) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
-                let mut next_epoch= match hs.iter().find(|h| h.is_epoch()) {
-                    //TODO get next turn_term
-                    Some(h) => Epoch::new(h.get_validator_set()?, 100),
+                let mut next_epoch = match hs.iter().find(|h| h.is_epoch()) {
+                    //TODO get next turn_term from extra_data
+                    Some(h) => Epoch::new(h.get_validator_set()?, 1),
                     None => return Ok((Some(trusted.validators()), None)),
                 };
 
@@ -237,14 +237,14 @@ mod test {
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::*;
 
+    use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
+    use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
     use crate::misc::Validators;
     use hex_literal::hex;
     use light_client::types::Any;
     use std::prelude::rust_2015::Vec;
     use std::vec;
-    use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-    use crate::header::validator_set::ValidatorSet;
 
     fn trust(v: &Epoch) -> TrustedEpoch {
         TrustedEpoch::new(v)
@@ -254,7 +254,7 @@ mod test {
         UntrustedEpoch::new(v)
     }
 
-    fn empty() -> Epoch{
+    fn empty() -> Epoch {
         let validators: Validators = vec![];
         Epoch::new(validators.into(), 1)
     }
@@ -291,7 +291,7 @@ mod test {
         let headers = create_after_checkpoint_headers();
         let p_val = empty();
         let p_val = trust(&p_val);
-        let c_val =Epoch::new(header_31297200().get_validator_bytes().unwrap().into(), 1);
+        let c_val = Epoch::new(header_31297200().get_validator_bytes().unwrap().into(), 1);
         let c_val = EitherEpoch::Trusted(trust(&c_val));
         headers.verify(&mainnet(), &c_val, &p_val).unwrap();
     }
