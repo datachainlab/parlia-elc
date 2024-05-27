@@ -381,11 +381,11 @@ pub(crate) mod test {
             trusted_height.revision_number
         );
         assert_eq!(
-            &result.previous_epoch.validators(),
+            result.previous_epoch.validators(),
             &raw.previous_validators
         );
         assert_eq!(
-            &result.current_epoch.validators(),
+            result.current_epoch.validators(),
             &raw.current_validators
         );
     }
@@ -403,8 +403,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![header_31297200().coinbase],
             previous_validators: vec![h.coinbase.clone()],
-            current_turn_term,
-            previous_turn_term
+            current_turn_term: 1,
+            previous_turn_term: 1
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);
@@ -417,11 +417,11 @@ pub(crate) mod test {
             trusted_height.revision_number
         );
         assert_eq!(
-            &result.previous_epoch.validators(),
+            result.previous_epoch.validators(),
             &raw.previous_validators
         );
         assert_eq!(
-            &result.current_epoch.validators(),
+            result.current_epoch.validators(),
             &raw.current_validators
         );
     }
@@ -485,7 +485,7 @@ pub(crate) mod test {
         .unwrap();
         match c_val {
             EitherEpoch::Trusted(r) => {
-                assert_eq!(*r.validators(), current_epoch.validators());
+                assert_eq!(r.validators(), current_epoch.validators());
             }
             _ => unreachable!("unexpected untrusted"),
         }

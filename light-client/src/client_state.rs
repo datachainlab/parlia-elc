@@ -313,6 +313,8 @@ mod test {
                 vec![]
             },
             previous_validators: validators_in_31297000(),
+            previous_turn_term: 1,
+            current_turn_term: 1
         };
         let now = new_timestamp(h.timestamp + 1).unwrap();
         let invalid_header: Header = raw.clone().try_into().unwrap();
@@ -341,6 +343,8 @@ mod test {
             account_proof: vec![1],
             current_validators: header_31297200().get_validator_bytes().unwrap(),
             previous_validators: validators_in_31297000(),
+            previous_turn_term: 1,
+            current_turn_term: 1
         };
         let valid_header: Header = raw.try_into().unwrap();
         let err = cs
@@ -371,6 +375,8 @@ mod test {
                     vec![h[0].coinbase.clone()]
                 },
                 previous_validators: vec![h[0].coinbase.clone()],
+                previous_turn_term: 1,
+                current_turn_term: 1
             };
             raw.try_into().unwrap()
         };
