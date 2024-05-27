@@ -308,7 +308,7 @@ mod test {
             }),
             account_proof: vec![],
             current_validators: if h.is_epoch() {
-                h.get_validator_set().unwrap().validators
+                h.epoch.clone().unwrap().validators().clone()
             } else {
                 vec![]
             },
@@ -341,7 +341,7 @@ mod test {
                 revision_height: h.number - 1,
             }),
             account_proof: vec![1],
-            current_validators: header_31297200().get_validator_bytes().unwrap(),
+            current_validators: header_31297200().epoch.unwrap().validators().clone(),
             previous_validators: validators_in_31297000(),
             previous_turn_term: 1,
             current_turn_term: 1,
@@ -370,7 +370,7 @@ mod test {
                 trusted_height: Some(trusted_height),
                 account_proof: vec![],
                 current_validators: if h[0].is_epoch() {
-                    h[0].get_validator_set().unwrap().validators
+                    h[0].epoch.clone().unwrap().validators().clone()
                 } else {
                     vec![h[0].coinbase.clone()]
                 },

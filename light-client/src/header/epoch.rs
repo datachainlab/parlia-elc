@@ -3,7 +3,7 @@ use crate::header::validator_set::ValidatorSet;
 use crate::misc::{ceil_div, Hash, Validators};
 use patricia_merkle_trie::keccak::keccak_256;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Epoch {
     validator_set: ValidatorSet,
     turn_term: u8,
@@ -29,10 +29,6 @@ impl Epoch {
 
     pub fn validators(&self) -> &Validators {
         &self.validator_set.validators
-    }
-
-    pub fn to_validators(self) -> Validators {
-        self.validator_set.validators
     }
 }
 

@@ -8,6 +8,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
+use crate::errors::Error::MissingTurnTermInEpochBlock;
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::ETHHeader;
 
@@ -118,15 +119,15 @@ fn verify_epoch<'a>(
             ));
         }
 
-        let val_in_extra = target.get_validator_set()?;
-        //TODO get turn_term from extra_data
-        let turn_term_in_extra = 1;
-        let epoch_in_extra_hash = Epoch::new(val_in_extra, turn_term_in_extra).hash();
-        if epoch_in_extra_hash != current_epoch.hash() {
+        let epoch_info = target
+            .epoch
+            .as_ref()
+            .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(target.number))?;
+        if epoch_info.hash() != current_epoch.hash() {
             return Err(Error::UnexpectedCurrentValidatorsHash(
                 trusted_height,
                 height,
-                epoch_in_extra_hash,
+                epoch_info.hash(),
                 current_epoch.hash(),
             ));
         }
@@ -195,15 +196,20 @@ impl TryFrom<RawHeader> for Header {
         }
 
         // Epoch header contains validator set
-        let current_validators = if headers.target.is_epoch() {
+        let current_epoch = if headers.target.is_epoch() {
             headers
                 .target
-                .get_validator_bytes()
-                .ok_or_else(|| Error::MissingValidatorInEpochBlock(headers.target.number))?
+                .epoch
+                .clone()
+                .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(headers.target.number))?
         } else {
-            value.current_validators
+            //TODO validate turn term
+            Epoch::new(
+                value.current_validators.into(),
+                value.current_turn_term as u8,
+            )
         };
-        if current_validators.is_empty() {
+        if current_epoch.validators().is_empty() {
             return Err(Error::MissingCurrentValidators(headers.target.number));
         }
 
@@ -215,7 +221,7 @@ impl TryFrom<RawHeader> for Header {
                 value.previous_validators.into(),
                 value.previous_turn_term as u8,
             ),
-            current_epoch: Epoch::new(current_validators.into(), value.current_turn_term as u8),
+            current_epoch,
         })
     }
 }
@@ -371,7 +377,7 @@ pub(crate) mod test {
             headers: vec![h.try_into().unwrap()],
             trusted_height: Some(trusted_height.clone()),
             account_proof: vec![],
-            current_validators: header_31297200().get_validator_bytes().unwrap(),
+            current_validators: header_31297200().epoch.unwrap().validators().clone(),
             previous_validators: validators_in_31297000(),
             current_turn_term: 1,
             previous_turn_term: 1,
@@ -439,7 +445,7 @@ pub(crate) mod test {
         // epoch
         let height = new_height(0, 400);
         let trusted_height = new_height(0, 201);
-        let current_epoch = &Epoch::new(header_31297200().get_validator_set().unwrap(), 1);
+        let current_epoch = &header_31297200().epoch.unwrap();
         let previous_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let (c_val, p_val) = verify_epoch(
             &cs,
@@ -622,10 +628,7 @@ pub(crate) mod test {
             Error::UnexpectedCurrentValidatorsHash(t, h, header_hash, request_hash) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
-                assert_eq!(
-                    header_hash,
-                    Epoch::new(header_31297200().get_validator_set().unwrap(), 1).hash()
-                );
+                assert_eq!(header_hash, header_31297200().epoch.unwrap().hash());
                 assert_eq!(request_hash, current_epoch.hash());
             }
             _ => unreachable!("err {:?}", err),

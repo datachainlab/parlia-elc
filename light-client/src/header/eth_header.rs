@@ -10,6 +10,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::header::epoch::Epoch;
 use crate::header::validator_set::ValidatorSet;
 
 use crate::header::vote_attestation::VoteAttestation;
@@ -55,6 +56,7 @@ pub struct ETHHeader {
 
     // calculated by RawETHHeader
     pub hash: Hash,
+    pub epoch: Option<Epoch>,
 }
 
 impl ETHHeader {
@@ -244,37 +246,33 @@ impl ETHHeader {
         Rlp::new(attestation_bytes).try_into()
     }
 
-    // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
-    pub fn get_validator_bytes(&self) -> Option<Validators> {
-        if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
-            return None;
-        }
-        let num = self.extra_data[EXTRA_VANITY] as usize;
-        if num == 0
-            || self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH
-        {
-            return None;
-        }
-        let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
-        let end = start + num * VALIDATOR_BYTES_LENGTH;
-        Some(
-            self.extra_data[start..end]
-                .chunks(VALIDATOR_BYTES_LENGTH)
-                .map(|s| s.into())
-                .collect(),
-        )
-    }
-
-    pub fn get_validator_set(&self) -> Result<ValidatorSet, Error> {
-        Ok(self
-            .get_validator_bytes()
-            .ok_or_else(|| Error::MissingValidatorInEpochBlock(self.number))?
-            .into())
-    }
-
     pub fn is_epoch(&self) -> bool {
         self.number % BLOCKS_PER_EPOCH == 0
     }
+}
+
+// https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
+pub fn get_validator_bytes(extra_data: &[u8]) -> Option<Validators> {
+    if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
+        return None;
+    }
+    let num = extra_data[EXTRA_VANITY] as usize;
+    if num == 0 || extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH {
+        return None;
+    }
+    let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
+    let end = start + num * VALIDATOR_BYTES_LENGTH;
+    Some(
+        extra_data[start..end]
+            .chunks(VALIDATOR_BYTES_LENGTH)
+            .map(|s| s.into())
+            .collect(),
+    )
+}
+
+pub fn get_turn_term(extra_data: &[u8]) -> Option<u8> {
+    //TODO get turn term from extra-data
+    return Some(1);
 }
 
 impl TryFrom<RawETHHeader> for ETHHeader {
@@ -398,6 +396,18 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
 
+        let epoch = if number % BLOCKS_PER_EPOCH == 0 {
+            let validators: ValidatorSet = get_validator_bytes(&extra_data)
+                .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?
+                .into();
+            let turn_term = get_turn_term(&extra_data)
+                .ok_or_else(|| Error::MissingTurnTermInEpochBlock(number))?
+                .into();
+            Some(Epoch::new(validators, turn_term))
+        } else {
+            None
+        };
+
         Ok(Self {
             parent_hash,
             uncle_hash,
@@ -415,6 +425,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             mix_digest,
             nonce,
             hash,
+            epoch,
         })
     }
 }

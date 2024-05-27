@@ -78,6 +78,8 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
+    MissingTurnTermInEpochBlock(BlockNumber),
+    MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
     MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
@@ -253,6 +255,12 @@ impl core::fmt::Display for Error {
             }
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
+            }
+            Error::MissingEpochInfoInEpochBlock(e1) => {
+                write!(f, "MissingEpochInfoInEpochBlock : {:?}", e1)
+            }
+            Error::MissingTurnTermInEpochBlock(e1) => {
+                write!(f, "MissingTurnTermInEpochBlock : {:?}", e1)
             }
             Error::MissingPreviousValidators(e1) => {
                 write!(f, "MissingPreviousValidators : {:?}", e1)
