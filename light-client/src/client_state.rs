@@ -93,6 +93,9 @@ impl ClientState {
     ) -> Result<ClientState, Error> {
         self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
         self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+
+        misbehaviour.verify()?;
+
         Ok(self.clone().freeze())
     }
 
