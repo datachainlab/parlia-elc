@@ -2,9 +2,10 @@ use crate::header::epoch::Epoch;
 use hex_literal::hex;
 
 use crate::header::eth_header::{get_validator_bytes, ETHHeader};
-use crate::header::validator_set::ValidatorSet;
 
 use crate::misc::{ChainId, Validators};
+
+//TODO should be localnet testdata
 
 pub fn mainnet() -> ChainId {
     ChainId::new(56)

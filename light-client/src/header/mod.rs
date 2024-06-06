@@ -249,19 +249,16 @@ impl TryFrom<Any> for Header {
 }
 
 #[cfg(test)]
-pub(crate) mod testdata;
-
-#[cfg(test)]
 pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
 
     use crate::header::epoch::{EitherEpoch, Epoch};
     use crate::header::eth_headers::ETHHeaders;
-    use crate::header::testdata::{header_31297200, header_31297201, validators_in_31297000};
     use crate::header::validator_set::ValidatorSet;
     use crate::header::{verify_epoch, Header};
     use crate::misc::{new_height, Hash, Validators};
+    use crate::testdata::localnet::{header_31297200, header_31297201, validators_in_31297000};
     use light_client::types::Time;
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;

@@ -69,7 +69,7 @@ mod test {
     use crate::errors::Error;
     use crate::header::eth_header::ETHHeader;
 
-    use crate::header::testdata::{header_31297201, header_31297202};
+    use crate::testdata::localnet::{header_31297201, header_31297202};
 
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::new_height;

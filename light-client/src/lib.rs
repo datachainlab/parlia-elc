@@ -15,6 +15,8 @@ pub mod header;
 pub mod message;
 pub mod misbehaviour;
 pub mod misc;
+#[cfg(test)]
+mod testdata;
 
 pub fn register_implementations(registry: &mut dyn light_client::LightClientRegistry) {
     registry

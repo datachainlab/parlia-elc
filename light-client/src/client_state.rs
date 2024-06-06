@@ -273,12 +273,12 @@ mod test {
     use crate::consensus_state::ConsensusState;
     use crate::header::epoch::Epoch;
     use crate::header::eth_header::ETHHeader;
-    use crate::header::testdata::{
-        header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
-    };
     use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_timestamp, ChainId, Hash};
+    use crate::testdata::localnet::{
+        header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
+    };
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 

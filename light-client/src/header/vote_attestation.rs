@@ -147,12 +147,12 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
-    use crate::header::testdata::{
-        header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
-    };
     use crate::header::vote_attestation::{
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,
+    };
+    use crate::testdata::localnet::{
+        header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
     };
     use hex_literal::hex;
     use rlp::{Rlp, RlpStream};

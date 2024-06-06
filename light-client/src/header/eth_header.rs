@@ -440,7 +440,7 @@ pub(crate) mod test {
 
     use rlp::RlpStream;
 
-    use crate::header::testdata::*;
+    use crate::testdata::localnet::*;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     impl TryFrom<&ETHHeader> for RawETHHeader {
