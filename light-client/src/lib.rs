@@ -11,12 +11,12 @@ pub mod client_state;
 pub mod commitment;
 pub mod consensus_state;
 pub mod errors;
+#[cfg(test)]
+mod fixture;
 pub mod header;
 pub mod message;
 pub mod misbehaviour;
 pub mod misc;
-#[cfg(test)]
-mod fixture;
 
 pub fn register_implementations(registry: &mut dyn light_client::LightClientRegistry) {
     registry

@@ -5,8 +5,8 @@ use std::prelude::rust_2015::Vec;
 use crate::header::eth_header::{get_validator_bytes, ETHHeader};
 use crate::header::eth_headers::ETHHeaders;
 
-use crate::misc::{ChainId, Validators};
 use crate::fixture::Network;
+use crate::misc::{ChainId, Validators};
 
 pub struct Localnet;
 

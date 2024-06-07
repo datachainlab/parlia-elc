@@ -1,7 +1,7 @@
+use crate::fixture::localnet::Localnet;
 use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{ChainId, Validators};
-use crate::fixture::localnet::Localnet;
 use alloc::boxed::Box;
 
 pub mod localnet;
