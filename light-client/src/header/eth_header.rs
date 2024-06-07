@@ -703,7 +703,7 @@ pub(crate) mod test {
             hp.epoch_header_plus_2(),
         ];
         for block in blocks {
-            if let Err(e) = block.verify_seal(&validators, &mainnet()) {
+            if let Err(e) = block.verify_seal(&validators, &hp.network()) {
                 unreachable!("{} {:?}", block.number, e);
             }
         }
@@ -720,7 +720,7 @@ pub(crate) mod test {
         ];
 
         for block in blocks.iter_mut() {
-            let result = block.verify_seal(&validators[0..1].to_vec(), &mainnet());
+            let result = block.verify_seal(&validators[0..1].to_vec(), &hp.network());
             match result.unwrap_err() {
                 Error::MissingSignerInValidator(number, address) => {
                     assert_eq!(block.number, number);
@@ -732,7 +732,7 @@ pub(crate) mod test {
 
         for mut block in blocks.iter_mut() {
             block.coinbase = vec![];
-            let result = block.verify_seal(&validators, &mainnet());
+            let result = block.verify_seal(&validators, &hp.network());
             match result.unwrap_err() {
                 Error::UnexpectedCoinbase(number) => assert_eq!(block.number, number),
                 e => unreachable!("{:?}", e),

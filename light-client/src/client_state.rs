@@ -269,16 +269,16 @@ mod test {
     use crate::errors::Error;
     use light_client::types::{Any, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
+    use rstest::rstest;
 
     use crate::consensus_state::ConsensusState;
-    use crate::fixture::localnet::{
-        header_31297200, header_31297201, header_31297202, mainnet, validators_in_31297000,
-    };
+    use crate::fixture::*;
     use crate::header::epoch::Epoch;
     use crate::header::eth_header::ETHHeader;
     use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_timestamp, ChainId, Hash};
+    use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
@@ -293,10 +293,11 @@ mod test {
         .hash()
     }
 
-    #[test]
-    fn test_error_check_header_and_update_state() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_check_header_and_update_state(#[case] hp: Box<dyn Network>) {
         let cs = ClientState {
-            chain_id: mainnet(),
+            chain_id: hp.network(),
             ibc_store_address: [0u8; 20],
             ibc_commitments_slot: [0u8; 32],
             trusting_period: Duration::from_millis(1001),
@@ -306,12 +307,12 @@ mod test {
         };
 
         // fail: check_header
-        let h = &header_31297200();
+        let h = &hp.epoch_header();
         let cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(h.timestamp).unwrap(),
-            current_validators_hash: make_cs_hash(keccak_256_vec(&validators_in_31297000())),
-            previous_validators_hash: make_cs_hash(keccak_256_vec(&validators_in_31297000())),
+            current_validators_hash: make_cs_hash(keccak_256_vec(&hp.previous_validators())),
+            previous_validators_hash: make_cs_hash(keccak_256_vec(&hp.previous_validators())),
         };
         let raw = RawHeader {
             headers: vec![h.try_into().unwrap()],
@@ -325,7 +326,7 @@ mod test {
             } else {
                 vec![]
             },
-            previous_validators: validators_in_31297000(),
+            previous_validators: hp.previous_validators(),
             previous_turn_term: 1,
             current_turn_term: 1,
         };
@@ -345,17 +346,17 @@ mod test {
         // fail: resolve_account
         let raw = RawHeader {
             headers: vec![
-                (&header_31297200()).try_into().unwrap(),
-                (&header_31297201()).try_into().unwrap(),
-                (&header_31297202()).try_into().unwrap(),
+                (&hp.epoch_header()).try_into().unwrap(),
+                (&hp.epoch_header_plus_1()).try_into().unwrap(),
+                (&hp.epoch_header_plus_2()).try_into().unwrap(),
             ],
             trusted_height: Some(Height {
                 revision_number: 0,
                 revision_height: h.number - 1,
             }),
             account_proof: vec![1],
-            current_validators: header_31297200().epoch.unwrap().validators().clone(),
-            previous_validators: validators_in_31297000(),
+            current_validators: hp.epoch_header().epoch.unwrap().validators().clone(),
+            previous_validators: hp.previous_validators(),
             previous_turn_term: 1,
             current_turn_term: 1,
         };
@@ -371,8 +372,9 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_error_check_header() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_check_header(#[case] hp: Box<dyn Network>) {
         let header_fn = |revision: u64, h: alloc::vec::Vec<ETHHeader>| {
             let trusted_height = Height {
                 revision_number: revision,
@@ -411,7 +413,7 @@ mod test {
         };
 
         // fail: validate_trusting_period
-        let h = header_31297200();
+        let h = hp.epoch_header();
         let now = new_timestamp(h.timestamp - 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
         let header = header_fn(0, vec![h]);
@@ -422,7 +424,7 @@ mod test {
         }
 
         // fail: revision check
-        let h = header_31297200();
+        let h = hp.epoch_header();
         let now = new_timestamp(h.timestamp + 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
         let header = header_fn(1, vec![h]);
@@ -436,7 +438,7 @@ mod test {
         }
 
         // fail: verify_validator_set
-        let h = header_31297200();
+        let h = hp.epoch_header();
         let header = header_fn(0, vec![h.clone()]);
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
@@ -448,7 +450,7 @@ mod test {
         }
 
         // fail: header.verify
-        let h = header_31297200();
+        let h = hp.epoch_header();
         cons_state.current_validators_hash = make_cs_hash(keccak_256_vec(&[h.coinbase.clone()]));
         let header = header_fn(0, vec![h.clone()]);
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();

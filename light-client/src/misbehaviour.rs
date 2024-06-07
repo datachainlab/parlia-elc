@@ -69,11 +69,13 @@ mod test {
     use crate::errors::Error;
     use crate::header::eth_header::ETHHeader;
 
-    use crate::fixture::localnet::{header_31297201, header_31297202};
+    use crate::fixture::*;
 
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::new_height;
     use alloc::string::ToString;
+    use rstest::rstest;
+    use std::prelude::rust_2015::Box;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
@@ -117,9 +119,10 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_error_try_from_missing_h2() {
-        let h1 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_h2(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
             header_1: Some(to_raw(&h1)),
@@ -131,9 +134,10 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_error_try_from_same_block() {
-        let h1 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_same_block(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
             header_1: Some(to_raw(&h1)),
@@ -145,10 +149,11 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_error_try_from_different_height() {
-        let h1 = header_31297201();
-        let h2 = header_31297202();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_different_height(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
+        let h2 = hp.epoch_header_plus_2();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
             header_1: Some(to_raw(&h1)),
@@ -163,10 +168,11 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_success_try_from() {
-        let h1 = header_31297201();
-        let mut h2 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_try_from(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
+        let mut h2 = hp.epoch_header_plus_1();
         h2.gas_used = h1.gas_used + 1;
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),

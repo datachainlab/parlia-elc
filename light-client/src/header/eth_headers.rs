@@ -272,7 +272,7 @@ mod test {
         let p_val = trust(&p_val);
         let c_val = empty();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
-        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
+        headers.verify(&hp.network(), &c_val, &p_val).unwrap();
 
         // from epoch
         let headers: ETHHeaders = vec![
@@ -283,7 +283,7 @@ mod test {
         .into();
         let c_val = empty();
         let c_val = EitherEpoch::Untrusted(untrust(&c_val));
-        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
+        headers.verify(&hp.network(), &c_val, &p_val).unwrap();
     }
 
     #[rstest]
@@ -294,7 +294,7 @@ mod test {
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.clone().unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
-        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
+        headers.verify(&hp.network(), &c_val, &p_val).unwrap();
     }
 
     #[rstest]
@@ -305,14 +305,14 @@ mod test {
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
-        headers.verify(&mainnet(), &c_val, &p_val).unwrap();
+        headers.verify(&hp.network(), &c_val, &p_val).unwrap();
     }
 
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_verify_before_checkpoint(#[case] hp: Box<dyn Network>) {
         let header = hp.headers_before_checkpoint();
-        let mainnet = &mainnet();
+        let mainnet = &hp.network();
 
         // first block uses previous broken validator set
         let mut validators = hp.previous_validators();
@@ -345,7 +345,7 @@ mod test {
         let p_val = Epoch::new(hp.previous_validators().into(), 1);
         let p_val = trust(&p_val);
 
-        let mainnet = &mainnet();
+        let mainnet = &hp.network();
 
         // last block uses new empty validator set
         let header = hp.headers_across_checkpoint();
@@ -368,7 +368,7 @@ mod test {
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let result = headers.verify(&hp.network(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(e1, e2, _, _, _, _) => {
                 assert_eq!(e1, headers.target.number);
@@ -392,7 +392,7 @@ mod test {
         let p_val = TrustedEpoch::new(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Untrusted(untrust(&c_val));
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let result = headers.verify(&hp.network(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -411,7 +411,7 @@ mod test {
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let result = headers.verify(&hp.network(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::InvalidVerifyingHeaderLength(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -464,7 +464,7 @@ mod test {
 
         let p_val = Epoch::new(hp.previous_validators().into(), 1);
         let p_val = trust(&p_val);
-        let result = headers.verify(&mainnet(), &c_val, &p_val);
+        let result = headers.verify(&hp.network(), &c_val, &p_val);
         match result.unwrap_err() {
             Error::UnexpectedTooManyHeadersToFinalize(e1, e2) => {
                 assert_eq!(e1, headers.target.number, "block error");
@@ -493,7 +493,7 @@ mod test {
                 next.number = last.number + 1;
                 headers.all.push(next);
             }
-            let result = headers.verify(&mainnet(), c_val, p_val).unwrap_err();
+            let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();
             if include_limit {
                 match result {
                     Error::UnexpectedNextCheckpointHeader(e1, e2) => {
@@ -555,7 +555,7 @@ mod test {
                 }
                 headers.all.push(next);
             }
-            let result = headers.verify(&mainnet(), c_val, p_val).unwrap_err();
+            let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();
             if include_limit {
                 match result {
                     Error::UnexpectedNextNextCheckpointHeader(e1, e2) => {
@@ -586,7 +586,7 @@ mod test {
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
         f(headers.clone(), &c_val, &p_val, n_val_header.clone(), true);
-        f(headers, &c_val, &p_val, header_31297200(), false);
+        f(headers, &c_val, &p_val, hp.epoch_header(), false);
 
         let headers = hp.headers_across_checkpoint();
         f(headers.clone(), &c_val, &p_val, n_val_header.clone(), true);
