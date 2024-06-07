@@ -439,8 +439,11 @@ pub(crate) mod test {
     use hex_literal::hex;
 
     use rlp::RlpStream;
+    use rstest::*;
 
     use crate::testdata::localnet::*;
+    use crate::testdata::{localnet, TestData};
+    use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     impl TryFrom<&ETHHeader> for RawETHHeader {
@@ -469,9 +472,10 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_try_from_missing_vanity() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_vanity(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY - 1].to_vec();
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -485,9 +489,10 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_missing_signature() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_signature(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY + EXTRA_SEAL - 1].to_vec();
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -501,9 +506,10 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_mix_hash() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_mix_hash(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.mix_digest = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -515,9 +521,10 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_uncle_hash() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_uncle_hash(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.uncle_hash = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -529,9 +536,10 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_difficulty() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_difficulty(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.difficulty = 10;
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -544,9 +552,10 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_nonce() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_nonce(#[case] hp: Box<dyn TestData>) {
+        let mut header = hp.epoch_header_plus_1();
         header.nonce = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
         let err = ETHHeader::try_from(raw).unwrap_err();
@@ -558,10 +567,11 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_success_try_from_with_bep336_field() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_try_from_with_bep336_field(#[case] hp: Box<dyn TestData>) {
         let base_fn = || {
-            let header = header_31297200();
+            let header = hp.epoch_header();
             let mut stream = RlpStream::new();
             stream.begin_unbounded_list();
             stream.append(&header.parent_hash);
@@ -588,7 +598,7 @@ pub(crate) mod test {
             header: stream.out().to_vec(),
         };
         let v = ETHHeader::try_from(raw).unwrap();
-        assert_eq!(v.hash, header_31297200().hash);
+        assert_eq!(v.hash, hp.epoch_header().hash);
 
         // with base_fee_per_gas
         let base_fee_per_gas: u64 = 2;
@@ -601,7 +611,7 @@ pub(crate) mod test {
         ETHHeader::try_from(raw).unwrap();
 
         // with withdrawals_hash
-        let withdrawals_hash = header_31297200().tx_hash;
+        let withdrawals_hash = hp.epoch_header().tx_hash;
         let mut stream = base_fn();
         stream.append(&base_fee_per_gas);
         stream.append(&withdrawals_hash);
@@ -683,14 +693,14 @@ pub(crate) mod test {
         )
     }
 
-    #[test]
-    fn test_success_verify_seal() {
-        let validators = validators_in_31297000();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_seal(#[case] hp: Box<dyn TestData>) {
+        let validators = hp.previous_validators();
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for block in blocks {
             if let Err(e) = block.verify_seal(&validators, &mainnet()) {
@@ -699,14 +709,14 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_verify_seal() {
-        let validators = validators_in_31297000();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_seal(#[case] hp: Box<dyn TestData>) {
+        let validators = hp.previous_validators();
         let mut blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
 
         for block in blocks.iter_mut() {
@@ -730,13 +740,13 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_success_verify_cascading_fields() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_cascading_fields(#[case] hp: Box<dyn TestData>) {
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for (i, block) in blocks.iter().enumerate() {
             if i == 0 {
@@ -748,10 +758,11 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_verify_cascading_fields() {
-        let parent = header_31297199();
-        let mut block = header_31297200();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_cascading_fields(#[case] hp: Box<dyn TestData>) {
+        let parent = hp.epoch_header();
+        let mut block = hp.epoch_header_plus_1();
         block.gas_limit = 10000;
         block.gas_used = parent.gas_limit + 1;
         let result = block.verify_cascading_fields(&parent);
@@ -764,8 +775,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let parent = header_31297199();
-        let block = header_31297201();
+        let parent = hp.epoch_header();
+        let block = hp.epoch_header_plus_2();
         let result = block.verify_cascading_fields(&parent);
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(
@@ -786,8 +797,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let parent = header_31297199();
-        let mut block = header_31297200();
+        let parent = hp.epoch_header();
+        let mut block = hp.epoch_header_plus_1();
         block.gas_used = 0;
         block.gas_limit = 0;
         let result = block.verify_cascading_fields(&parent);
@@ -801,13 +812,13 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_success_verify_vote_attestation() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_vote_attestation(#[case] hp: Box<dyn TestData>) {
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for (i, block) in blocks.iter().enumerate() {
             if i == 0 {
@@ -819,10 +830,11 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_verify_vote_attestation() {
-        let header = header_31297201();
-        let parent = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_vote_attestation(#[case] hp: Box<dyn TestData>) {
+        let header = hp.epoch_header_plus_1();
+        let parent = hp.epoch_header_plus_1();
         let err = header.verify_vote_attestation(&parent).unwrap_err();
         match err {
             Error::UnexpectedTargetVoteAttestationRelation(
@@ -837,10 +849,10 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let mut block = header_31297200();
+        let mut block = hp.epoch_header_plus_1();
         block.extra_data = vec![];
         let err = block
-            .verify_vote_attestation(&header_31297199())
+            .verify_vote_attestation(&hp.epoch_header())
             .unwrap_err();
         match err {
             Error::UnexpectedVoteLength(size) => {
@@ -849,8 +861,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let header = header_31297202();
-        let mut parent = header_31297201();
+        let header = hp.epoch_header_plus_2();
+        let mut parent = hp.epoch_header_plus_1();
         parent.extra_data = header.extra_data.clone();
         let err = header.verify_vote_attestation(&parent).unwrap_err();
         match err {

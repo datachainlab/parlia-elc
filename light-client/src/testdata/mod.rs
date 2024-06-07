@@ -1,7 +1,8 @@
 use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{ChainId, Validators};
-use alloc::vec::Vec;
+use crate::testdata::localnet::Localnet;
+use alloc::boxed::Box;
 
 pub mod localnet;
 
@@ -16,3 +17,9 @@ pub trait TestData {
     fn headers_after_checkpoint(&self) -> ETHHeaders;
     fn previous_validators(&self) -> Validators;
 }
+
+pub fn localnet() -> Box<dyn TestData> {
+    Box::new(Localnet)
+}
+
+// TODO Modify testnet / mainnet after each HF released

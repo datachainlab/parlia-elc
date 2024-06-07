@@ -30,6 +30,7 @@ hex-literal = "0.4.1"
 [dev-dependencies]
 store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.2.7", default-features = false }
 time = { version = "0.3", default-features = false, features = ["macros", "parsing"] }
+rstest = "0.18"
 
 [features]
 default = ["std"]
