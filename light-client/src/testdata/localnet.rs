@@ -3,6 +3,7 @@ use hex_literal::hex;
 use std::prelude::rust_2015::Vec;
 
 use crate::header::eth_header::{get_validator_bytes, ETHHeader};
+use crate::header::eth_headers::ETHHeaders;
 
 use crate::misc::{ChainId, Validators};
 use crate::testdata::TestData;
@@ -104,12 +105,16 @@ impl TestData for Localnet {
         }
     }
 
-    fn headers_across_checkpoint(&self) -> Vec<ETHHeader> {
-        vec![header_31297210(), header_31297211(), header_31297212()]
+    fn headers_before_checkpoint(&self) -> ETHHeaders {
+        vec![header_31297208(), header_31297209(), header_31297210()].into()
     }
 
-    fn headers_after_checkpoint(&self) -> Vec<ETHHeader> {
-        vec![header_31297211(), header_31297212(), header_31297213()]
+    fn headers_across_checkpoint(&self) -> ETHHeaders {
+        vec![header_31297210(), header_31297211(), header_31297212()].into()
+    }
+
+    fn headers_after_checkpoint(&self) -> ETHHeaders {
+        vec![header_31297211(), header_31297212(), header_31297213()].into()
     }
 
     fn previous_validators(&self) -> Validators {
@@ -333,102 +338,6 @@ pub fn header_31297208() -> ETHHeader {
         mix_digest: hex!("0000000000000000000000000000000000000000000000000000000000000000").into(),
         nonce: hex!("0000000000000000").into(),
         hash: hex!("77545edd1aa19c89e81b0a1360ab862aab49c6193a18a52ec22f5922c56a17b6"),
-        epoch: None
-    }
-}
-
-pub fn header_31297207() -> ETHHeader {
-    //https://api.bscscan.com/api?module=proxy&action=eth_getBlockByNumber&tag=0x1dd8eb7&boolean=false
-    //https://bscscan.com/block/31297207
-    ETHHeader {
-        parent_hash: hex!("4edb537f71dc11604b10251c74ec65f9f5d8b7b49823a4e6b3fa635043ab066a").into(),
-        uncle_hash: hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").into(),
-        coinbase: hex!("61dd481a114a2e761c554b641742c973867899d3").into(),
-        root: hex!("53470cabcceb59cb1791c5671c730349effe4cb1e905e59a669a992bbc0108a3"),
-        tx_hash: hex!("744ae570d1a8a93909fb7103ebcd6fe954e022b672b5cb9be489432c488c1ff7").into(),
-        receipt_hash: hex!("f169c9a2f0b634c358d264f7a07b9394f4ba0835dee24ae20af9a41f535eee4b").into(),
-        bloom: hex!("22200260065295f9805a3140ec14002bd420c70084001e84a22a050291381010c2021140408010000631242a001e3010a2a4c00c1418a5210306289863a422f01c41962081408c008bb200a8a00839b8221016a101628002602c1840a0300e218a4c002a1a035c012e534064d4080f3b8b50ac35005b5e02c901a812a00040514881390412f0f8d0009445770ac2448e563615036910001829c000c18ac24c280382a0306380cb13c280c6070fc4940860a0dc4100c9a02378208460611002e06806150624101847105208070031b760248332c7c2140254859050c30c00ec04119094078d21c18003079442a14001240c00202a28a8ec48010704009c214120").into(),
-        difficulty: 2,
-        number: u64::from_str_radix("1dd8eb7", 16).unwrap(),
-        gas_limit: u64::from_str_radix("8583b00", 16).unwrap(),
-        gas_used: u64::from_str_radix("683daa", 16).unwrap(),
-        timestamp: u64::from_str_radix("64eee0a9", 16).unwrap(),
-        extra_data: hex!("d88301020a846765746888676f312e32302e36856c696e7578000000b19df4a2f8b5830aefffb8608968a3375fc9df9fe293c2b1b932f2c6c373c16c6a8ad803653c4b2e37d36954ae620e82ca7ddf800afcf43d2152ae0f03c242b5afb6917cdd19076363647ae7b62841d196f0c75084ceb616db03de5f57e06a83e743a7c4f7d3ba9ca73614a8f84c8401dd8eb5a0194822ef17f86aa711f97387a2fed416227806f12a957715630f25a0a06042818401dd8eb6a04edb537f71dc11604b10251c74ec65f9f5d8b7b49823a4e6b3fa635043ab066a806bb80e19c89b75c476fdd6d654c9391e3699257bff38af792b757842bfeae34f5e2af403ee3017fd6d774509b782b80dec4a343f47048b788e8868e80d778a6200").into(),
-        mix_digest: hex!("0000000000000000000000000000000000000000000000000000000000000000").into(),
-        nonce: hex!("0000000000000000").into(),
-        hash: hex!("0d16a0ad7ea094c72adfd206bfc939627a0d254bed38ebb4ef940f3cb82a68b0"),
-        epoch: None
-    }
-}
-
-pub fn header_31297206() -> ETHHeader {
-    //https://api.bscscan.com/api?module=proxy&action=eth_getBlockByNumber&tag=0x1dd8eb6&boolean=false
-    //https://bscscan.com/block/31297206
-    ETHHeader {
-        parent_hash: hex!("194822ef17f86aa711f97387a2fed416227806f12a957715630f25a0a0604281").into(),
-        uncle_hash: hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").into(),
-        coinbase: hex!("3f349bbafec1551819b8be1efea2fc46ca749aa1").into(),
-        root: hex!("bbc943551df90ecb01b15f521ccbd5780063c41f6273689690415206d6683a25"),
-        tx_hash: hex!("20bfdae2117df689c699d7b0402bf4878740879fad11350afdf53cc8b7b96b5a").into(),
-        receipt_hash: hex!("1a40aa2cd1b1e174f8ad0ae1e3f7a9918c6da6297238ffbaa9db907a44b96b6b").into(),
-        bloom: hex!("1ea0e6d21a3ebf7e894421e68e1475dfc39bc6d28728cb0a322ba16f5a9459128e66116753377025dd23beaa295e2a98c7512c89510c21356d946e983d2f36b87446c66ec3482f288358c668c35449ed6cb2bda772e68b0ae0c5a856d5c38e35cb0d3d268ac7dd012a5f5974257a6deba8c974db8f4f7e270a2b9e58e8e9d39549c8b18626a871996a86a61518c03fcd147564556d74169d399a95dd18da7ca15210288a43e587d5f61e5fcf9ba51556cfb6c5c10d72d2a534364f212f5123e57827950bd790bc4e70d8baeb49303265b967176a950839762f1ad4d2c90de6fdd55ca249bb37d93fc9959eca99030fa03137df6502ab54d5d9323bd2dea1c6df").into(),
-        difficulty: 2,
-        number: u64::from_str_radix("1dd8eb6", 16).unwrap(),
-        gas_limit: u64::from_str_radix("8583b00", 16).unwrap(),
-        gas_used: u64::from_str_radix("f96c44", 16).unwrap(),
-        timestamp: u64::from_str_radix("64eee0a6", 16).unwrap(),
-        extra_data: hex!("d883010209846765746888676f312e32302e36856c696e7578000000b19df4a2f8b5830aefffb860a0138da8d8d9e4f6f61bab7567e04099cf03ada629e8190af22cd4ef64a03f6c429065f576709c7b72cefe9645f4dd9f0ddbfa22e3510b0d4e9a97441d2d00ca1807a072d34cc6551a97c48db9b188de7911f5ec56a061015641787e47fa0917f84c8401dd8eb4a055ac85646e4961091af47efe4cb44edc27446ee7b843e9ca88bd2410cabbd0bc8401dd8eb5a0194822ef17f86aa711f97387a2fed416227806f12a957715630f25a0a060428180f032d9041437495d44595befbb88540d3e87e4a6407fabc164295aa399d967090d860b2500045f33a37a7292d8d9314a0703a075d8e6de54656d16c5d3a64afc01").into(),
-        mix_digest: hex!("0000000000000000000000000000000000000000000000000000000000000000").into(),
-        nonce: hex!("0000000000000000").into(),
-        hash: hex!("4edb537f71dc11604b10251c74ec65f9f5d8b7b49823a4e6b3fa635043ab066a"),
-        epoch: None
-    }
-}
-
-pub fn header_31297205() -> ETHHeader {
-    //https://api.bscscan.com/api?module=proxy&action=eth_getBlockByNumber&tag=0x1dd8eb5&boolean=false
-    //https://bscscan.com/block/31297205
-    ETHHeader {
-        parent_hash: hex!("55ac85646e4961091af47efe4cb44edc27446ee7b843e9ca88bd2410cabbd0bc").into(),
-        uncle_hash: hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").into(),
-        coinbase: hex!("2d4c407bbe49438ed859fe965b140dcf1aab71a9").into(),
-        root: hex!("0fcf463d8fb2dbff492b65e6f79af26d23e80c288aa7724019aa4cda75652061"),
-        tx_hash: hex!("1820a50d43fdc3cd2117af385955c896959555b3573590af364c6f8185646a74").into(),
-        receipt_hash: hex!("f498551fbc5c1298f3ed791a80b76750c6679c21b289a0c56bf3bb0c82491e37").into(),
-        bloom: hex!("20600602072a1118041000448416040501408082118b09015098050311c641088e00f900202410400100364f171642a483260e38042000082126480200243226240094c8994016a08d30b4c9c280a4a02810b420004e8813a42c0850810000e1cbab30273a261029886d080303492d184814124096c93c141021ac188852063d888a81250648e0919080371602795b08042644056b04009821c03944a0315ce01252611032b2010a2502dc9e0e800000a01001090700118130b60123e45020c8c858048a2642804e00a0886162229808e08801e285402855091ac4420021f5be0c18909084a6812a0190044ab003c982880494bf2031f0d839402481492101da").into(),
-        difficulty: 2,
-        number: u64::from_str_radix("1dd8eb5", 16).unwrap(),
-        gas_limit: u64::from_str_radix("8583b00", 16).unwrap(),
-        gas_used: u64::from_str_radix("5f1ae3", 16).unwrap(),
-        timestamp: u64::from_str_radix("64eee0a3", 16).unwrap(),
-        extra_data: hex!("d88301020a846765746888676f312e31392e38856c696e7578000000b19df4a2f8b5830aefffb860a8b4e7e5f158135b806ad8d725138c902ebce597c98f0205d3b2072b3ac06f1712103a9ba0e6b0da115364a28048d2ee0380cd09eecc422408390e716ef372c1cb6a4795898d0b3136019f53df637ab55aa73afd35b0c1da54a9762be654b472f84c8401dd8eb3a013901357854d7c35878d6ff9a24714e0c21f1beb95e0b55667b915d2d74c729e8401dd8eb4a055ac85646e4961091af47efe4cb44edc27446ee7b843e9ca88bd2410cabbd0bc804f894a2e6797eef8cb87e611a4d04c9d9d382a3025d0f21233992143acfdfd451598f85f09da424e6f1051aa4e3ead85b21a769d177c86d264799f13a4883bfc01").into(),
-        mix_digest: hex!("0000000000000000000000000000000000000000000000000000000000000000").into(),
-        nonce: hex!("0000000000000000").into(),
-        hash: hex!("194822ef17f86aa711f97387a2fed416227806f12a957715630f25a0a0604281"),
-        epoch: None
-    }
-}
-
-pub fn header_31297204() -> ETHHeader {
-    //https://api.bscscan.com/api?module=proxy&action=eth_getBlockByNumber&tag=0x1dd8eb4&boolean=false
-    //https://bscscan.com/block/31297204
-    ETHHeader {
-        parent_hash: hex!("13901357854d7c35878d6ff9a24714e0c21f1beb95e0b55667b915d2d74c729e").into(),
-        uncle_hash: hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").into(),
-        coinbase: hex!("295e26495cef6f69dfa69911d9d8e4f3bbadb89b").into(),
-        root: hex!("74f96bbe3fdcb97aa80f9865f150a32bd3640761feb026457b8ccf9c81a4d0b3"),
-        tx_hash: hex!("704032ce0e736aa129323696270ba0c4f4c226770d5a5769b477f20028c69528").into(),
-        receipt_hash: hex!("85796e78bcf8868383deb17f5794af1ab2a02920410faeb25dcdce0a2114d49f").into(),
-        bloom: hex!("9feff27efd2db7ffcf7b7a47cdacbe47305ddb6377342ccf63fae53f2861af5e9ea43fd9ecc15ddf1bbefee2cf7e5b0daee7599ef32f7fd3749eeddf6f7cbe9bacdecd9bf95d893fa17ee69f9aa794eaea9287fd53f6aba29fef91678af61e79cf7cbee3ffae8e87956fdf6bffdbadfd9c8ab27dadfb5dcf7267cdfd8fdb8febddefa87757ddbce536cfef151c57efdb97fe7cb77bf3fcdff9fe91dfbcffdcff9f033ad3737b378eb607af6c1fef94d4fc2aea7e9b7acd9df3e963e47ffb55f8eb3b35e31c7cadff7dfa0e6e71fa9bb1e5d7f6eecd29fa35ff57fddef394f9e9bdf3ed7b15e577cb7fbd16ff217a23a6fe76863bf3f35b692b0256b4b9634c5e").into(),
-        difficulty: 2,
-        number: u64::from_str_radix("1dd8eb4", 16).unwrap(),
-        gas_limit: u64::from_str_radix("85832a7", 16).unwrap(),
-        gas_used: u64::from_str_radix("1ab0be2", 16).unwrap(),
-        timestamp: u64::from_str_radix("64eee0a0", 16).unwrap(),
-        extra_data: hex!("d883010209846765746888676f312e32302e36856c696e7578000000b19df4a2f8b5830aefffb860a37f1a0dc4fbaffca02601db7fa52727bfc120101001a10a628b33340ae2437e34bab00c59ee3b77041899328ff816e0011b7f664c9837756fa64c824802ddcc15405628f667d07c6120161e68ef8c6ab2a5b03faf109f53254d9f65747781e4f84c8401dd8eb2a094fd52d22bffdadbdb22f6d8f5ff8843d7bb47cc4ed34170168862437d830c798401dd8eb3a013901357854d7c35878d6ff9a24714e0c21f1beb95e0b55667b915d2d74c729e8096c7d1f1f9dd8df490346a9b3e2f9cc92ee320217cc08dd253159cd50e3029052d9de5c19162eec1be3458eb7cb31e97dc9b656d80e92c681558beec028045da00").into(),
-        mix_digest: hex!("0000000000000000000000000000000000000000000000000000000000000000").into(),
-        nonce: hex!("0000000000000000").into(),
-        hash: hex!("55ac85646e4961091af47efe4cb44edc27446ee7b843e9ca88bd2410cabbd0bc"),
         epoch: None
     }
 }
