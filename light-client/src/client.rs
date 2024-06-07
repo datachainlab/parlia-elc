@@ -640,7 +640,7 @@ mod test {
             "{}",
             err
         );
-        // assert testdata validity
+        // assert fixture validity
         let de_header: Header = any.clone().try_into().unwrap();
         assert_ne!(
             de_header.eth_header().target.hash,
@@ -892,7 +892,7 @@ mod test {
             other => unreachable!("err={:?}", other),
         };
 
-        // assert testdata validity
+        // assert fixture validity
         assert_eq!(misbehavior.client_id, client_id);
         assert_eq!(misbehavior.header_1.height(), new_height(0, 1189));
         assert_eq!(

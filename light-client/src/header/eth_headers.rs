@@ -239,7 +239,7 @@ mod test {
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{get_turn_term, get_validator_bytes, ETHHeader};
     use crate::header::eth_headers::ETHHeaders;
-    use crate::testdata::localnet::*;
+    use crate::fixture::localnet::*;
 
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
     use crate::header::Header;

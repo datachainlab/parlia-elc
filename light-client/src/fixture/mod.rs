@@ -1,12 +1,12 @@
 use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{ChainId, Validators};
-use crate::testdata::localnet::Localnet;
+use crate::fixture::localnet::Localnet;
 use alloc::boxed::Box;
 
 pub mod localnet;
 
-pub trait TestData {
+pub trait Network {
     fn network(&self) -> ChainId;
     fn epoch_header(&self) -> ETHHeader;
     fn epoch_header_plus_1(&self) -> ETHHeader;
@@ -18,7 +18,7 @@ pub trait TestData {
     fn previous_validators(&self) -> Validators;
 }
 
-pub fn localnet() -> Box<dyn TestData> {
+pub fn localnet() -> Box<dyn Network> {
     Box::new(Localnet)
 }
 

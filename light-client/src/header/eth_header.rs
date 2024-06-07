@@ -441,8 +441,8 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::testdata::localnet::*;
-    use crate::testdata::{localnet, TestData};
+    use crate::fixture::localnet::*;
+    use crate::fixture::{localnet, Network};
     use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
@@ -474,7 +474,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_missing_vanity(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_missing_vanity(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY - 1].to_vec();
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -491,7 +491,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_missing_signature(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_missing_signature(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY + EXTRA_SEAL - 1].to_vec();
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -508,7 +508,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_unexpected_mix_hash(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_unexpected_mix_hash(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.mix_digest = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -523,7 +523,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_unexpected_uncle_hash(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_unexpected_uncle_hash(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.uncle_hash = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -538,7 +538,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_unexpected_difficulty(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_unexpected_difficulty(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.difficulty = 10;
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -554,7 +554,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_try_from_unexpected_nonce(#[case] hp: Box<dyn TestData>) {
+    fn test_error_try_from_unexpected_nonce(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header_plus_1();
         header.nonce = vec![];
         let raw = RawETHHeader::try_from(&header).unwrap();
@@ -569,7 +569,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_success_try_from_with_bep336_field(#[case] hp: Box<dyn TestData>) {
+    fn test_success_try_from_with_bep336_field(#[case] hp: Box<dyn Network>) {
         let base_fn = || {
             let header = hp.epoch_header();
             let mut stream = RlpStream::new();
@@ -695,7 +695,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_success_verify_seal(#[case] hp: Box<dyn TestData>) {
+    fn test_success_verify_seal(#[case] hp: Box<dyn Network>) {
         let validators = hp.previous_validators();
         let blocks = vec![
             hp.epoch_header(),
@@ -711,7 +711,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_verify_seal(#[case] hp: Box<dyn TestData>) {
+    fn test_error_verify_seal(#[case] hp: Box<dyn Network>) {
         let validators = hp.previous_validators();
         let mut blocks = vec![
             hp.epoch_header(),
@@ -742,7 +742,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_success_verify_cascading_fields(#[case] hp: Box<dyn TestData>) {
+    fn test_success_verify_cascading_fields(#[case] hp: Box<dyn Network>) {
         let blocks = vec![
             hp.epoch_header(),
             hp.epoch_header_plus_1(),
@@ -760,7 +760,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_verify_cascading_fields(#[case] hp: Box<dyn TestData>) {
+    fn test_error_verify_cascading_fields(#[case] hp: Box<dyn Network>) {
         let parent = hp.epoch_header();
         let mut block = hp.epoch_header_plus_1();
         block.gas_limit = 10000;
@@ -814,7 +814,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_success_verify_vote_attestation(#[case] hp: Box<dyn TestData>) {
+    fn test_success_verify_vote_attestation(#[case] hp: Box<dyn Network>) {
         let blocks = vec![
             hp.epoch_header(),
             hp.epoch_header_plus_1(),
@@ -832,7 +832,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_verify_vote_attestation(#[case] hp: Box<dyn TestData>) {
+    fn test_error_verify_vote_attestation(#[case] hp: Box<dyn Network>) {
         let header = hp.epoch_header_plus_1();
         let parent = hp.epoch_header_plus_1();
         let err = header.verify_vote_attestation(&parent).unwrap_err();

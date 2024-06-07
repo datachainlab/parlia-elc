@@ -6,12 +6,12 @@ use crate::header::eth_header::{get_validator_bytes, ETHHeader};
 use crate::header::eth_headers::ETHHeaders;
 
 use crate::misc::{ChainId, Validators};
-use crate::testdata::TestData;
+use crate::fixture::Network;
 
 pub struct Localnet;
 
 //TODO use local testnet data
-impl TestData for Localnet {
+impl Network for Localnet {
     fn network(&self) -> ChainId {
         ChainId::new(56)
     }

@@ -151,7 +151,7 @@ mod test {
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,
     };
-    use crate::testdata::localnet::{
+    use crate::fixture::localnet::{
         header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
     };
     use hex_literal::hex;
