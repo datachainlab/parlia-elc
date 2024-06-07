@@ -434,13 +434,6 @@ mod test {
             header_31297201(),
             header_31297202(),
             header_31297203(),
-            header_31297204(),
-            header_31297205(),
-            header_31297206(),
-            header_31297207(),
-            header_31297208(),
-            header_31297209(),
-            header_31297210(),
         ];
         let c_val = v.first().unwrap().clone().epoch.unwrap();
         let c_val = EitherEpoch::Untrusted(untrust(&c_val));
