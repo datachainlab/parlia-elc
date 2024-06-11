@@ -626,7 +626,7 @@ mod test {
             .update_client(&ctx, client_id.clone(), any.clone())
             .unwrap_err();
         assert!(
-            format!("{:?}", err).contains("UnexpectedHeaderRelation: 32160247 32160248"),
+            format!("{:?}", err).contains("UnexpectedPreviousValidatorsHash"),
             "{}",
             err
         );
