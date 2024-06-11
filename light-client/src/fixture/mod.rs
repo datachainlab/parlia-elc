@@ -1,8 +1,9 @@
 use crate::fixture::localnet::Localnet;
 use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
-use crate::misc::{ChainId, Validators};
+use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 pub mod localnet;
 
@@ -16,6 +17,27 @@ pub trait Network {
     fn headers_across_checkpoint(&self) -> ETHHeaders;
     fn headers_after_checkpoint(&self) -> ETHHeaders;
     fn previous_validators(&self) -> Validators;
+    fn ibc_store_address(&self) -> Address;
+    fn success_update_client_non_epoch_input(&self) -> UpdateClientNonEpochInput;
+    fn success_update_client_epoch_input(&self) -> UpdateClientEpochInput;
+}
+
+pub struct UpdateClientNonEpochInput {
+    pub header: Vec<u8>,
+    pub trusted_height: u64,
+    pub trusted_current_validators_hash: Hash,
+    pub trusted_previous_validators_hash: Hash,
+    pub expected_storage_root: Hash,
+}
+
+pub struct UpdateClientEpochInput {
+    pub header: Vec<u8>,
+    pub trusted_height: u64,
+    pub trusted_current_validators_hash: Hash,
+    pub trusted_previous_validators_hash: Hash,
+    pub new_current_validators_hash: Hash,
+    pub new_previous_validators_hash: Hash,
+    pub expected_storage_root: Hash,
 }
 
 pub fn localnet() -> Box<dyn Network> {

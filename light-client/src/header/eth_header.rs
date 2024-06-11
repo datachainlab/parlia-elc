@@ -441,7 +441,6 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::localnet::*;
     use crate::fixture::{localnet, Network};
     use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
