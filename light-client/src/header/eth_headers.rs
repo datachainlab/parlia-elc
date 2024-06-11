@@ -143,7 +143,7 @@ impl ETHHeaders {
             // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
             Trusted(trusted) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
-                let mut next_epoch = match hs.iter().find(|h| h.is_epoch()) {
+                let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
                     Some(h) => h
                         .epoch
                         .as_ref()

@@ -530,7 +530,6 @@ pub(crate) mod test {
         }
 
         let trusted_height = new_height(0, 200);
-        let previous_validators = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header(),
