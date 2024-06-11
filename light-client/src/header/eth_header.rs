@@ -270,9 +270,9 @@ pub fn get_validator_bytes(extra_data: &[u8]) -> Option<Validators> {
     )
 }
 
-pub fn get_turn_term(extra_data: &[u8]) -> Option<u8> {
+pub fn get_turn_term(_extra_data: &[u8]) -> Option<u8> {
     //TODO get turn term from extra-data
-    return Some(1);
+    Some(1)
 }
 
 impl TryFrom<RawETHHeader> for ETHHeader {
@@ -401,8 +401,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
                 .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?
                 .into();
             let turn_term = get_turn_term(&extra_data)
-                .ok_or_else(|| Error::MissingTurnTermInEpochBlock(number))?
-                .into();
+                .ok_or_else(|| Error::MissingTurnTermInEpochBlock(number))?;
             Some(Epoch::new(validators, turn_term))
         } else {
             None

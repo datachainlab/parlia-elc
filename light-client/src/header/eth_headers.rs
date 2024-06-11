@@ -5,8 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
-use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-use crate::header::validator_set::ValidatorSet;
+use crate::header::epoch::{EitherEpoch, TrustedEpoch, UntrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
@@ -236,7 +235,7 @@ fn unwrap_c_val<'a>(
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
-    use crate::fixture::localnet::*;
+
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{get_turn_term, get_validator_bytes, ETHHeader};
     use crate::header::eth_headers::ETHHeaders;
@@ -292,7 +291,7 @@ mod test {
         let headers = hp.headers_across_checkpoint();
         let p_val = Epoch::new(hp.previous_validators().into(), 1);
         let p_val = trust(&p_val);
-        let c_val = hp.epoch_header().epoch.clone().unwrap();
+        let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
         headers.verify(&hp.network(), &c_val, &p_val).unwrap();
     }

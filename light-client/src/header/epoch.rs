@@ -39,7 +39,7 @@ pub struct TrustedEpoch<'a> {
 
 impl<'a> TrustedEpoch<'a> {
     pub fn validators(&self) -> &Validators {
-        &self.inner.validators()
+        self.inner.validators()
     }
 
     pub fn checkpoint(&self) -> u64 {
@@ -66,7 +66,7 @@ impl<'a> UntrustedEpoch<'a> {
     pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Validators, Error> {
         let (result, found, required) = self.contains(trusted_epoch);
         if result {
-            return Ok(&self.inner.validators());
+            return Ok(self.inner.validators());
         }
         Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
             self.inner.hash,

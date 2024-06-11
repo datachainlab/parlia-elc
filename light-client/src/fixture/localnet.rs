@@ -1,6 +1,5 @@
 use crate::header::epoch::Epoch;
 use hex_literal::hex;
-use std::prelude::rust_2015::Vec;
 
 use crate::header::eth_header::{get_validator_bytes, ETHHeader};
 use crate::header::eth_headers::ETHHeaders;
