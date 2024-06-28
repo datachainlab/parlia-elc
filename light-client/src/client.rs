@@ -49,7 +49,8 @@ impl LightClient for ParliaLightClient {
         any_client_state: Any,
         any_consensus_state: Any,
     ) -> Result<CreateClientResult, LightClientError> {
-        self.process_create_client(ctx, any_client_state.clone(), any_consensus_state.clone())
+        InnerLightClient
+            .create_client(ctx, any_client_state.clone(), any_consensus_state.clone())
             .map_err(|e| ClientError::CreateClient(e, any_client_state, any_consensus_state).into())
     }
 
@@ -59,7 +60,8 @@ impl LightClient for ParliaLightClient {
         client_id: ClientId,
         any_message: Any,
     ) -> Result<UpdateClientResult, LightClientError> {
-        self.process_update_client(ctx, client_id.clone(), any_message.clone())
+        InnerLightClient
+            .update_client(ctx, client_id.clone(), any_message.clone())
             .map_err(|e| ClientError::UpdateClient(e, client_id, any_message).into())
     }
 
@@ -73,19 +75,28 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<VerifyMembershipResult, LightClientError> {
-        self.process_verify_membership(
-            ctx,
-            client_id.clone(),
-            prefix.clone(),
-            path.clone(),
-            value.clone(),
-            proof_height,
-            proof.clone(),
-        )
-        .map_err(|e| {
-            ClientError::VerifyMembership(e, client_id, prefix, path, value, proof_height, proof)
+        InnerLightClient
+            .verify_membership(
+                ctx,
+                client_id.clone(),
+                prefix.clone(),
+                path.clone(),
+                value.clone(),
+                proof_height,
+                proof.clone(),
+            )
+            .map_err(|e| {
+                ClientError::VerifyMembership(
+                    e,
+                    client_id,
+                    prefix,
+                    path,
+                    value,
+                    proof_height,
+                    proof,
+                )
                 .into()
-        })
+            })
     }
 
     fn verify_non_membership(
@@ -97,22 +108,26 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<VerifyNonMembershipResult, LightClientError> {
-        self.process_verify_non_membership(
-            ctx,
-            client_id.clone(),
-            prefix.clone(),
-            path.clone(),
-            proof_height,
-            proof.clone(),
-        )
-        .map_err(|e| {
-            ClientError::VerifyNonMembership(e, client_id, prefix, path, proof_height, proof).into()
-        })
+        InnerLightClient
+            .verify_non_membership(
+                ctx,
+                client_id.clone(),
+                prefix.clone(),
+                path.clone(),
+                proof_height,
+                proof.clone(),
+            )
+            .map_err(|e| {
+                ClientError::VerifyNonMembership(e, client_id, prefix, path, proof_height, proof)
+                    .into()
+            })
     }
 }
 
-impl ParliaLightClient {
-    fn process_create_client(
+struct InnerLightClient;
+
+impl InnerLightClient {
+    fn create_client(
         &self,
         _ctx: &dyn HostClientReader,
         any_client_state: Any,
@@ -142,7 +157,7 @@ impl ParliaLightClient {
         })
     }
 
-    fn process_update_client(
+    fn update_client(
         &self,
         ctx: &dyn HostClientReader,
         client_id: ClientId,
@@ -167,7 +182,7 @@ impl ParliaLightClient {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn process_verify_membership(
+    fn verify_membership(
         &self,
         ctx: &dyn HostClientReader,
         client_id: ClientId,
@@ -199,7 +214,7 @@ impl ParliaLightClient {
         })
     }
 
-    fn process_verify_non_membership(
+    fn verify_non_membership(
         &self,
         ctx: &dyn HostClientReader,
         client_id: ClientId,
@@ -873,7 +888,7 @@ mod test {
             true,
         )
         .unwrap_err();
-        let expected = format!("{:?}", err).contains(" ClientFrozen: xx-parlia-0");
+        let expected = format!("{:?}", err).contains("ClientFrozen: xx-parlia-0");
         assert!(expected, "{}", err);
     }
 
