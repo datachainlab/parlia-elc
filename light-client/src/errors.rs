@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
-use light_client::commitments::Error as CommitmentError;
-use light_client::types::{ClientId, Height, Time, TimeError};
+use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
+use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
@@ -112,6 +112,9 @@ pub enum Error {
     UnexpectedDifferentHeight(Height, Height),
     UnexpectedSameBlockHash(Height),
     TrieError(BoxedTrieError),
+
+    // Framework
+    LCPError(light_client::Error),
 }
 
 impl core::fmt::Display for Error {
@@ -327,8 +330,70 @@ impl core::fmt::Display for Error {
             Error::LCPCommitmentError(e1) => {
                 write!(f, "LCPCommitmentError : {}", e1)
             }
+            Error::LCPError(e1) => {
+                write!(f, "LCPError: {}", e1)
+            }
         }
     }
 }
 
-impl light_client::LightClientSpecificError for Error {}
+#[derive(Debug)]
+pub enum ClientError {
+    LatestHeight(Error, ClientId),
+    CreateClient(Error, Any, Any),
+    UpdateClient(Error, ClientId, Any),
+    VerifyMembership(
+        Error,
+        ClientId,
+        CommitmentPrefix,
+        String,
+        Vec<u8>,
+        Height,
+        Vec<u8>,
+    ),
+    VerifyNonMembership(Error, ClientId, CommitmentPrefix, String, Height, Vec<u8>),
+}
+
+impl core::fmt::Display for ClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ClientError::LatestHeight(e, client_id) => write!(
+                f,
+                "LatestHeight: cause={}\n, client_id={:?}",
+                e, client_id
+            ),
+            ClientError::CreateClient(e, any_client_state, any_consensus_state) => write!(
+                f,
+                "CreateClient: cause={}\n, any_client_state={:?}, any_consensus_state={:?}",
+                e, any_client_state, any_consensus_state
+            ),
+            ClientError::UpdateClient(e, client_id, message) => write!(
+                f,
+                "CreateClient: cause={}\n, client_id={:?}, message={:?}",
+                e, client_id, message
+            ),
+            ClientError::VerifyMembership(e,  client_id,
+                                          prefix,
+                                          path,
+                                          value,
+                                          proof_height,
+                                          proof
+            ) => write!(
+                f,
+                "VerifyMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, value={:?}, proof_height={:?}, proof={:?}",
+                e, client_id, prefix, path, value, proof_height, proof
+            ),
+            ClientError::VerifyNonMembership(e,  client_id,
+                                          prefix,
+                                          path,
+                                          proof_height,
+                                          proof
+            ) => write!(
+                f,
+                "VerifyNonMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, proof_height={:?}, proof={:?}",
+                e, client_id, prefix, path, proof_height, proof
+            ),
+        }
+    }
+}
+impl light_client::LightClientSpecificError for ClientError {}
