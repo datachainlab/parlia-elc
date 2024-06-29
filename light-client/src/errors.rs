@@ -339,59 +339,82 @@ impl core::fmt::Display for Error {
 
 #[derive(Debug)]
 pub enum ClientError {
-    LatestHeight(Error, ClientId),
-    CreateClient(Error, Any, Any),
-    UpdateClient(Error, ClientId, Any),
-    VerifyMembership(
-        Error,
-        ClientId,
-        CommitmentPrefix,
-        String,
-        Vec<u8>,
-        Height,
-        Vec<u8>,
-    ),
-    VerifyNonMembership(Error, ClientId, CommitmentPrefix, String, Height, Vec<u8>),
+    LatestHeight {
+        cause: Error,
+        client_id: ClientId,
+    },
+    CreateClient {
+        cause: Error,
+        client_state: Any,
+        consensus_sate: Any,
+    },
+    UpdateClient {
+        cause: Error,
+        client_id: ClientId,
+        message: Any,
+    },
+    VerifyMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        value: Vec<u8>,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
+    VerifyNonMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
 }
 
 impl core::fmt::Display for ClientError {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            ClientError::LatestHeight(e, client_id) => write!(
+            ClientError::LatestHeight {
+                cause,
+                client_id
+            } => write!(
                 f,
-                "LatestHeight: cause={}\n, client_id={:?}",
-                e, client_id
+                "LatestHeight: cause={}\n, client_id={}",
+                cause, client_id
             ),
-            ClientError::CreateClient(e, any_client_state, any_consensus_state) => write!(
+            ClientError::CreateClient {cause, client_state, consensus_sate} => write!(
                 f,
-                "CreateClient: cause={}\n, any_client_state={:?}, any_consensus_state={:?}",
-                e, any_client_state, any_consensus_state
+                "CreateClient: cause={}\n, client_state={:?}, consensus_state={:?}",
+                cause, client_state, consensus_sate
             ),
-            ClientError::UpdateClient(e, client_id, message) => write!(
+            ClientError::UpdateClient{cause, client_id, message} => write!(
                 f,
                 "CreateClient: cause={}\n, client_id={:?}, message={:?}",
-                e, client_id, message
+                cause, client_id, message
             ),
-            ClientError::VerifyMembership(e,  client_id,
-                                          prefix,
-                                          path,
-                                          value,
-                                          proof_height,
-                                          proof
-            ) => write!(
+            ClientError::VerifyMembership {
+                cause, client_id,
+                prefix,
+                path,
+                value,
+                proof_height,
+                proof
+            } => write!(
                 f,
                 "VerifyMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, value={:?}, proof_height={:?}, proof={:?}",
-                e, client_id, prefix, path, value, proof_height, proof
+                cause, client_id, prefix, path, value, proof_height, proof
             ),
-            ClientError::VerifyNonMembership(e,  client_id,
-                                          prefix,
-                                          path,
-                                          proof_height,
-                                          proof
-            ) => write!(
+            ClientError::VerifyNonMembership {
+                cause, client_id,
+                prefix,
+                path,
+                proof_height,
+                proof
+            } => write!(
                 f,
                 "VerifyNonMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, proof_height={:?}, proof={:?}",
-                e, client_id, prefix, path, proof_height, proof
+                cause, client_id, prefix, path, proof_height, proof
             ),
         }
     }

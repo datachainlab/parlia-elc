@@ -38,8 +38,11 @@ impl LightClient for ParliaLightClient {
         client_id: &ClientId,
     ) -> Result<Height, LightClientError> {
         let any_client_state = ctx.client_state(client_id)?;
-        let client_state = ClientState::try_from(any_client_state)
-            .map_err(|e| ClientError::LatestHeight(e, client_id.clone()))?;
+        let client_state =
+            ClientState::try_from(any_client_state).map_err(|e| ClientError::LatestHeight {
+                cause: e,
+                client_id: client_id.clone(),
+            })?;
         Ok(client_state.latest_height)
     }
 
@@ -51,7 +54,14 @@ impl LightClient for ParliaLightClient {
     ) -> Result<CreateClientResult, LightClientError> {
         InnerLightClient
             .create_client(ctx, any_client_state.clone(), any_consensus_state.clone())
-            .map_err(|e| ClientError::CreateClient(e, any_client_state, any_consensus_state).into())
+            .map_err(|e| {
+                ClientError::CreateClient {
+                    cause: e,
+                    client_state: any_client_state,
+                    consensus_sate: any_consensus_state,
+                }
+                .into()
+            })
     }
 
     fn update_client(
@@ -62,7 +72,14 @@ impl LightClient for ParliaLightClient {
     ) -> Result<UpdateClientResult, LightClientError> {
         InnerLightClient
             .update_client(ctx, client_id.clone(), any_message.clone())
-            .map_err(|e| ClientError::UpdateClient(e, client_id, any_message).into())
+            .map_err(|e| {
+                ClientError::UpdateClient {
+                    cause: e,
+                    client_id,
+                    message: any_message,
+                }
+                .into()
+            })
     }
 
     fn verify_membership(
@@ -86,15 +103,15 @@ impl LightClient for ParliaLightClient {
                 proof.clone(),
             )
             .map_err(|e| {
-                ClientError::VerifyMembership(
-                    e,
+                ClientError::VerifyMembership {
+                    cause: e,
                     client_id,
                     prefix,
                     path,
                     value,
                     proof_height,
                     proof,
-                )
+                }
                 .into()
             })
     }
@@ -118,8 +135,15 @@ impl LightClient for ParliaLightClient {
                 proof.clone(),
             )
             .map_err(|e| {
-                ClientError::VerifyNonMembership(e, client_id, prefix, path, proof_height, proof)
-                    .into()
+                ClientError::VerifyNonMembership {
+                    cause: e,
+                    client_id,
+                    prefix,
+                    path,
+                    proof_height,
+                    proof,
+                }
+                .into()
             })
     }
 }
