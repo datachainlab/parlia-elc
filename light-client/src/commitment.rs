@@ -67,12 +67,12 @@ pub fn verify_proof(
     Ok(())
 }
 
-fn verify(root: &Hash, proof: &[Vec<u8>], key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+fn verify(raw_root: &Hash, proof: &[Vec<u8>], key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
     let db = StorageProof::new(proof.to_vec()).into_memory_db::<keccak::KeccakHasher>();
-    let root: primitive_types::H256 = root.into();
+    let root: primitive_types::H256 = raw_root.into();
     let trie = TrieDBBuilder::<EIP1186Layout<keccak::KeccakHasher>>::new(&db, &root).build();
     trie.get(&keccak_256(key))
-        .map_err(|e| Error::TrieError(e, root, proof.to_vec(), key.to_vec()))
+        .map_err(|e| Error::TrieError(e, *raw_root, proof.to_vec(), key.to_vec()))
 }
 
 fn trim_left_zero(value: &[u8]) -> &[u8] {

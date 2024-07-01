@@ -112,7 +112,7 @@ pub enum Error {
     UnexpectedDifferentHeight(Height, Height),
     UnexpectedSameBlockHash(Height),
 
-    TrieError(BoxedTrieError, primitive_types::H256, Vec<Vec<u8>>, Vec<u8>),
+    TrieError(BoxedTrieError, Hash, Vec<Vec<u8>>, Vec<u8>),
 
     // Framework
     LCPError(light_client::Error),
