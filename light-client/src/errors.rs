@@ -380,17 +380,17 @@ impl core::fmt::Display for ClientError {
                 client_id
             } => write!(
                 f,
-                "LatestHeight: cause={}\n, client_id={}",
+                "LatestHeight: cause={}\nclient_id={}",
                 cause, client_id
             ),
             ClientError::CreateClient {cause, client_state, consensus_sate} => write!(
                 f,
-                "CreateClient: cause={}\n, client_state={:?}, consensus_state={:?}",
+                "CreateClient: cause={}\nclient_state={:?}\nconsensus_state={:?}",
                 cause, client_state, consensus_sate
             ),
             ClientError::UpdateClient{cause, client_id, message} => write!(
                 f,
-                "CreateClient: cause={}\n, client_id={:?}, message={:?}",
+                "CreateClient: cause={}\nclient_id={:?}\nmessage={:?}",
                 cause, client_id, message
             ),
             ClientError::VerifyMembership {
@@ -402,7 +402,7 @@ impl core::fmt::Display for ClientError {
                 proof
             } => write!(
                 f,
-                "VerifyMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, value={:?}, proof_height={:?}, proof={:?}",
+                "VerifyMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nvalue={:?}\nproof_height={:?}\nproof={:?}",
                 cause, client_id, prefix, path, value, proof_height, proof
             ),
             ClientError::VerifyNonMembership {
@@ -413,7 +413,7 @@ impl core::fmt::Display for ClientError {
                 proof
             } => write!(
                 f,
-                "VerifyNonMembership: cause={}\n, client_id={:?}, prefix={:?}, path={:?}, proof_height={:?}, proof={:?}",
+                "VerifyNonMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nproof_height={:?}\nproof={:?}",
                 cause, client_id, prefix, path, proof_height, proof
             ),
         }
