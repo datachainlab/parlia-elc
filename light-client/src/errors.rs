@@ -111,7 +111,8 @@ pub enum Error {
     UnexpectedClientId(String),
     UnexpectedDifferentHeight(Height, Height),
     UnexpectedSameBlockHash(Height),
-    TrieError(BoxedTrieError),
+
+    TrieError(BoxedTrieError, primitive_types::H256, Vec<Vec<u8>>, Vec<u8>),
 
     // Framework
     LCPError(light_client::Error),
@@ -210,8 +211,8 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4, e5
                 )
             }
-            Error::TrieError(e1) => {
-                write!(f, "TrieError : {:?}", e1)
+            Error::TrieError(e1, e2, e3, e4) => {
+                write!(f, "TrieError : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
             }
             Error::InvalidProofFormatError(e1) => {
                 write!(f, "InvalidProofFormatError : {:?}", e1)
