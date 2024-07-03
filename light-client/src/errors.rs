@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
-use light_client::commitments::Error as CommitmentError;
-use light_client::types::{ClientId, Height, Time, TimeError};
+use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
+use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
@@ -113,7 +113,11 @@ pub enum Error {
     UnexpectedClientId(String),
     UnexpectedDifferentHeight(Height, Height),
     UnexpectedSameBlockHash(Height),
-    TrieError(BoxedTrieError),
+
+    TrieError(BoxedTrieError, Hash, Vec<Vec<u8>>, Vec<u8>),
+
+    // Framework
+    LCPError(light_client::Error),
 }
 
 impl core::fmt::Display for Error {
@@ -209,8 +213,8 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4, e5
                 )
             }
-            Error::TrieError(e1) => {
-                write!(f, "TrieError : {:?}", e1)
+            Error::TrieError(e1, e2, e3, e4) => {
+                write!(f, "TrieError : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
             }
             Error::InvalidProofFormatError(e1) => {
                 write!(f, "InvalidProofFormatError : {:?}", e1)
@@ -335,8 +339,93 @@ impl core::fmt::Display for Error {
             Error::LCPCommitmentError(e1) => {
                 write!(f, "LCPCommitmentError : {}", e1)
             }
+            Error::LCPError(e1) => {
+                write!(f, "LCPError: {}", e1)
+            }
         }
     }
 }
 
-impl light_client::LightClientSpecificError for Error {}
+#[derive(Debug)]
+pub enum ClientError {
+    LatestHeight {
+        cause: Error,
+        client_id: ClientId,
+    },
+    CreateClient {
+        cause: Error,
+        client_state: Any,
+        consensus_sate: Any,
+    },
+    UpdateClient {
+        cause: Error,
+        client_id: ClientId,
+        message: Any,
+    },
+    VerifyMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        value: Vec<u8>,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
+    VerifyNonMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
+}
+
+impl core::fmt::Display for ClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ClientError::LatestHeight {
+                cause,
+                client_id
+            } => write!(
+                f,
+                "LatestHeight: cause={}\nclient_id={}",
+                cause, client_id
+            ),
+            ClientError::CreateClient {cause, client_state, consensus_sate} => write!(
+                f,
+                "CreateClient: cause={}\nclient_state={:?}\nconsensus_state={:?}",
+                cause, client_state, consensus_sate
+            ),
+            ClientError::UpdateClient{cause, client_id, message} => write!(
+                f,
+                "CreateClient: cause={}\nclient_id={:?}\nmessage={:?}",
+                cause, client_id, message
+            ),
+            ClientError::VerifyMembership {
+                cause, client_id,
+                prefix,
+                path,
+                value,
+                proof_height,
+                proof
+            } => write!(
+                f,
+                "VerifyMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nvalue={:?}\nproof_height={:?}\nproof={:?}",
+                cause, client_id, prefix, path, value, proof_height, proof
+            ),
+            ClientError::VerifyNonMembership {
+                cause, client_id,
+                prefix,
+                path,
+                proof_height,
+                proof
+            } => write!(
+                f,
+                "VerifyNonMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nproof_height={:?}\nproof={:?}",
+                cause, client_id, prefix, path, proof_height, proof
+            ),
+        }
+    }
+}
+impl light_client::LightClientSpecificError for ClientError {}
