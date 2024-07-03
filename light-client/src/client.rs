@@ -18,7 +18,7 @@ use crate::commitment::{
     calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof,
 };
 use crate::consensus_state::ConsensusState;
-use crate::errors::Error;
+use crate::errors::{ClientError, Error};
 
 use crate::header::Header;
 use crate::message::ClientMessage;
@@ -38,16 +38,125 @@ impl LightClient for ParliaLightClient {
         client_id: &ClientId,
     ) -> Result<Height, LightClientError> {
         let any_client_state = ctx.client_state(client_id)?;
-        let client_state = ClientState::try_from(any_client_state)?;
+        let client_state =
+            ClientState::try_from(any_client_state).map_err(|e| ClientError::LatestHeight {
+                cause: e,
+                client_id: client_id.clone(),
+            })?;
         Ok(client_state.latest_height)
     }
 
     fn create_client(
         &self,
-        _ctx: &dyn HostClientReader,
+        ctx: &dyn HostClientReader,
         any_client_state: Any,
         any_consensus_state: Any,
     ) -> Result<CreateClientResult, LightClientError> {
+        InnerLightClient
+            .create_client(ctx, any_client_state.clone(), any_consensus_state.clone())
+            .map_err(|e| {
+                ClientError::CreateClient {
+                    cause: e,
+                    client_state: any_client_state,
+                    consensus_sate: any_consensus_state,
+                }
+                .into()
+            })
+    }
+
+    fn update_client(
+        &self,
+        ctx: &dyn HostClientReader,
+        client_id: ClientId,
+        any_message: Any,
+    ) -> Result<UpdateClientResult, LightClientError> {
+        InnerLightClient
+            .update_client(ctx, client_id.clone(), any_message.clone())
+            .map_err(|e| {
+                ClientError::UpdateClient {
+                    cause: e,
+                    client_id,
+                    message: any_message,
+                }
+                .into()
+            })
+    }
+
+    fn verify_membership(
+        &self,
+        ctx: &dyn HostClientReader,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        value: Vec<u8>,
+        proof_height: Height,
+        proof: Vec<u8>,
+    ) -> Result<VerifyMembershipResult, LightClientError> {
+        InnerLightClient
+            .verify_membership(
+                ctx,
+                client_id.clone(),
+                prefix.clone(),
+                path.clone(),
+                value.clone(),
+                proof_height,
+                proof.clone(),
+            )
+            .map_err(|e| {
+                ClientError::VerifyMembership {
+                    cause: e,
+                    client_id,
+                    prefix,
+                    path,
+                    value,
+                    proof_height,
+                    proof,
+                }
+                .into()
+            })
+    }
+
+    fn verify_non_membership(
+        &self,
+        ctx: &dyn HostClientReader,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        proof_height: Height,
+        proof: Vec<u8>,
+    ) -> Result<VerifyNonMembershipResult, LightClientError> {
+        InnerLightClient
+            .verify_non_membership(
+                ctx,
+                client_id.clone(),
+                prefix.clone(),
+                path.clone(),
+                proof_height,
+                proof.clone(),
+            )
+            .map_err(|e| {
+                ClientError::VerifyNonMembership {
+                    cause: e,
+                    client_id,
+                    prefix,
+                    path,
+                    proof_height,
+                    proof,
+                }
+                .into()
+            })
+    }
+}
+
+struct InnerLightClient;
+
+impl InnerLightClient {
+    fn create_client(
+        &self,
+        _ctx: &dyn HostClientReader,
+        any_client_state: Any,
+        any_consensus_state: Any,
+    ) -> Result<CreateClientResult, Error> {
         let client_state = ClientState::try_from(any_client_state.clone())?;
         let consensus_state = ConsensusState::try_from(any_consensus_state)?;
 
@@ -77,7 +186,7 @@ impl LightClient for ParliaLightClient {
         ctx: &dyn HostClientReader,
         client_id: ClientId,
         any_message: Any,
-    ) -> Result<UpdateClientResult, LightClientError> {
+    ) -> Result<UpdateClientResult, Error> {
         match ClientMessage::try_from(any_message.clone())? {
             ClientMessage::Header(header) => Ok(self.update_state(ctx, client_id, header)?.into()),
             ClientMessage::Misbehaviour(misbehavior) => {
@@ -96,6 +205,7 @@ impl LightClient for ParliaLightClient {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn verify_membership(
         &self,
         ctx: &dyn HostClientReader,
@@ -105,7 +215,7 @@ impl LightClient for ParliaLightClient {
         value: Vec<u8>,
         proof_height: Height,
         proof: Vec<u8>,
-    ) -> Result<VerifyMembershipResult, LightClientError> {
+    ) -> Result<VerifyMembershipResult, Error> {
         let value = keccak_256(&value);
         let state_id = self.verify_commitment(
             ctx,
@@ -136,33 +246,33 @@ impl LightClient for ParliaLightClient {
         path: String,
         proof_height: Height,
         proof: Vec<u8>,
-    ) -> Result<VerifyNonMembershipResult, LightClientError> {
+    ) -> Result<VerifyNonMembershipResult, Error> {
         let state_id =
             self.verify_commitment(ctx, client_id, &prefix, &path, None, &proof_height, proof)?;
         Ok(VerifyNonMembershipResult {
             message: VerifyMembershipProxyMessage::new(prefix, path, None, proof_height, state_id),
         })
     }
-}
 
-impl ParliaLightClient {
     pub fn update_state(
         &self,
         ctx: &dyn HostClientReader,
         client_id: ClientId,
         header: Header,
-    ) -> Result<UpdateStateData, LightClientError> {
+    ) -> Result<UpdateStateData, Error> {
         //Ensure header can be verified.
         let height = header.height();
         let timestamp = header.timestamp()?;
         let trusted_height = header.trusted_height();
-        let any_client_state = ctx.client_state(&client_id)?;
-        let any_consensus_state = ctx.consensus_state(&client_id, &trusted_height)?;
+        let any_client_state = ctx.client_state(&client_id).map_err(Error::LCPError)?;
+        let any_consensus_state = ctx
+            .consensus_state(&client_id, &trusted_height)
+            .map_err(Error::LCPError)?;
 
         //Ensure client is not frozen
         let client_state = ClientState::try_from(any_client_state)?;
         if client_state.frozen {
-            return Err(Error::ClientFrozen(client_id).into());
+            return Err(Error::ClientFrozen(client_id));
         }
 
         // Create new state and ensure header is valid
@@ -207,16 +317,18 @@ impl ParliaLightClient {
         ctx: &dyn HostClientReader,
         client_id: ClientId,
         misbehaviour: Misbehaviour,
-    ) -> Result<(ClientState, Vec<PrevState>, ValidationContext), LightClientError> {
-        let any_client_state = ctx.client_state(&client_id)?;
-        let any_consensus_state1 =
-            ctx.consensus_state(&client_id, &misbehaviour.header_1.trusted_height())?;
-        let any_consensus_state2 =
-            ctx.consensus_state(&client_id, &misbehaviour.header_2.trusted_height())?;
+    ) -> Result<(ClientState, Vec<PrevState>, ValidationContext), Error> {
+        let any_client_state = ctx.client_state(&client_id).map_err(Error::LCPError)?;
+        let any_consensus_state1 = ctx
+            .consensus_state(&client_id, &misbehaviour.header_1.trusted_height())
+            .map_err(Error::LCPError)?;
+        let any_consensus_state2 = ctx
+            .consensus_state(&client_id, &misbehaviour.header_2.trusted_height())
+            .map_err(Error::LCPError)?;
 
         let client_state = ClientState::try_from(any_client_state)?;
         if client_state.frozen {
-            return Err(Error::ClientFrozen(client_id).into());
+            return Err(Error::ClientFrozen(client_id));
         }
 
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
@@ -266,20 +378,24 @@ impl ParliaLightClient {
         value: Option<Vec<u8>>,
         proof_height: &Height,
         storage_proof_rlp: Vec<u8>,
-    ) -> Result<StateID, LightClientError> {
-        let client_state = ClientState::try_from(ctx.client_state(&client_id)?)?;
+    ) -> Result<StateID, Error> {
+        let client_state =
+            ClientState::try_from(ctx.client_state(&client_id).map_err(Error::LCPError)?)?;
         if client_state.frozen {
-            return Err(Error::ClientFrozen(client_id).into());
+            return Err(Error::ClientFrozen(client_id));
         }
         let proof_height = *proof_height;
         if client_state.latest_height < proof_height {
-            return Err(
-                Error::UnexpectedProofHeight(proof_height, client_state.latest_height).into(),
-            );
+            return Err(Error::UnexpectedProofHeight(
+                proof_height,
+                client_state.latest_height,
+            ));
         }
 
-        let consensus_state =
-            ConsensusState::try_from(ctx.consensus_state(&client_id, &proof_height)?)?;
+        let consensus_state = ConsensusState::try_from(
+            ctx.consensus_state(&client_id, &proof_height)
+                .map_err(Error::LCPError)?,
+        )?;
         let storage_root = consensus_state.state_root;
         let storage_proof = decode_eip1184_rlp_proof(&storage_proof_rlp)?;
         verify_proof(
@@ -299,11 +415,13 @@ impl ParliaLightClient {
         client_id: &ClientId,
         client_state: &ClientState,
         heights: Vec<Height>,
-    ) -> Result<Vec<PrevState>, LightClientError> {
+    ) -> Result<Vec<PrevState>, Error> {
         let mut prev_states = Vec::new();
         for height in heights {
-            let consensus_state: ConsensusState =
-                ctx.consensus_state(client_id, &height)?.try_into()?;
+            let consensus_state: ConsensusState = ctx
+                .consensus_state(client_id, &height)
+                .map_err(Error::LCPError)?
+                .try_into()?;
             prev_states.push(PrevState {
                 height,
                 state_id: gen_state_id(client_state.clone(), consensus_state)?,
@@ -316,10 +434,12 @@ impl ParliaLightClient {
 fn gen_state_id(
     client_state: ClientState,
     consensus_state: ConsensusState,
-) -> Result<StateID, LightClientError> {
+) -> Result<StateID, Error> {
     let client_state = Any::try_from(client_state.canonicalize())?;
     let consensus_state = Any::try_from(consensus_state.canonicalize())?;
-    gen_state_id_from_any(&client_state, &consensus_state).map_err(LightClientError::commitment)
+    gen_state_id_from_any(&client_state, &consensus_state)
+        .map_err(LightClientError::commitment)
+        .map_err(Error::LCPError)
 }
 
 #[cfg(test)]
@@ -412,7 +532,7 @@ mod test {
                 .client_state
                 .clone()
                 .ok_or_else(|| light_client::Error::client_state_not_found(client_id.clone()))?;
-            Ok(Any::try_from(cs)?)
+            Ok(Any::try_from(cs).unwrap())
         }
 
         fn consensus_state(
@@ -427,7 +547,7 @@ mod test {
                     light_client::Error::consensus_state_not_found(client_id.clone(), *height)
                 })?
                 .clone();
-            Ok(Any::try_from(state)?)
+            Ok(Any::try_from(state).unwrap())
         }
     }
 
@@ -792,7 +912,7 @@ mod test {
             true,
         )
         .unwrap_err();
-        let expected = format!("{:?}", err).contains(" ClientFrozen: xx-parlia-0");
+        let expected = format!("{:?}", err).contains("ClientFrozen: xx-parlia-0");
         assert!(expected, "{}", err);
     }
 
