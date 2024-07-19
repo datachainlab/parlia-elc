@@ -275,6 +275,7 @@ mod test {
     use crate::fixture::*;
     use crate::header::epoch::Epoch;
     use crate::header::eth_header::ETHHeader;
+    use crate::header::eth_headers::ETHHeaders;
     use crate::header::validator_set::ValidatorSet;
     use crate::header::Header;
     use crate::misc::{keccak_256_vec, new_timestamp, ChainId, Hash};
@@ -311,58 +312,54 @@ mod test {
         let cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(h.timestamp).unwrap(),
-            current_validators_hash: make_cs_hash(keccak_256_vec(&hp.previous_validators())),
-            previous_validators_hash: make_cs_hash(keccak_256_vec(&hp.previous_validators())),
+            current_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
+            previous_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
         };
-        let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
-            trusted_height: Some(Height {
+        let header = Header::new(
+            vec![1],
+            ETHHeaders {
+                target: hp.epoch_header(),
+                all: vec![],
+            },
+            Height {
                 revision_number: 0,
                 revision_height: h.number - 1,
-            }),
-            account_proof: vec![],
-            current_validators: if h.is_epoch() {
-                h.epoch.clone().unwrap().validators().clone()
-            } else {
-                vec![]
             },
-            previous_validators: hp.previous_validators(),
-            previous_turn_term: 1,
-            current_turn_term: 1,
-        };
+            hp.previous_epoch_header().epoch.unwrap(),
+            hp.epoch_header().epoch.unwrap(),
+        );
         let now = new_timestamp(h.timestamp + 1).unwrap();
-        let invalid_header: Header = raw.clone().try_into().unwrap();
         let err = cs
-            .check_header_and_update_state(now, &cons_state, invalid_header)
+            .check_header_and_update_state(now, &cons_state, header.clone())
             .unwrap_err();
         match err {
             Error::InvalidVerifyingHeaderLength(number, size) => {
                 assert_eq!(number, h.number);
-                assert_eq!(size, raw.headers.len());
+                assert_eq!(size, header.eth_header().all.len());
             }
             err => unreachable!("{:?}", err),
         }
 
         // fail: resolve_account
-        let raw = RawHeader {
-            headers: vec![
-                (&hp.epoch_header()).try_into().unwrap(),
-                (&hp.epoch_header_plus_1()).try_into().unwrap(),
-                (&hp.epoch_header_plus_2()).try_into().unwrap(),
-            ],
-            trusted_height: Some(Height {
+        let header = Header::new(
+            vec![1],
+            ETHHeaders {
+                target: hp.epoch_header(),
+                all: vec![
+                    hp.epoch_header(),
+                    hp.epoch_header_plus_1(),
+                    hp.epoch_header_plus_2(),
+                ],
+            },
+            Height {
                 revision_number: 0,
                 revision_height: h.number - 1,
-            }),
-            account_proof: vec![1],
-            current_validators: hp.epoch_header().epoch.unwrap().validators().clone(),
-            previous_validators: hp.previous_validators(),
-            previous_turn_term: 1,
-            current_turn_term: 1,
-        };
-        let valid_header: Header = raw.try_into().unwrap();
+            },
+            hp.previous_epoch_header().epoch.unwrap(),
+            hp.epoch_header().epoch.unwrap(),
+        );
         let err = cs
-            .check_header_and_update_state(now, &cons_state, valid_header)
+            .check_header_and_update_state(now, &cons_state, header)
             .unwrap_err();
         match err {
             Error::InvalidProofFormatError(value) => {
