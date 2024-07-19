@@ -78,16 +78,16 @@ mod test {
     use std::prelude::rust_2015::Box;
 
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehaviour;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};
 
-    fn to_raw(h: &ETHHeader) -> RawHeader {
+    fn to_raw(h: alloc::vec::Vec<u8>, coinbase: alloc::vec::Vec<u8>) -> RawHeader {
         RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader { header: h }],
             trusted_height: Some(Height::default()),
             account_proof: vec![],
-            current_validators: vec![h.coinbase.clone()],
-            previous_validators: vec![h.coinbase.clone()],
+            current_validators: vec![coinbase.clone()],
+            previous_validators: vec![coinbase],
             previous_turn_term: 1,
             current_turn_term: 1,
         }
@@ -125,7 +125,7 @@ mod test {
         let h1 = hp.epoch_header_plus_1();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
+            header_1: Some(to_raw(hp.epoch_header_plus_1_rlp(), h1.coinbase)),
             header_2: None,
         };
         match Misbehaviour::try_from(src).unwrap_err() {
@@ -140,8 +140,8 @@ mod test {
         let h1 = hp.epoch_header();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h1)),
+            header_1: Some(to_raw(hp.epoch_header_rlp(), h1.coinbase.clone())),
+            header_2: Some(to_raw(hp.epoch_header_rlp(), h1.coinbase)),
         };
         match Misbehaviour::try_from(src).unwrap_err() {
             Error::UnexpectedSameBlockHash(height) => assert_eq!(height, new_height(0, h1.number)),
@@ -152,12 +152,12 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_try_from_different_height(#[case] hp: Box<dyn Network>) {
-        let h1 = hp.epoch_header_plus_1();
-        let h2 = hp.epoch_header_plus_2();
+        let h1 = hp.epoch_header();
+        let h2 = hp.epoch_header_plus_1();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
+            header_1: Some(to_raw(hp.epoch_header_rlp(), h1.coinbase)),
+            header_2: Some(to_raw(hp.epoch_header_plus_1_rlp(), h2.coinbase)),
         };
         match Misbehaviour::try_from(src).unwrap_err() {
             Error::UnexpectedDifferentHeight(h1_height, h2_height) => {
@@ -172,16 +172,18 @@ mod test {
     #[case::localnet(localnet())]
     fn test_success_try_from(#[case] hp: Box<dyn Network>) {
         let h1 = hp.epoch_header_plus_1();
-        let mut h2 = hp.epoch_header_plus_1();
-        h2.gas_used = h1.gas_used + 1;
+        let mut h2 = hp.epoch_header_plus_1_rlp();
+        let size = h2.len();
+        h2[size - 1] = 1; // set excess blob gas
+        let _v = ETHHeader::try_from(EthHeader { header: h2.clone() });
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
+            header_1: Some(to_raw(hp.epoch_header_plus_1_rlp(), h1.coinbase.clone())),
+            header_2: Some(to_raw(h2, h1.coinbase)),
         };
         let misbehaviour = Misbehaviour::try_from(src).unwrap();
         assert_eq!(misbehaviour.client_id.as_str(), "xx-parlia-1");
         assert_eq!(misbehaviour.header_1.height(), new_height(0, h1.number));
-        assert_eq!(misbehaviour.header_2.height(), new_height(0, h2.number));
+        assert_eq!(misbehaviour.header_2.height(), new_height(0, h1.number));
     }
 }

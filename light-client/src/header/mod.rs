@@ -296,7 +296,9 @@ pub(crate) mod test {
     fn test_error_try_from_missing_trusted_height(#[case] hp: Box<dyn Network>) {
         let h = &hp.epoch_header_plus_1();
         let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader {
+                header: hp.epoch_header_plus_1_rlp(),
+            }],
             trusted_height: None,
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
@@ -320,7 +322,9 @@ pub(crate) mod test {
             revision_height: h.number,
         };
         let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader {
+                header: hp.epoch_header_plus_1_rlp(),
+            }],
             trusted_height: Some(trusted_height.clone()),
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
@@ -347,7 +351,9 @@ pub(crate) mod test {
             revision_height: h.number - 1,
         };
         let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader {
+                header: hp.epoch_header_plus_1_rlp(),
+            }],
             trusted_height: Some(trusted_height),
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
@@ -373,7 +379,9 @@ pub(crate) mod test {
             revision_height: h.number - 1,
         };
         let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader {
+                header: hp.epoch_header_plus_1_rlp(),
+            }],
             trusted_height: Some(trusted_height),
             account_proof: vec![],
             current_validators: vec![],
