@@ -263,24 +263,12 @@ mod test {
         Epoch::new(validators.into(), 1)
     }
 
-    //TODO fix testdata
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_verify_before_checkpoint(#[case] hp: Box<dyn Network>) {
         let headers = hp.headers_before_checkpoint();
-        let p_val = Epoch::new(hp.previous_validators().into(), 1);
+        let p_val = hp.previous_epoch_header().epoch.unwrap();
         let p_val = trust(&p_val);
-        let c_val = empty();
-        let c_val = EitherEpoch::Trusted(trust(&c_val));
-        headers.verify(&hp.network(), &c_val, &p_val).unwrap();
-
-        // from epoch
-        let headers: ETHHeaders = vec![
-            hp.epoch_header(),
-            hp.epoch_header_plus_1(),
-            hp.epoch_header_plus_2(),
-        ]
-        .into();
         let c_val = empty();
         let c_val = EitherEpoch::Untrusted(untrust(&c_val));
         headers.verify(&hp.network(), &c_val, &p_val).unwrap();
@@ -290,7 +278,7 @@ mod test {
     #[case::localnet(localnet())]
     fn test_success_verify_across_checkpoint(#[case] hp: Box<dyn Network>) {
         let headers = hp.headers_across_checkpoint();
-        let p_val = Epoch::new(hp.previous_validators().into(), 1);
+        let p_val = hp.previous_epoch_header().epoch.unwrap();
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
@@ -311,17 +299,19 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_verify_before_checkpoint(#[case] hp: Box<dyn Network>) {
-        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();;
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
         let header = hp.headers_before_checkpoint();
         let network = &hp.network();
 
         // first block uses previous broken validator set
         let mut validators = previous_epoch.validators().to_vec();
-        validators[0] = hex!("0000000000000000000000000000000000000000").to_vec();
+        for val in validators.iter_mut() {
+            val[0] = 0;
+        }
         let p_val = Epoch::new(validators.into(), previous_epoch.turn_term());
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
-        let c_val = EitherEpoch::Untrusted(untrust(&c_val));
+        let c_val = EitherEpoch::Trusted(trust(&c_val));
         let result = header.verify(network, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {

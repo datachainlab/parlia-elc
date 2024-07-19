@@ -263,7 +263,7 @@ pub(crate) mod test {
     use alloc::vec::Vec;
     use light_client::types::{Height as LCPHeight, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};
     use rstest::rstest;
 
     impl Header {
@@ -399,7 +399,9 @@ pub(crate) mod test {
             revision_height: h.number - 1,
         };
         let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader {
+                header: hp.epoch_header_rlp(),
+            }],
             trusted_height: Some(trusted_height.clone()),
             account_proof: vec![],
             current_validators: hp.epoch_header().epoch.unwrap().validators().clone(),

@@ -31,7 +31,7 @@ impl Epoch {
         &self.validator_set.validators
     }
 
-    pub fn turn_term(&self) -> u8{
+    pub fn turn_term(&self) -> u8 {
         self.turn_term
     }
 }

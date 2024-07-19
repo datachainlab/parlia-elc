@@ -240,7 +240,8 @@ impl ETHHeader {
             {
                 return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
             }
-            let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_TERM_SIZE;
+            let start =
+                EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_TERM_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
             &self.extra_data[start..end]
         };
@@ -437,7 +438,6 @@ pub(crate) mod test {
     use crate::header::eth_header::{
         ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
     };
-    use hex_literal::hex;
 
     use rlp::RlpStream;
     use rstest::*;
@@ -587,10 +587,7 @@ pub(crate) mod test {
     #[case::localnet(localnet())]
     fn test_error_verify_seal(#[case] hp: Box<dyn Network>) {
         let validators = hp.previous_validators();
-        let mut blocks = vec![
-            hp.epoch_header_plus_1(),
-            hp.epoch_header_plus_2(),
-        ];
+        let mut blocks = vec![hp.epoch_header_plus_1(), hp.epoch_header_plus_2()];
 
         for block in blocks.iter_mut() {
             let result = block.verify_seal(&vec![], &hp.network());

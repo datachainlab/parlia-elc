@@ -1,10 +1,10 @@
 use crate::fixture::localnet::Localnet;
-use crate::header::eth_header::{get_validator_bytes, ETHHeader};
+use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use hex_literal::hex;
+
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 pub mod localnet;

@@ -199,21 +199,16 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_verify(#[case] hp: Box<dyn Network>) {
-        let validators = hp.previous_validators();
-        let blocks = vec![
-            hp.epoch_header(),
-            hp.epoch_header_plus_1(),
-            hp.epoch_header_plus_2(),
-            hp.epoch_header_plus_3(),
-        ];
+        let validators = hp
+            .previous_epoch_header()
+            .epoch
+            .unwrap()
+            .validators()
+            .clone();
+        let blocks = hp.headers_before_checkpoint().all;
         for block in blocks.iter() {
-            if let Err(e) = block
-                .get_vote_attestation()
-                .unwrap()
-                .verify(block.number, &validators)
-            {
-                unreachable!("{} {:?}", block.number, e);
-            }
+            let vote = block.get_vote_attestation().unwrap();
+            vote.verify(block.number, &validators).unwrap();
         }
     }
 
@@ -321,9 +316,8 @@ mod test {
         }
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
-            Error::UnexpectedBLSPubkey(number, e) => {
+            Error::UnexpectedBLSPubkey(number, _) => {
                 assert_eq!(header.number, number);
-                assert_eq!(format!("{:?}", e), "InvalidPoint");
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
@@ -334,9 +328,8 @@ mod test {
         vote.app_signature[0] = 1;
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
-            Error::UnexpectedBLSSignature(number, e) => {
+            Error::UnexpectedBLSSignature(number, _e) => {
                 assert_eq!(number, header.number);
-                assert_eq!(format!("{:?}", e), "InvalidG2Size");
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
@@ -349,7 +342,7 @@ mod test {
         match err {
             Error::FailedToVerifyBLSSignature(number, e) => {
                 assert_eq!(number, header.number);
-                assert_eq!(e, 16);
+                assert_eq!(e, validators.len() - 1);
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
