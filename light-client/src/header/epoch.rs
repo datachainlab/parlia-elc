@@ -30,6 +30,10 @@ impl Epoch {
     pub fn validators(&self) -> &Validators {
         &self.validator_set.validators
     }
+
+    pub fn turn_term(&self) -> u8{
+        self.turn_term
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

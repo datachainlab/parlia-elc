@@ -12,8 +12,14 @@ pub mod localnet;
 pub trait Network {
     fn network(&self) -> ChainId;
     fn previous_epoch_header(&self) -> ETHHeader;
-    fn epoch_header(&self) -> ETHHeader;
-    fn epoch_header_plus_1(&self) -> ETHHeader;
+    fn epoch_header_rlp(&self) -> Vec<u8>;
+    fn epoch_header(&self) -> ETHHeader {
+        decode_header(self.epoch_header_rlp())
+    }
+    fn epoch_header_plus_1_rlp(&self) -> Vec<u8>;
+    fn epoch_header_plus_1(&self) -> ETHHeader {
+        decode_header(self.epoch_header_plus_1_rlp())
+    }
     fn epoch_header_plus_2(&self) -> ETHHeader;
     fn epoch_header_plus_3(&self) -> ETHHeader;
     fn headers_before_checkpoint(&self) -> ETHHeaders;

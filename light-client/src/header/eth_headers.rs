@@ -263,6 +263,7 @@ mod test {
         Epoch::new(validators.into(), 1)
     }
 
+    //TODO fix testdata
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_verify_before_checkpoint(#[case] hp: Box<dyn Network>) {
@@ -310,19 +311,18 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_verify_before_checkpoint(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();;
         let header = hp.headers_before_checkpoint();
-        let mainnet = &hp.network();
+        let network = &hp.network();
 
         // first block uses previous broken validator set
-        let mut validators = hp.previous_validators();
-        for v in validators.iter_mut() {
-            v.remove(0);
-        }
-        let p_val = Epoch::new(validators.into(), 1);
+        let mut validators = previous_epoch.validators().to_vec();
+        validators[0] = hex!("0000000000000000000000000000000000000000").to_vec();
+        let p_val = Epoch::new(validators.into(), previous_epoch.turn_term());
         let p_val = trust(&p_val);
-        let c_val = empty();
+        let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Untrusted(untrust(&c_val));
-        let result = header.verify(mainnet, &c_val, &p_val);
+        let result = header.verify(network, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 assert_eq!(number, header.target.number)
@@ -344,11 +344,11 @@ mod test {
         let p_val = Epoch::new(hp.previous_validators().into(), 1);
         let p_val = trust(&p_val);
 
-        let mainnet = &hp.network();
+        let network = &hp.network();
 
         // last block uses new empty validator set
         let header = hp.headers_across_checkpoint();
-        let result = header.verify(mainnet, &c_val, &p_val);
+        let result = header.verify(network, &c_val, &p_val);
         match result.unwrap_err() {
             Error::MissingSignerInValidator(number, _) => {
                 //25428811 uses next validator

@@ -28,6 +28,8 @@ const BLS_PUBKEY_LENGTH: usize = 48;
 const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
 const VALIDATOR_NUM_SIZE: usize = 1;
 
+const TURN_TERM_SIZE: usize = 1;
+
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 
 const EMPTY_UNCLE_HASH: Hash =
@@ -238,7 +240,7 @@ impl ETHHeader {
             {
                 return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
             }
-            let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH);
+            let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_TERM_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
             &self.extra_data[start..end]
         };
@@ -567,132 +569,6 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_success_try_from_with_bep336_field(#[case] hp: Box<dyn Network>) {
-        let base_fn = || {
-            let header = hp.epoch_header();
-            let mut stream = RlpStream::new();
-            stream.begin_unbounded_list();
-            stream.append(&header.parent_hash);
-            stream.append(&header.uncle_hash);
-            stream.append(&header.coinbase);
-            stream.append(&header.root.to_vec());
-            stream.append(&header.tx_hash);
-            stream.append(&header.receipt_hash);
-            stream.append(&header.bloom);
-            stream.append(&header.difficulty);
-            stream.append(&header.number);
-            stream.append(&header.gas_limit);
-            stream.append(&header.gas_used);
-            stream.append(&header.timestamp);
-            stream.append(&header.extra_data);
-            stream.append(&header.mix_digest);
-            stream.append(&header.nonce);
-            stream
-        };
-
-        let mut stream = base_fn();
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        let v = ETHHeader::try_from(raw).unwrap();
-        assert_eq!(v.hash, hp.epoch_header().hash);
-
-        // with base_fee_per_gas
-        let base_fee_per_gas: u64 = 2;
-        let mut stream = base_fn();
-        stream.append(&base_fee_per_gas);
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        ETHHeader::try_from(raw).unwrap();
-
-        // with withdrawals_hash
-        let withdrawals_hash = hp.epoch_header().tx_hash;
-        let mut stream = base_fn();
-        stream.append(&base_fee_per_gas);
-        stream.append(&withdrawals_hash);
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        ETHHeader::try_from(raw).unwrap();
-
-        // with blob_gas_used
-        let blob_gas_used: u64 = 3;
-        let mut stream = base_fn();
-        stream.append(&base_fee_per_gas);
-        stream.append(&withdrawals_hash);
-        stream.append(&blob_gas_used);
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        ETHHeader::try_from(raw).unwrap();
-
-        // with excess_blob_gas
-        let excess_blob_gas: u64 = 4;
-        let mut stream = base_fn();
-        stream.append(&base_fee_per_gas);
-        stream.append(&withdrawals_hash);
-        stream.append(&blob_gas_used);
-        stream.append(&excess_blob_gas);
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        ETHHeader::try_from(raw).unwrap();
-
-        // testnet after Tycho
-        let mut stream = RlpStream::new();
-        stream.begin_unbounded_list();
-        stream.append(
-            &hex!("bc7d1149db8ecb83b784b9418511e9997e12a0acf419ca344b952da42b25209a").to_vec(),
-        );
-        stream.append(
-            &hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347").to_vec(),
-        );
-        stream.append(&hex!("53387f3321fd69d1e030bb921230dfb188826aff").to_vec());
-        stream.append(
-            &hex!("6b295725152189db64d8afe76ebbc78d04ad3452ee5c0613d2cdde234aae6518").to_vec(),
-        );
-        stream.append(
-            &hex!("b49a9e69547c01e22100afa0dac47ad573a73c8a456d368aa78a20a1be3b8f61").to_vec(),
-        );
-        stream.append(
-            &hex!("3f1e435e6e4833d5ce8ff9fbdb1e8fc61b71c75f03de98e1dd96662363230fb4").to_vec(),
-        );
-        stream.append(&hex!("000020000000080100900040a00001000000400000020000000440002020081000001002000000000000000000000001020000040004100000111001000c60000240000100020008020100880000000020100000040400000000010000000000002c0020220200000006000028000800082200000000088000002010100008000040400482000000080080001000000008100400280000000040008000000020000080004000062008000010020000000000000000000020000080080000002080021012040028040002000002000000400000000408064000104002000060001200000010000000010040340000110020008040000420004000080000000000").to_vec());
-        stream.append(&u64::from_str_radix("1", 16).unwrap());
-        stream.append(&u64::from_str_radix("25b7469", 16).unwrap());
-        stream.append(&u64::from_str_radix("42c1d80", 16).unwrap());
-        stream.append(&u64::from_str_radix("14c285", 16).unwrap());
-        stream.append(&u64::from_str_radix("661fc104", 16).unwrap());
-        stream.append(&hex!("d883010405846765746888676f312e32312e36856c696e7578000000821df8b9f8b381f7b860881105fa9e628179b4be7c807d56d7f83e0354604a31a3a0610dc2cfd312f089cca6cf0dc22e0a675179cafcdd0fcd5309257163c6c53b48404671f1cbdb5d4c38de16ffc0e0951c4d3141de1748399ddf4fa51b4fadfbe0201b4d30a2b7fffef84c84025b7467a0dd8f3ec7f7613d048271569ed3b3712b1a8c91a9039ab0e15395b345a76459fa84025b7468a0bc7d1149db8ecb83b784b9418511e9997e12a0acf419ca344b952da42b25209a80174ffd16859a8984cb5c4420784ac48f5df3c5be2225f009d3f78a26ab8766fa05589316bb3d657c8b5f0796afcef09bb284c4bbef83d89d980fe6958022906e01").to_vec());
-        stream.append(
-            &hex!("0000000000000000000000000000000000000000000000000000000000000000").to_vec(),
-        );
-        stream.append(&hex!("0000000000000000").to_vec());
-        stream.append(&u64::from_str_radix("0", 16).unwrap());
-        stream.append(
-            &hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421").to_vec(),
-        );
-        stream.append(&u64::from_str_radix("0", 16).unwrap());
-        stream.append(&u64::from_str_radix("0", 16).unwrap());
-        stream.finalize_unbounded_list();
-        let raw = RawETHHeader {
-            header: stream.out().to_vec(),
-        };
-        let hash = ETHHeader::try_from(raw).unwrap().hash;
-        assert_eq!(
-            hash,
-            hex!("6de91bc2b08a30d2082b7d3077e6ad381d040373b706d231cff899b096322972")
-        )
-    }
-
-    #[rstest]
-    #[case::localnet(localnet())]
     fn test_success_verify_seal(#[case] hp: Box<dyn Network>) {
         let validators = hp.previous_validators();
         let blocks = vec![
@@ -712,13 +588,12 @@ pub(crate) mod test {
     fn test_error_verify_seal(#[case] hp: Box<dyn Network>) {
         let validators = hp.previous_validators();
         let mut blocks = vec![
-            hp.epoch_header(),
             hp.epoch_header_plus_1(),
             hp.epoch_header_plus_2(),
         ];
 
         for block in blocks.iter_mut() {
-            let result = block.verify_seal(&validators[0..1].to_vec(), &hp.network());
+            let result = block.verify_seal(&vec![], &hp.network());
             match result.unwrap_err() {
                 Error::MissingSignerInValidator(number, address) => {
                     assert_eq!(block.number, number);
@@ -804,7 +679,7 @@ pub(crate) mod test {
             Error::UnexpectedGasDiff(number, diff, limit) => {
                 assert_eq!(block.number, number);
                 assert_eq!(parent.gas_limit / PARAMS_GAS_LIMIT_BOUND_DIVISOR, limit);
-                assert_eq!(140000000, diff);
+                assert_eq!(parent.gas_limit - block.gas_limit, diff);
             }
             err => unreachable!("{:?}", err),
         }

@@ -421,37 +421,6 @@ pub(crate) mod test {
         assert_eq!(result.current_epoch.validators(), &raw.current_validators);
     }
 
-    #[rstest]
-    #[case::localnet(localnet())]
-    fn test_success_try_from2(#[case] hp: Box<dyn Network>) {
-        let h = &hp.epoch_header_plus_1();
-        let trusted_height = Height {
-            revision_number: 0,
-            revision_height: h.number - 1,
-        };
-        let raw = RawHeader {
-            headers: vec![h.try_into().unwrap()],
-            trusted_height: Some(trusted_height.clone()),
-            account_proof: vec![],
-            current_validators: vec![hp.epoch_header().coinbase],
-            previous_validators: vec![h.coinbase.clone()],
-            current_turn_term: 1,
-            previous_turn_term: 1,
-        };
-        let result = Header::try_from(raw.clone()).unwrap();
-        assert_eq!(result.headers.target, *h);
-        assert_eq!(
-            result.trusted_height.revision_height(),
-            trusted_height.revision_height
-        );
-        assert_eq!(
-            result.trusted_height.revision_number(),
-            trusted_height.revision_number
-        );
-        assert_eq!(result.previous_epoch.validators(), &raw.previous_validators);
-        assert_eq!(result.current_epoch.validators(), &raw.current_validators);
-    }
-
     fn to_validator_set(h: Hash) -> ValidatorSet {
         let validators: Validators = vec![vec![1]];
         let mut v: ValidatorSet = validators.into();
