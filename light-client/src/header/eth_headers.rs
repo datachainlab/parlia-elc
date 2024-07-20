@@ -237,7 +237,7 @@ mod test {
     use crate::errors::Error;
 
     use crate::header::constant::BLOCKS_PER_EPOCH;
-    use crate::header::eth_header::{get_turn_term, get_validator_bytes, ETHHeader};
+    use crate::header::eth_header::{get_validator_bytes_and_tern_term, ETHHeader};
     use crate::header::eth_headers::ETHHeaders;
 
     use crate::fixture::*;
@@ -537,10 +537,9 @@ mod test {
                 if next.is_epoch() {
                     // set n_val
                     next.extra_data = n_val_header.extra_data.clone();
-                    next.epoch = Some(Epoch::new(
-                        get_validator_bytes(&next.extra_data).unwrap().into(),
-                        get_turn_term(&next.extra_data).unwrap(),
-                    ));
+                    let (validators, turn_term) =
+                        get_validator_bytes_and_tern_term(&next.extra_data).unwrap();
+                    next.epoch = Some(Epoch::new(validators.into(), turn_term));
                 }
                 headers.all.push(next);
             }

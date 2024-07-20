@@ -11,7 +11,6 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 use crate::header::epoch::Epoch;
-use crate::header::validator_set::ValidatorSet;
 
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -255,7 +254,7 @@ impl ETHHeader {
 }
 
 // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
-pub fn get_validator_bytes(extra_data: &[u8]) -> Option<Validators> {
+pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Option<(Validators, u8)> {
     if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
         return None;
     }
@@ -265,17 +264,13 @@ pub fn get_validator_bytes(extra_data: &[u8]) -> Option<Validators> {
     }
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
-    Some(
+    Some((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
             .map(|s| s.into())
             .collect(),
-    )
-}
-
-pub fn get_turn_term(_extra_data: &[u8]) -> Option<u8> {
-    //TODO get turn term from extra-data
-    Some(1)
+        extra_data[end],
+    ))
 }
 
 impl TryFrom<RawETHHeader> for ETHHeader {
@@ -400,12 +395,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let hash: Hash = keccak_256(&buffer_vec);
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
-            let validators: ValidatorSet = get_validator_bytes(&extra_data)
-                .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?
-                .into();
-            let turn_term = get_turn_term(&extra_data)
-                .ok_or_else(|| Error::MissingTurnTermInEpochBlock(number))?;
-            Some(Epoch::new(validators, turn_term))
+            let (validators, turn_term) = get_validator_bytes_and_tern_term(&extra_data)
+                .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?;
+            Some(Epoch::new(validators.into(), turn_term))
         } else {
             None
         };

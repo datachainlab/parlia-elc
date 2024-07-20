@@ -543,7 +543,7 @@ pub(crate) mod test {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
                 assert_eq!(hash, previous_epoch.hash());
-                assert_eq!(cons_hash, cons_hash);
+                assert_eq!(cons_hash, cs.current_validators_hash);
             }
             _ => unreachable!("err {:?}", err),
         }
@@ -584,7 +584,7 @@ pub(crate) mod test {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
                 assert_eq!(hash, previous_epoch.hash());
-                assert_eq!(cons_hash, cons_hash);
+                assert_eq!(cons_hash, cs.previous_validators_hash);
             }
             _ => unreachable!("err {:?}", err),
         }
@@ -606,7 +606,7 @@ pub(crate) mod test {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
                 assert_eq!(hash, current_epoch.hash());
-                assert_eq!(cons_hash, cons_hash);
+                assert_eq!(cons_hash, cs.current_validators_hash);
             }
             _ => unreachable!("err {:?}", err),
         }
