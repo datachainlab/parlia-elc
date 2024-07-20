@@ -276,23 +276,14 @@ mod test {
     use crate::header::epoch::Epoch;
     use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
-    use crate::header::validator_set::ValidatorSet;
-    use crate::header::Header;
-    use crate::misc::{keccak_256_vec, new_timestamp, ChainId, Hash};
-    use alloc::boxed::Box;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-    fn make_cs_hash(hash: Hash) -> Hash {
-        Epoch::new(
-            ValidatorSet {
-                validators: vec![],
-                hash,
-            },
-            1,
-        )
-        .hash()
-    }
+    use crate::header::Header;
+    use crate::misc::{new_timestamp, ChainId};
+    use alloc::boxed::Box;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
+        ClientState as RawClientState, EthHeader,
+    };
 
     #[rstest]
     #[case::localnet(localnet())]
@@ -372,21 +363,21 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_check_header(#[case] hp: Box<dyn Network>) {
-        let header_fn = |revision: u64, h: alloc::vec::Vec<ETHHeader>| {
+        let header_fn = |revision: u64, h: &ETHHeader, h_rlp: alloc::vec::Vec<u8>| {
             let trusted_height = Height {
                 revision_number: revision,
-                revision_height: h[0].number - 1,
+                revision_height: h.number - 1,
             };
             let raw = RawHeader {
-                headers: h.iter().map(|e| e.try_into().unwrap()).collect(),
+                headers: vec![EthHeader { header: h_rlp }],
                 trusted_height: Some(trusted_height),
                 account_proof: vec![],
-                current_validators: if h[0].is_epoch() {
-                    h[0].epoch.clone().unwrap().validators().clone()
+                current_validators: if h.is_epoch() {
+                    h.epoch.clone().unwrap().validators().clone()
                 } else {
-                    vec![h[0].coinbase.clone()]
+                    vec![h.coinbase.clone()]
                 },
-                previous_validators: vec![h[0].coinbase.clone()],
+                previous_validators: vec![h.coinbase.clone()],
                 previous_turn_term: 1,
                 current_turn_term: 1,
             };
@@ -405,15 +396,15 @@ mod test {
         let mut cons_state = ConsensusState {
             state_root: [0u8; 32],
             timestamp: new_timestamp(0).unwrap(),
-            current_validators_hash: make_cs_hash([0u8; 32]),
-            previous_validators_hash: make_cs_hash([0u8; 32]),
+            current_validators_hash: Epoch::new(vec![[0u8; 20].to_vec()].into(), 1).hash(),
+            previous_validators_hash: Epoch::new(vec![[0u8; 20].to_vec()].into(), 1).hash(),
         };
 
         // fail: validate_trusting_period
         let h = hp.epoch_header();
         let now = new_timestamp(h.timestamp - 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let header = header_fn(0, vec![h]);
+        let header = header_fn(0, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::HeaderFromFuture(_, _, _) => {}
@@ -424,7 +415,7 @@ mod test {
         let h = hp.epoch_header();
         let now = new_timestamp(h.timestamp + 1).unwrap();
         cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let header = header_fn(1, vec![h]);
+        let header = header_fn(1, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedHeaderRevision(n1, n2) => {
@@ -436,7 +427,7 @@ mod test {
 
         // fail: verify_validator_set
         let h = hp.epoch_header();
-        let header = header_fn(0, vec![h.clone()]);
+        let header = header_fn(0, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedPreviousValidatorsHash(h1, h2, _, _) => {
@@ -448,8 +439,8 @@ mod test {
 
         // fail: header.verify
         let h = hp.epoch_header();
-        cons_state.current_validators_hash = make_cs_hash(keccak_256_vec(&[h.coinbase.clone()]));
-        let header = header_fn(0, vec![h.clone()]);
+        cons_state.current_validators_hash = Epoch::new(vec![h.coinbase.clone()].into(), 1).hash();
+        let header = header_fn(0, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
             Error::UnexpectedCoinbase(number) => {
