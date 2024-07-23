@@ -34,8 +34,7 @@ const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 const EMPTY_UNCLE_HASH: Hash =
     hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
-const EMPTY_HASH: Hash =
-    hex!("0000000000000000000000000000000000000000000000000000000000000000");
+const EMPTY_HASH: Hash = hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
@@ -54,10 +53,10 @@ pub struct ETHHeader {
     pub extra_data: Vec<u8>,
     pub mix_digest: Vec<u8>,
     pub nonce: Vec<u8>,
-    pub base_fee_per_gas: Option<u64> ,
-    pub withdrawals_hash: Option<Vec<u8>> ,
+    pub base_fee_per_gas: Option<u64>,
+    pub withdrawals_hash: Option<Vec<u8>>,
     pub blob_gas_used: Option<u64>,
-    pub excess_blob_gas: Option<u64> ,
+    pub excess_blob_gas: Option<u64>,
     pub parent_beacon_root: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
@@ -116,24 +115,24 @@ impl ETHHeader {
         stream.append(&self.nonce);
         if let Some(parent_beacon_root) = &self.parent_beacon_root {
             if parent_beacon_root == &EMPTY_HASH {
-                if let Some(value ) = &self.base_fee_per_gas {
+                if let Some(value) = &self.base_fee_per_gas {
                     stream.append(value);
-                }else {
+                } else {
                     stream.append_empty_data();
                 }
-                if let Some(value) = &self.withdrawals_hash{
+                if let Some(value) = &self.withdrawals_hash {
                     stream.append(value);
-                }else {
+                } else {
                     stream.append_empty_data();
                 }
                 if let Some(value) = &self.blob_gas_used {
                     stream.append(value);
-                }else {
+                } else {
                     stream.append_empty_data();
                 }
-                if let Some(value) = &self.excess_blob_gas{
+                if let Some(value) = &self.excess_blob_gas {
                     stream.append(value);
-                }else {
+                } else {
                     stream.append_empty_data();
                 }
                 stream.append(parent_beacon_root);
