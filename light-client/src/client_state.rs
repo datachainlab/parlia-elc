@@ -77,7 +77,7 @@ impl ClientState {
                 .try_into()
                 .map_err(Error::UnexpectedStorageRoot)?,
             timestamp: header.timestamp()?,
-            current_validators_hash: header.current_epoch_validators_hash()?,
+            current_validators_hash: header.current_epoch_validators_hash(),
             previous_validators_hash: header.previous_epoch_validators_hash(),
         };
 

@@ -37,7 +37,6 @@ pub struct Header {
     previous_validators: ValidatorSet,
     /// validator set
     /// - not a epoch block: current epoch validators (which must be in trusted cons state)
-    /// - non neighboring epoch header: validators in trusted cons state
     /// - neighboring epoch header: validators in extra data
     current_validators: ValidatorSet,
 }
@@ -70,13 +69,8 @@ impl Header {
         self.previous_validators.hash
     }
 
-    /// In non-adjacent epochs, current_validators contains the validator set of trusted_height,
-    /// so you need to use the validator set of extra_data of target.
-    pub fn current_epoch_validators_hash(&self) -> Result<Hash, Error> {
-        if self.headers.target.is_epoch() {
-            return Ok(self.headers.target.get_validator_set()?.hash);
-        }
-        Ok(self.current_validators.hash)
+    pub fn current_epoch_validators_hash(&self) -> Hash {
+        self.current_validators.hash
     }
 
     pub fn block_hash(&self) -> &Hash {
@@ -88,70 +82,16 @@ impl Header {
         chain_id: &ChainId,
         consensus_state: &ConsensusState,
     ) -> Result<(), Error> {
-        if self.is_non_neighboring_epoch() {
-            let n_val = self.headers.target.get_validator_set()?;
-            // 'current_validators' are trusted validators in non-neighboring epoch verification.
-            let t_val = &self.current_validators;
-            let (t_val, n_val) = verify_validator_set_non_neighboring_epoch(
-                consensus_state,
-                self.height(),
-                self.trusted_height(),
-                t_val,
-                &n_val,
-            )?;
-
-            // target height is epoch
-            let checkpoint =
-                self.height().revision_height() + self.previous_validators.checkpoint();
-            self.headers
-                .verify_non_neighboring_epoch(chain_id, checkpoint, t_val, n_val)
-        } else {
-            let (c_val, p_val) = verify_validator_set(
-                consensus_state,
-                &self.headers.target,
-                self.height(),
-                self.trusted_height,
-                &self.previous_validators,
-                &self.current_validators,
-            )?;
-            self.headers.verify(chain_id, &c_val, &p_val)
-        }
+        let (c_val, p_val) = verify_validator_set(
+            consensus_state,
+            &self.headers.target,
+            self.height(),
+            self.trusted_height,
+            &self.previous_validators,
+            &self.current_validators,
+        )?;
+        self.headers.verify(chain_id, &c_val, &p_val)
     }
-
-    fn is_non_neighboring_epoch(&self) -> bool {
-        if !self.headers.target.is_epoch() {
-            return false;
-        }
-        let trusted_epoch = self.trusted_height.revision_height() / BLOCKS_PER_EPOCH;
-        let target_epoch = self.height().revision_height() / BLOCKS_PER_EPOCH;
-        trusted_epoch + 1 < target_epoch
-    }
-}
-
-fn verify_validator_set_non_neighboring_epoch<'a>(
-    consensus_state: &ConsensusState,
-    height: Height,
-    trusted_height: Height,
-    current_validators: &'a ValidatorSet,
-    next_validators: &'a ValidatorSet,
-) -> Result<(TrustedValidatorSet<'a>, UntrustedValidatorSet<'a>), Error> {
-    if current_validators.validators.is_empty() {
-        return Err(Error::MissingTrustedCurrentValidators(
-            height.revision_height(),
-        ));
-    }
-    if consensus_state.current_validators_hash != current_validators.hash {
-        return Err(Error::UnexpectedCurrentValidatorsHash(
-            trusted_height,
-            height,
-            current_validators.hash,
-            consensus_state.previous_validators_hash,
-        ));
-    }
-    Ok((
-        TrustedValidatorSet::new(current_validators),
-        UntrustedValidatorSet::new(next_validators),
-    ))
 }
 
 fn verify_validator_set<'a>(
@@ -256,7 +196,16 @@ impl TryFrom<RawHeader> for Header {
             return Err(Error::MissingPreviousValidators(headers.target.number));
         }
 
-        if value.current_validators.is_empty() {
+        // Epoch header contains validator set
+        let current_validators = if headers.target.is_epoch() {
+            headers
+                .target
+                .get_validator_bytes()
+                .ok_or_else(|| Error::MissingValidatorInEpochBlock(headers.target.number))?
+        } else {
+            value.current_validators
+        };
+        if current_validators.is_empty() {
             return Err(Error::MissingCurrentValidators(headers.target.number));
         }
 
@@ -265,7 +214,7 @@ impl TryFrom<RawHeader> for Header {
             headers,
             trusted_height,
             previous_validators: value.previous_validators.into(),
-            current_validators: value.current_validators.into(),
+            current_validators: current_validators.into(),
         })
     }
 }
@@ -297,12 +246,11 @@ pub(crate) mod testdata;
 pub(crate) mod test {
     use crate::consensus_state::ConsensusState;
     use crate::errors::Error;
-    use crate::header::constant::BLOCKS_PER_EPOCH;
 
     use crate::header::eth_headers::ETHHeaders;
     use crate::header::testdata::{header_31297200, header_31297201, validators_in_31297000};
     use crate::header::validator_set::{EitherValidatorSet, ValidatorSet};
-    use crate::header::{verify_validator_set, verify_validator_set_non_neighboring_epoch, Header};
+    use crate::header::{verify_validator_set, Header};
     use crate::misc::{new_height, Hash, Validators};
     use light_client::types::Time;
     use parlia_ibc_proto::ibc::core::client::v1::Height;
@@ -679,113 +627,5 @@ pub(crate) mod test {
             }
             _ => unreachable!("err {:?}", err),
         }
-    }
-
-    #[test]
-    fn test_success_verify_validator_set_non_neighboring_epoch() {
-        let cs = ConsensusState {
-            state_root: [0u8; 32],
-            timestamp: Time::now(),
-            current_validators_hash: [1u8; 32],
-            previous_validators_hash: [2u8; 32],
-        };
-
-        let height = new_height(0, 600);
-        let trusted_height = new_height(0, 201);
-
-        let trusted_validators = &to_validator_set(cs.current_validators_hash);
-        let next_validators = &to_validator_set([4u8; 32]);
-        let (_c_val, _n_val) = verify_validator_set_non_neighboring_epoch(
-            &cs,
-            height,
-            trusted_height,
-            trusted_validators,
-            next_validators,
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn test_error_verify_validator_set_non_neighboring_epoch() {
-        let cs = ConsensusState {
-            state_root: [0u8; 32],
-            timestamp: Time::now(),
-            current_validators_hash: [1u8; 32],
-            previous_validators_hash: [2u8; 32],
-        };
-
-        let height = new_height(0, 600);
-        let trusted_height = new_height(0, 201);
-
-        // empty trusted validator
-        let mut trusted_validators = to_validator_set(cs.current_validators_hash);
-        trusted_validators.validators = Validators::new();
-        let next_validators = &to_validator_set([4u8; 32]);
-        let err = verify_validator_set_non_neighboring_epoch(
-            &cs,
-            height,
-            trusted_height,
-            &trusted_validators,
-            next_validators,
-        )
-        .unwrap_err();
-        match err {
-            Error::MissingTrustedCurrentValidators(t) => {
-                assert_eq!(t, height.revision_height());
-            }
-            _ => unreachable!("err {:?}", err),
-        }
-
-        // untrusted validator
-        let trusted_validators = &to_validator_set([5u8; 32]);
-        let err = verify_validator_set_non_neighboring_epoch(
-            &cs,
-            height,
-            trusted_height,
-            trusted_validators,
-            next_validators,
-        )
-        .unwrap_err();
-        match err {
-            Error::UnexpectedCurrentValidatorsHash(t, h, hash, cons_hash) => {
-                assert_eq!(t, trusted_height);
-                assert_eq!(h, height);
-                assert_eq!(hash, trusted_validators.hash);
-                assert_eq!(cons_hash, cons_hash);
-            }
-            _ => unreachable!("err {:?}", err),
-        }
-    }
-
-    #[test]
-    fn test_is_non_neighboring_epoch() {
-        let mut h = Header {
-            account_proof: vec![],
-            headers: ETHHeaders {
-                target: header_31297201(),
-                all: vec![],
-            },
-            trusted_height: new_height(0, 0),
-            previous_validators: vec![].into(),
-            current_validators: vec![].into(),
-        };
-
-        // not epoch
-        let base = 31297200;
-        h.trusted_height = new_height(0, base);
-        assert!(!h.is_non_neighboring_epoch());
-        h.trusted_height = new_height(0, base - BLOCKS_PER_EPOCH);
-        assert!(!h.is_non_neighboring_epoch());
-        h.trusted_height = new_height(0, base - BLOCKS_PER_EPOCH - 1);
-        assert!(!h.is_non_neighboring_epoch());
-
-        // epoch
-        h.headers.target.number = 31297200;
-        h.trusted_height = new_height(0, base);
-        assert!(!h.is_non_neighboring_epoch());
-        h.trusted_height = new_height(0, base - BLOCKS_PER_EPOCH);
-        assert!(!h.is_non_neighboring_epoch());
-        h.trusted_height = new_height(0, base - BLOCKS_PER_EPOCH - 1);
-        assert!(h.is_non_neighboring_epoch());
     }
 }
