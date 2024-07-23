@@ -31,8 +31,8 @@ message Header {
   bytes account_proof = 3;
   repeated bytes current_validators = 4;
   repeated bytes previous_validators = 5;
-  uint32 current_turn_term = 6;
-  uint32 previous_turn_term = 7;
+  uint32 current_turn_length = 6;
+  uint32 previous_turn_length = 7;
 }
 
 message ConsensusState {

@@ -78,7 +78,7 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
-    MissingTurnTermInEpochBlock(BlockNumber),
+    MissingTurnLengthInEpochBlock(BlockNumber),
     MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
     MissingCurrentValidatorSet(BlockNumber),
@@ -263,8 +263,8 @@ impl core::fmt::Display for Error {
             Error::MissingEpochInfoInEpochBlock(e1) => {
                 write!(f, "MissingEpochInfoInEpochBlock : {:?}", e1)
             }
-            Error::MissingTurnTermInEpochBlock(e1) => {
-                write!(f, "MissingTurnTermInEpochBlock : {:?}", e1)
+            Error::MissingTurnLengthInEpochBlock(e1) => {
+                write!(f, "MissingTurnLengthInEpochBlock : {:?}", e1)
             }
             Error::MissingPreviousValidators(e1) => {
                 write!(f, "MissingPreviousValidators : {:?}", e1)

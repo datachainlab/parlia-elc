@@ -10,9 +10,9 @@ pub struct ValidatorSet {
 
 impl ValidatorSet {
     /// https://github.com/NathanBSC/bsc/blob/a910033bc52013d96ecefd8d5224d70d288c1309/consensus/parlia/snapshot.go#L226
-    pub fn checkpoint(&self, turn_term: u8) -> u64 {
+    pub fn checkpoint(&self, turn_length: u8) -> u64 {
         let validator_size = self.validators.len() as u64;
-        (validator_size / 2) * turn_term as u64 + 1
+        (validator_size / 2) * turn_length as u64 + 1
     }
 }
 

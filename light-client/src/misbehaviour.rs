@@ -88,8 +88,8 @@ mod test {
             account_proof: vec![],
             current_validators: vec![coinbase.clone()],
             previous_validators: vec![coinbase],
-            previous_turn_term: 1,
-            current_turn_term: 1,
+            previous_turn_length: 1,
+            current_turn_length: 1,
         }
     }
 

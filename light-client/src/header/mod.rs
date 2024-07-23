@@ -208,7 +208,7 @@ impl TryFrom<RawHeader> for Header {
             //TODO validate turn term
             Epoch::new(
                 value.current_validators.into(),
-                value.current_turn_term as u8,
+                value.current_turn_length as u8,
             )
         };
         if current_epoch.validators().is_empty() {
@@ -221,7 +221,7 @@ impl TryFrom<RawHeader> for Header {
             trusted_height,
             previous_epoch: Epoch::new(
                 value.previous_validators.into(),
-                value.previous_turn_term as u8,
+                value.previous_turn_length as u8,
             ),
             current_epoch,
         })
@@ -303,8 +303,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
-            current_turn_term: 1,
-            previous_turn_term: 1,
+            current_turn_length: 1,
+            previous_turn_length: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -329,8 +329,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![h.coinbase.clone()],
-            current_turn_term: 1,
-            previous_turn_term: 1,
+            current_turn_length: 1,
+            previous_turn_length: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -358,8 +358,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![h.coinbase.clone()],
             previous_validators: vec![],
-            current_turn_term: 1,
-            previous_turn_term: 1,
+            current_turn_length: 1,
+            previous_turn_length: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -386,8 +386,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: vec![],
             previous_validators: vec![h.coinbase.clone()],
-            current_turn_term: 1,
-            previous_turn_term: 1,
+            current_turn_length: 1,
+            previous_turn_length: 1,
         };
         let err = Header::try_from(raw).unwrap_err();
         match err {
@@ -414,8 +414,8 @@ pub(crate) mod test {
             account_proof: vec![],
             current_validators: hp.epoch_header().epoch.unwrap().validators().clone(),
             previous_validators: hp.previous_validators(),
-            current_turn_term: 1,
-            previous_turn_term: 1,
+            current_turn_length: 1,
+            previous_turn_length: 1,
         };
         let result = Header::try_from(raw.clone()).unwrap();
         assert_eq!(result.headers.target, *h);

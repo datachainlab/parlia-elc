@@ -27,7 +27,7 @@ const BLS_PUBKEY_LENGTH: usize = 48;
 const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
 const VALIDATOR_NUM_SIZE: usize = 1;
 
-const TURN_TERM_SIZE: usize = 1;
+const TURN_LENGTH_SIZE: usize = 1;
 
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 
@@ -240,7 +240,7 @@ impl ETHHeader {
                 return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
             }
             let start =
-                EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_TERM_SIZE;
+                EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_LENGTH_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
             &self.extra_data[start..end]
         };
@@ -395,9 +395,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let hash: Hash = keccak_256(&buffer_vec);
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
-            let (validators, turn_term) = get_validator_bytes_and_tern_term(&extra_data)
+            let (validators, turn_length) = get_validator_bytes_and_tern_term(&extra_data)
                 .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?;
-            Some(Epoch::new(validators.into(), turn_term))
+            Some(Epoch::new(validators.into(), turn_length))
         } else {
             None
         };

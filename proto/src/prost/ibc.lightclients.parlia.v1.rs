@@ -44,9 +44,9 @@ pub struct Header {
     #[prost(bytes = "vec", repeated, tag = "5")]
     pub previous_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     #[prost(uint32, tag = "6")]
-    pub current_turn_term: u32,
+    pub current_turn_length: u32,
     #[prost(uint32, tag = "7")]
-    pub previous_turn_term: u32,
+    pub previous_turn_length: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

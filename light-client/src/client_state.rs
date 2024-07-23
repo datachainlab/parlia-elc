@@ -378,8 +378,8 @@ mod test {
                     vec![h.coinbase.clone()]
                 },
                 previous_validators: vec![h.coinbase.clone()],
-                previous_turn_term: 1,
-                current_turn_term: 1,
+                previous_turn_length: 1,
+                current_turn_length: 1,
             };
             raw.try_into().unwrap()
         };

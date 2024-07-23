@@ -6,21 +6,21 @@ use patricia_merkle_trie::keccak::keccak_256;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Epoch {
     validator_set: ValidatorSet,
-    turn_term: u8,
+    turn_length: u8,
     hash: Hash,
 }
 
 impl Epoch {
-    pub fn new(validator_set: ValidatorSet, turn_term: u8) -> Self {
-        let seed = [[turn_term].as_slice(), validator_set.hash.as_slice()].concat();
+    pub fn new(validator_set: ValidatorSet, turn_length: u8) -> Self {
+        let seed = [[turn_length].as_slice(), validator_set.hash.as_slice()].concat();
         Self {
             validator_set,
-            turn_term,
+            turn_length,
             hash: keccak_256(&seed),
         }
     }
     pub fn checkpoint(&self) -> u64 {
-        self.validator_set.checkpoint(self.turn_term)
+        self.validator_set.checkpoint(self.turn_length)
     }
 
     pub fn hash(&self) -> Hash {
@@ -31,8 +31,8 @@ impl Epoch {
         &self.validator_set.validators
     }
 
-    pub fn turn_term(&self) -> u8 {
-        self.turn_term
+    pub fn turn_length(&self) -> u8 {
+        self.turn_length
     }
 }
 

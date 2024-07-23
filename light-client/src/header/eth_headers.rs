@@ -308,7 +308,7 @@ mod test {
         for val in validators.iter_mut() {
             val[0] = 0;
         }
-        let p_val = Epoch::new(validators.into(), previous_epoch.turn_term());
+        let p_val = Epoch::new(validators.into(), previous_epoch.turn_length());
         let p_val = trust(&p_val);
         let c_val = hp.epoch_header().epoch.unwrap();
         let c_val = EitherEpoch::Trusted(trust(&c_val));
@@ -537,9 +537,9 @@ mod test {
                 if next.is_epoch() {
                     // set n_val
                     next.extra_data = n_val_header.extra_data.clone();
-                    let (validators, turn_term) =
+                    let (validators, turn_length) =
                         get_validator_bytes_and_tern_term(&next.extra_data).unwrap();
-                    next.epoch = Some(Epoch::new(validators.into(), turn_term));
+                    next.epoch = Some(Epoch::new(validators.into(), turn_length));
                 }
                 headers.all.push(next);
             }
