@@ -34,7 +34,7 @@ const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 const EMPTY_UNCLE_HASH: Hash =
     hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
-const EMPTY_MIX_HASH: Hash =
+const EMPTY_HASH: Hash =
     hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -54,6 +54,11 @@ pub struct ETHHeader {
     pub extra_data: Vec<u8>,
     pub mix_digest: Vec<u8>,
     pub nonce: Vec<u8>,
+    pub base_fee_per_gas: Option<u64> ,
+    pub withdrawals_hash: Option<Vec<u8>> ,
+    pub blob_gas_used: Option<u64>,
+    pub excess_blob_gas: Option<u64> ,
+    pub parent_beacon_root: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
@@ -91,7 +96,8 @@ impl ETHHeader {
 
     /// This returns the hash of a block prior to it being sealed.
     fn seal_hash(&self, chain_id: &ChainId) -> Result<Hash, Error> {
-        let mut stream = RlpStream::new_list(16);
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
         stream.append(&chain_id.id());
         stream.append(&self.parent_hash);
         stream.append(&self.uncle_hash);
@@ -108,6 +114,32 @@ impl ETHHeader {
         stream.append(&self.extra_data[..self.extra_data.len() - EXTRA_SEAL].to_vec());
         stream.append(&self.mix_digest);
         stream.append(&self.nonce);
+        if let Some(parent_beacon_root) = &self.parent_beacon_root {
+            if parent_beacon_root == &EMPTY_HASH {
+                if let Some(value ) = &self.base_fee_per_gas {
+                    stream.append(value);
+                }else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.withdrawals_hash{
+                    stream.append(value);
+                }else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.blob_gas_used {
+                    stream.append(value);
+                }else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.excess_blob_gas{
+                    stream.append(value);
+                }else {
+                    stream.append_empty_data();
+                }
+                stream.append(parent_beacon_root);
+            }
+        }
+        stream.finalize_unbounded_list();
         Ok(keccak_256(stream.out().as_ref()))
     }
 
@@ -324,7 +356,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // Ensure that the mix digest is zero as we don't have fork protection currently
-        if mix_digest != EMPTY_MIX_HASH {
+        if mix_digest != EMPTY_HASH {
             return Err(Error::UnexpectedMixHash(number));
         }
         // Ensure that the block doesn't contain any uncles which are meaningless in PoA
@@ -378,8 +410,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             || excess_blob_gas.is_some()
             || parent_beacon_root.is_some()
         {
-            if let Some(v) = withdrawals_hash {
-                stream.append(&v);
+            if let Some(v) = &withdrawals_hash {
+                stream.append(v);
             } else {
                 stream.append_empty_data();
             }
@@ -399,8 +431,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             }
         }
         if parent_beacon_root.is_some() {
-            if let Some(v) = parent_beacon_root {
-                stream.append(&v);
+            if let Some(v) = &parent_beacon_root {
+                stream.append(v);
             } else {
                 stream.append_empty_data();
             }
@@ -433,6 +465,11 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             extra_data,
             mix_digest,
             nonce,
+            base_fee_per_gas,
+            excess_blob_gas,
+            withdrawals_hash,
+            blob_gas_used,
+            parent_beacon_root,
             hash,
             epoch,
         })
@@ -454,7 +491,8 @@ pub(crate) mod test {
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
-        let mut stream = RlpStream::new_list(15);
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
         stream.append(&header.parent_hash);
         stream.append(&header.uncle_hash);
         stream.append(&header.coinbase);
@@ -470,6 +508,7 @@ pub(crate) mod test {
         stream.append(&header.extra_data);
         stream.append(&header.mix_digest);
         stream.append(&header.nonce);
+        stream.finalize_unbounded_list();
         RawETHHeader {
             header: stream.out().to_vec(),
         }
