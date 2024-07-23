@@ -710,16 +710,15 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_update_state_continuous(#[case] hp: Box<dyn Network>) {
-
         let client = ParliaLightClient::default();
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
-        let header_groups= hp.success_update_client_continuous_input();
+        let header_groups = hp.success_update_client_continuous_input();
 
         for headers in header_groups {
             let any: Any = headers.first().unwrap().clone().try_into().unwrap();
-            let first= Header::try_from(any.clone()).unwrap();
+            let first = Header::try_from(any.clone()).unwrap();
             if !first.eth_header().target.is_epoch() {
-               panic!("first header of each group must be epoch") ;
+                panic!("first header of each group must be epoch");
             }
             // create client
             let mut mock_consensus_state = BTreeMap::new();
@@ -745,18 +744,20 @@ mod test {
                 let result = client.update_client(&ctx, client_id.clone(), any).unwrap();
                 match result {
                     UpdateClientResult::UpdateState(state) => {
-                        ctx.consensus_state.insert(header.height(), state.new_any_consensus_state.try_into().unwrap());
+                        ctx.consensus_state.insert(
+                            header.height(),
+                            state.new_any_consensus_state.try_into().unwrap(),
+                        );
                         cs.latest_height = state.height;
                     }
-                    _ => unreachable!("invalid update_client result")
+                    _ => unreachable!("invalid update_client result"),
                 }
             }
 
             let any: Any = headers.last().unwrap().clone().try_into().unwrap();
-            let last= Header::try_from(any.clone()).unwrap();
+            let last = Header::try_from(any.clone()).unwrap();
             assert_eq!(cs.latest_height, last.height());
         }
-
     }
 
     #[rstest]

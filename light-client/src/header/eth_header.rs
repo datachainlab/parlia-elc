@@ -304,6 +304,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let withdrawals_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -359,11 +360,12 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
-        // https://github.com/bnb-chain/bsc/blob/4b45c5993c87d12c520a89e0d3d059e4d6b6eb9c/core/types/gen_header_rlp.go#L57
+
         if base_fee_per_gas.is_some()
             || withdrawals_hash.is_some()
             || blob_gas_used.is_some()
             || excess_blob_gas.is_some()
+            || parent_beacon_root.is_some()
         {
             if let Some(v) = base_fee_per_gas {
                 stream.append(&v);
@@ -371,22 +373,33 @@ impl TryFrom<RawETHHeader> for ETHHeader {
                 stream.append_empty_data();
             }
         }
-        if withdrawals_hash.is_some() || blob_gas_used.is_some() || excess_blob_gas.is_some() {
+        if withdrawals_hash.is_some()
+            || blob_gas_used.is_some()
+            || excess_blob_gas.is_some()
+            || parent_beacon_root.is_some()
+        {
             if let Some(v) = withdrawals_hash {
                 stream.append(&v);
             } else {
                 stream.append_empty_data();
             }
         }
-        if blob_gas_used.is_some() || excess_blob_gas.is_some() {
+        if blob_gas_used.is_some() || excess_blob_gas.is_some() || parent_beacon_root.is_some() {
             if let Some(v) = blob_gas_used {
                 stream.append(&v);
             } else {
                 stream.append_empty_data();
             }
         }
-        if excess_blob_gas.is_some() {
+        if excess_blob_gas.is_some() || parent_beacon_root.is_some() {
             if let Some(v) = excess_blob_gas {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if parent_beacon_root.is_some() {
+            if let Some(v) = parent_beacon_root {
                 stream.append(&v);
             } else {
                 stream.append_empty_data();
