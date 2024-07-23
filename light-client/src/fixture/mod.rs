@@ -35,6 +35,7 @@ pub trait Network {
     fn ibc_store_address(&self) -> Address;
     fn success_update_client_non_epoch_input(&self) -> UpdateClientNonEpochInput;
     fn success_update_client_epoch_input(&self) -> UpdateClientEpochInput;
+    fn success_update_client_continuous_input(&self) -> Vec<Vec<Vec<u8>>>;
     fn error_update_client_non_neighboring_epoch_input(&self) -> (Vec<u8>, u64);
     fn error_update_client_input(&self) -> UpdateClientErrorInput;
 }

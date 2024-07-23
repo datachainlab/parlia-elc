@@ -709,6 +709,58 @@ mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
+    fn test_success_update_state_continuous(#[case] hp: Box<dyn Network>) {
+
+        let client = ParliaLightClient::default();
+        let client_id = ClientId::new(&client.client_type(), 1).unwrap();
+        let header_groups= hp.success_update_client_continuous_input();
+
+        for headers in header_groups {
+            let any: Any = headers.first().unwrap().clone().try_into().unwrap();
+            let first= Header::try_from(any.clone()).unwrap();
+            if !first.eth_header().target.is_epoch() {
+               panic!("first header of each group must be epoch") ;
+            }
+            // create client
+            let mut mock_consensus_state = BTreeMap::new();
+            let trusted_cs = ConsensusState {
+                current_validators_hash: first.previous_epoch_validators_hash(),
+                ..Default::default()
+            };
+            mock_consensus_state.insert(first.trusted_height(), trusted_cs.clone());
+            let mut cs = ClientState {
+                chain_id: hp.network(),
+                ibc_store_address: hp.ibc_store_address(),
+                latest_height: first.trusted_height(),
+                ..Default::default()
+            };
+
+            let mut ctx = MockClientReader {
+                client_state: Some(cs.clone()),
+                consensus_state: mock_consensus_state,
+            };
+            for header in &headers {
+                let any: Any = header.clone().try_into().unwrap();
+                let header = Header::try_from(any.clone()).unwrap();
+                let result = client.update_client(&ctx, client_id.clone(), any).unwrap();
+                match result {
+                    UpdateClientResult::UpdateState(state) => {
+                        ctx.consensus_state.insert(header.height(), state.new_any_consensus_state.try_into().unwrap());
+                        cs.latest_height = state.height;
+                    }
+                    _ => unreachable!("invalid update_client result")
+                }
+            }
+
+            let any: Any = headers.last().unwrap().clone().try_into().unwrap();
+            let last= Header::try_from(any.clone()).unwrap();
+            assert_eq!(cs.latest_height, last.height());
+        }
+
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
     fn test_error_update_state(#[case] hp: Box<dyn Network>) {
         let input = hp.error_update_client_input();
         let header = input.header;
