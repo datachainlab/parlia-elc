@@ -239,8 +239,10 @@ impl ETHHeader {
             {
                 return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
             }
-            let start =
-                EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH) + TURN_LENGTH_SIZE;
+            let start = EXTRA_VANITY
+                + VALIDATOR_NUM_SIZE
+                + (num * VALIDATOR_BYTES_LENGTH)
+                + TURN_LENGTH_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
             &self.extra_data[start..end]
         };
