@@ -5,7 +5,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
-use crate::header::epoch::{EitherEpoch, TrustedEpoch, UntrustedEpoch};
+use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
@@ -48,7 +48,7 @@ impl ETHHeaders {
             } else if h.number >= checkpoint {
                 h.verify_seal(unwrap_c_val(h.number, &c_val)?, chain_id)?;
             } else {
-                h.verify_seal(p_val, chain_id)?;
+                h.verify_seal(previous_epoch.as_ref(), chain_id)?;
             }
         }
 
@@ -60,9 +60,9 @@ impl ETHHeaders {
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
-                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?)?;
+                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
             } else if h.number > checkpoint {
-                vote.verify(h.number, unwrap_c_val(h.number, &c_val)?)?;
+                vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
             } else {
                 vote.verify(h.number, p_val)?;
             }
@@ -119,7 +119,7 @@ impl ETHHeaders {
         next_checkpoint: u64,
         previous_epoch: &TrustedEpoch,
         current_epoch: &'a EitherEpoch,
-    ) -> Result<(Option<&'a Validators>, Option<&'b Validators>), Error> {
+    ) -> Result<(Option<&'a Epoch>, Option<&'b Epoch>), Error> {
         let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
@@ -147,14 +147,14 @@ impl ETHHeaders {
                         .epoch
                         .as_ref()
                         .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok((Some(trusted.validators()), None)),
+                    None => return Ok((Some(trusted.as_ref()), None)),
                 };
 
                 // Finish if no headers over next checkpoint were found
                 let hs: Vec<&&ETHHeader> =
                     hs.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if hs.is_empty() {
-                    return Ok((Some(trusted.validators()), None));
+                    return Ok((Some(trusted.as_ref()), None));
                 }
 
                 // Ensure n_val(400) can be borrowed by c_val(200)
@@ -168,7 +168,7 @@ impl ETHHeaders {
                         next_next_checkpoint,
                     ));
                 }
-                Ok((Some(trusted.validators()), Some(next_epoch.validators())))
+                Ok((Some(trusted.as_ref()), Some(next_epoch)))
             }
         }
     }
@@ -220,15 +220,15 @@ fn verify_finalized(
 
 fn unwrap_n_val<'a>(
     n: BlockNumber,
-    n_val: &'a Option<&'a Validators>,
-) -> Result<&'a Validators, Error> {
+    n_val: &'a Option<&'a Epoch>,
+) -> Result<&'a Epoch, Error> {
     n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
 }
 
 fn unwrap_c_val<'a>(
     n: BlockNumber,
-    c_val: &'a Option<&'a Validators>,
-) -> Result<&'a Validators, Error> {
+    c_val: &'a Option<&'a Epoch>,
+) -> Result<&'a Epoch, Error> {
     c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(n))
 }
 

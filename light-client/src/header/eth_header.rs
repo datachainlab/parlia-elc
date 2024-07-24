@@ -195,7 +195,7 @@ impl ETHHeader {
     /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L755
     pub fn verify_seal(
         &self,
-        validator_set: &Validators,
+        validating_epoch: &Epoch,
         chain_id: &ChainId,
     ) -> Result<Address, Error> {
         // Resolve the authorization key and check against validators
@@ -205,7 +205,7 @@ impl ETHHeader {
         }
 
         let mut valid_signer = false;
-        for validator in validator_set.iter() {
+        for validator in validating_epoch.validators().iter() {
             if validator[0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN] == signer {
                 valid_signer = true;
                 break;
@@ -215,9 +215,31 @@ impl ETHHeader {
             return Err(Error::MissingSignerInValidator(self.number, signer));
         }
 
-        // Don't check that the difficulty corresponds to the turn-ness of the signer
+        // Ensure that the difficulty corresponds to the turn-ness of the signer
+        self.verify_validator_rotation(validating_epoch)?;
 
         Ok(signer)
+    }
+
+    fn verify_validator_rotation(&self, epoch: &Epoch) -> Result<(), Error> {
+        let offset = (self.number / epoch.turn_length() as u64 ) as usize % epoch.validators().len();
+        let inturn_validator = &epoch.validators()[offset][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN];
+        if inturn_validator == self.coinbase {
+            if self.difficulty != DIFFICULTY_INTURN {
+                return Err(Error::UnexpectedDifficultyInTurn(
+                    self.number,
+                    self.difficulty,
+                    offset,
+                ));
+            }
+        } else if self.difficulty != DIFFICULTY_NOTURN {
+            return Err(Error::UnexpectedDifficultyNoTurn(
+                self.number,
+                self.difficulty,
+                offset,
+            ));
+        }
+        Ok(())
     }
 
     pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
@@ -288,6 +310,7 @@ impl ETHHeader {
 
 // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
 pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Option<(Validators, u8)> {
+    //TODO ret error
     if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
         return None;
     }
@@ -297,12 +320,16 @@ pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Option<(Validator
     }
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
+    let turn_length = extra_data[end];
+    if !(turn_length == 1 || (turn_length >= 3 && turn_length <= 9)) {
+        return None;
+    }
     Some((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
             .map(|s| s.into())
             .collect(),
-        extra_data[end],
+        turn_length
     ))
 }
 
@@ -478,9 +505,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::Error;
-    use crate::header::eth_header::{
-        ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
-    };
+    use crate::header::eth_header::{DIFFICULTY_INTURN, DIFFICULTY_NOTURN, ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN};
 
     use rlp::RlpStream;
     use rstest::*;
@@ -488,6 +513,7 @@ pub(crate) mod test {
     use crate::fixture::{localnet, Network};
     use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+    use crate::header::epoch::Epoch;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
         let mut stream = RlpStream::new();
@@ -611,14 +637,14 @@ pub(crate) mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_verify_seal(#[case] hp: Box<dyn Network>) {
-        let validators = hp.previous_validators();
+        let prev_epoch = hp.previous_epoch_header().epoch.unwrap();
         let blocks = vec![
             hp.epoch_header(),
             hp.epoch_header_plus_1(),
             hp.epoch_header_plus_2(),
         ];
         for block in blocks {
-            if let Err(e) = block.verify_seal(&validators, &hp.network()) {
+            if let Err(e) = block.verify_seal(&prev_epoch, &hp.network()) {
                 unreachable!("{} {:?}", block.number, e);
             }
         }
@@ -627,11 +653,11 @@ pub(crate) mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_verify_seal(#[case] hp: Box<dyn Network>) {
-        let validators = hp.previous_validators();
+        let prev_epoch = hp.previous_epoch_header().epoch.unwrap();
         let mut blocks = vec![hp.epoch_header_plus_1(), hp.epoch_header_plus_2()];
 
         for block in blocks.iter_mut() {
-            let result = block.verify_seal(&vec![], &hp.network());
+            let result = block.verify_seal(&Epoch::new(vec![].into(), 1), &hp.network());
             match result.unwrap_err() {
                 Error::MissingSignerInValidator(number, address) => {
                     assert_eq!(block.number, number);
@@ -643,7 +669,7 @@ pub(crate) mod test {
 
         for mut block in blocks.iter_mut() {
             block.coinbase = vec![];
-            let result = block.verify_seal(&validators, &hp.network());
+            let result = block.verify_seal(&prev_epoch, &hp.network());
             match result.unwrap_err() {
                 Error::UnexpectedCoinbase(number) => assert_eq!(block.number, number),
                 e => unreachable!("{:?}", e),
@@ -785,6 +811,38 @@ pub(crate) mod test {
             ) => {
                 assert_eq!(parent.number - 1, source);
                 assert_eq!(parent.number, parent_target);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_validator_rotation_inturn(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.difficulty = DIFFICULTY_NOTURN;
+        let prev = hp.previous_epoch_header();
+        match header.verify_validator_rotation(&prev.epoch.unwrap()).unwrap_err() {
+            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_validator_rotation_noturn(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.difficulty = DIFFICULTY_INTURN;
+        let prev = hp.previous_epoch_header();
+        header.coinbase =
+            prev.epoch.clone().unwrap().validators()[1][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].to_vec();
+        match header.verify_validator_rotation(&prev.epoch.unwrap()).unwrap_err() {
+            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
             }
             err => unreachable!("{:?}", err),
         }

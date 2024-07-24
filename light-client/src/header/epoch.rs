@@ -50,6 +50,10 @@ impl<'a> TrustedEpoch<'a> {
         self.inner.checkpoint()
     }
 
+    pub fn as_ref(&self) -> &'a Epoch {
+        self.inner
+    }
+
     pub fn new(inner: &'a Epoch) -> Self {
         Self { inner }
     }
@@ -67,10 +71,10 @@ impl<'a> UntrustedEpoch<'a> {
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
     }
-    pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Validators, Error> {
+    pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Epoch, Error> {
         let (result, found, required) = self.contains(trusted_epoch);
         if result {
-            return Ok(self.inner.validators());
+            return Ok(self.inner);
         }
         Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
             self.inner.hash,
@@ -146,7 +150,7 @@ mod test {
             match untrusted_epoch.try_borrow(&trusted_epoch) {
                 Ok(borrowed) => {
                     if c_val_borrowable {
-                        assert_eq!(borrowed, untrusted_epoch.inner.validators());
+                        assert_eq!(borrowed, untrusted_epoch.inner);
                     } else {
                         unreachable!("unexpected borrowed")
                     }
