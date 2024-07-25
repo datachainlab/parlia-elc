@@ -468,7 +468,7 @@ mod test {
 
     use crate::fixture::{localnet, Network};
     use crate::header::Header;
-    use crate::message::ClientMessage;
+
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;
@@ -764,19 +764,23 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_update_state(#[case] hp: Box<dyn Network>) {
-        let input = hp.error_update_client_input();
+        let input = hp.success_update_client_epoch_input();
         let header = input.header;
         let any: Any = header.try_into().unwrap();
 
         let client = ParliaLightClient::default();
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
-        let trusted_cs = ConsensusState {
-            current_validators_hash: input.trusted_current_validators_hash,
-            previous_validators_hash: input.trusted_previous_validators_hash,
-            ..Default::default()
-        };
-        mock_consensus_state.insert(Height::new(0, input.trusted_height), trusted_cs);
+
+        // fail: check_header_and_update_state (invalid validator hash)
+        mock_consensus_state.insert(
+            Height::new(0, input.trusted_height),
+            ConsensusState {
+                current_validators_hash: [0u8; 32],
+                previous_validators_hash: input.trusted_previous_validators_hash,
+                ..Default::default()
+            },
+        );
         let ctx = MockClientReader {
             client_state: Some(ClientState {
                 chain_id: hp.network(),
@@ -786,19 +790,10 @@ mod test {
             }),
             consensus_state: mock_consensus_state.clone(),
         };
-
-        // fail: check_header_and_update_state
         let err = client
             .update_client(&ctx, client_id.clone(), any.clone())
             .unwrap_err();
-        assert_err(err, "UnexpectedPreviousValidatorsHash");
-
-        // assert fixture validity
-        let de_header: Header = any.clone().try_into().unwrap();
-        assert_ne!(
-            de_header.eth_header().target.hash,
-            de_header.eth_header().all[1].parent_hash.as_slice()
-        );
+        assert_err(err, "UnexpectedUntrustedValidatorsHashInEpoch");
 
         // fail: client_frozen
         let ctx = MockClientReader {

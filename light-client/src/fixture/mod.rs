@@ -37,7 +37,6 @@ pub trait Network {
     fn success_update_client_epoch_input(&self) -> UpdateClientEpochInput;
     fn success_update_client_continuous_input(&self) -> Vec<Vec<Vec<u8>>>;
     fn error_update_client_non_neighboring_epoch_input(&self) -> Vec<u8>;
-    fn error_update_client_input(&self) -> UpdateClientErrorInput;
 }
 
 pub struct UpdateClientNonEpochInput {
@@ -56,13 +55,6 @@ pub struct UpdateClientEpochInput {
     pub new_current_validators_hash: Hash,
     pub new_previous_validators_hash: Hash,
     pub expected_storage_root: Hash,
-}
-
-pub struct UpdateClientErrorInput {
-    pub header: Vec<u8>,
-    pub trusted_height: u64,
-    pub trusted_current_validators_hash: Hash,
-    pub trusted_previous_validators_hash: Hash,
 }
 
 pub fn localnet() -> Box<dyn Network> {

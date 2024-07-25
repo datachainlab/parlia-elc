@@ -298,7 +298,7 @@ pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validator
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    if !(turn_length == 1 || (turn_length >= 3 && turn_length <= 9)) {
+    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
         return Err(Error::UnexpectedTurnLength(turn_length));
     }
     Ok((

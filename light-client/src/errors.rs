@@ -91,6 +91,8 @@ pub enum Error {
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
     UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
     MissingTrustedCurrentValidators(BlockNumber),
+    UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -349,6 +351,20 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedExtraDataLength(e1) => {
                 write!(f, "UnexpectedExtraDataLength: {}", e1)
+            }
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::UnexpectedCurrentValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
         }
     }
