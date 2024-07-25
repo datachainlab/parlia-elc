@@ -106,6 +106,8 @@ pub enum Error {
     InsufficientValidatorCount(BlockNumber, usize, usize),
     UnexpectedVoteAddressCount(BlockNumber, usize, usize),
     UnexpectedBLSSignatureLength(usize),
+    UnexpectedTurnLength(u8),
+    UnexpectedExtraDataLength(usize),
 
     // Misbehaviour
     MissingHeader1,
@@ -341,6 +343,12 @@ impl core::fmt::Display for Error {
             }
             Error::LCPError(e1) => {
                 write!(f, "LCPError: {}", e1)
+            }
+            Error::UnexpectedTurnLength(e1) => {
+                write!(f, "UnexpectedTurnLength : {}", e1)
+            }
+            Error::UnexpectedExtraDataLength(e1) => {
+                write!(f, "UnexpectedExtraDataLength: {}", e1)
             }
         }
     }
