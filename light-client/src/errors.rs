@@ -78,6 +78,8 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
+    MissingTurnLengthInEpochBlock(BlockNumber),
+    MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
     MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
@@ -89,6 +91,8 @@ pub enum Error {
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
     UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
     MissingTrustedCurrentValidators(BlockNumber),
+    UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -104,6 +108,8 @@ pub enum Error {
     InsufficientValidatorCount(BlockNumber, usize, usize),
     UnexpectedVoteAddressCount(BlockNumber, usize, usize),
     UnexpectedBLSSignatureLength(usize),
+    UnexpectedTurnLength(u8),
+    UnexpectedExtraDataLength(usize),
 
     // Misbehaviour
     MissingHeader1,
@@ -258,6 +264,12 @@ impl core::fmt::Display for Error {
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
             }
+            Error::MissingEpochInfoInEpochBlock(e1) => {
+                write!(f, "MissingEpochInfoInEpochBlock : {:?}", e1)
+            }
+            Error::MissingTurnLengthInEpochBlock(e1) => {
+                write!(f, "MissingTurnLengthInEpochBlock : {:?}", e1)
+            }
             Error::MissingPreviousValidators(e1) => {
                 write!(f, "MissingPreviousValidators : {:?}", e1)
             }
@@ -333,6 +345,26 @@ impl core::fmt::Display for Error {
             }
             Error::LCPError(e1) => {
                 write!(f, "LCPError: {}", e1)
+            }
+            Error::UnexpectedTurnLength(e1) => {
+                write!(f, "UnexpectedTurnLength : {}", e1)
+            }
+            Error::UnexpectedExtraDataLength(e1) => {
+                write!(f, "UnexpectedExtraDataLength: {}", e1)
+            }
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::UnexpectedCurrentValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
             }
         }
     }

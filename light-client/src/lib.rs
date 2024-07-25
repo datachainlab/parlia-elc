@@ -11,6 +11,8 @@ pub mod client_state;
 pub mod commitment;
 pub mod consensus_state;
 pub mod errors;
+#[cfg(test)]
+mod fixture;
 pub mod header;
 pub mod message;
 pub mod misbehaviour;

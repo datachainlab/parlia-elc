@@ -147,15 +147,16 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
-    use crate::header::testdata::{
-        header_31297199, header_31297200, header_31297201, header_31297202, validators_in_31297000,
-    };
+    use crate::fixture::*;
     use crate::header::vote_attestation::{
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,
     };
+    use crate::misc::ceil_div;
     use hex_literal::hex;
     use rlp::{Rlp, RlpStream};
+    use rstest::rstest;
+    use std::prelude::rust_2015::Box;
 
     #[test]
     fn test_error_try_from_unexpected_bls_signature_length() {
@@ -195,23 +196,19 @@ mod test {
         };
     }
 
-    #[test]
-    fn test_success_verify() {
-        let validators = validators_in_31297000();
-        let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
-        ];
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify(#[case] hp: Box<dyn Network>) {
+        let validators = hp
+            .previous_epoch_header()
+            .epoch
+            .unwrap()
+            .validators()
+            .clone();
+        let blocks = hp.headers_before_checkpoint().all;
         for block in blocks.iter() {
-            if let Err(e) = block
-                .get_vote_attestation()
-                .unwrap()
-                .verify(block.number, &validators)
-            {
-                unreachable!("{} {:?}", block.number, e);
-            }
+            let vote = block.get_vote_attestation().unwrap();
+            vote.verify(block.number, &validators).unwrap();
         }
     }
 
@@ -285,68 +282,67 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_error_verify() {
-        let mut validators = validators_in_31297000();
-        validators.extend(validators.clone());
-        let header = header_31297199();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify(#[case] hp: Box<dyn Network>) {
+        let mut validators = hp.previous_validators();
+        validators.extend(validators.clone()); // len = validators * 2
+        let header = hp.epoch_header();
         let vote = header.get_vote_attestation().unwrap();
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
             Error::InsufficientValidatorCount(number, vote_count_in_extra, required) => {
                 assert_eq!(number, header.number);
-                assert_eq!(vote_count_in_extra, 17);
-                assert_eq!(required, 28); //42 * 2 / 3
+                assert_eq!(required, ceil_div(validators.len() * 2, 3));
+                assert!(vote_count_in_extra < required);
             }
             _ => unreachable!("invalid error {:?}", err),
         }
 
-        let validators = validators_in_31297000()[0..16].to_vec();
+        let validators = hp.previous_validators()[0..1].to_vec();
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
             Error::UnexpectedVoteAddressCount(number, vote_count_in_extra, val_size) => {
                 assert_eq!(number, header.number);
-                assert_eq!(vote_count_in_extra, 17);
                 assert_eq!(val_size, validators.len());
+                assert!(vote_count_in_extra > validators.len());
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
 
-        let mut validators = validators_in_31297000();
+        let mut validators = hp.previous_validators();
         for v in validators.iter_mut() {
             v.pop();
         }
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
-            Error::UnexpectedBLSPubkey(number, e) => {
+            Error::UnexpectedBLSPubkey(number, _) => {
                 assert_eq!(header.number, number);
-                assert_eq!(format!("{:?}", e), "InvalidPoint");
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
 
-        let validators = validators_in_31297000();
-        let header = header_31297199();
+        let validators = hp.previous_validators();
+        let header = hp.epoch_header();
         let mut vote = header.get_vote_attestation().unwrap();
         vote.app_signature[0] = 1;
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
-            Error::UnexpectedBLSSignature(number, e) => {
+            Error::UnexpectedBLSSignature(number, _e) => {
                 assert_eq!(number, header.number);
-                assert_eq!(format!("{:?}", e), "InvalidG2Size");
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
 
-        let validators = validators_in_31297000();
-        let header = header_31297199();
+        let validators = hp.previous_validators();
+        let header = hp.epoch_header();
         let mut vote = header.get_vote_attestation().unwrap();
         vote.vote_address_set.vote_address_set.pop();
         let err = vote.verify(header.number, &validators).unwrap_err();
         match err {
             Error::FailedToVerifyBLSSignature(number, e) => {
                 assert_eq!(number, header.number);
-                assert_eq!(e, 16);
+                assert_eq!(e, validators.len() - 1);
             }
             _ => unreachable!("{} {:?}", header.number, err),
         }
