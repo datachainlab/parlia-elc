@@ -468,6 +468,7 @@ mod test {
 
     use crate::fixture::{localnet, Network};
     use crate::header::Header;
+    use crate::message::ClientMessage;
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;
@@ -845,25 +846,25 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_error_update_state_non_neighboring_epoch(#[case] hp: Box<dyn Network>) {
-        let input = hp.error_update_client_non_neighboring_epoch_input();
-        let header = input.0;
-        let trusted_height = input.1;
+        let input = Any::try_from(hp.error_update_client_non_neighboring_epoch_input()).unwrap();
+        let header = Header::try_from(input.clone()).unwrap();
+        let trusted_height = header.trusted_height();
 
         let client = ParliaLightClient::default();
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
-        mock_consensus_state.insert(Height::new(0, trusted_height), ConsensusState::default());
+        mock_consensus_state.insert(trusted_height, ConsensusState::default());
         let ctx = MockClientReader {
             client_state: Some(ClientState::default()),
             consensus_state: mock_consensus_state,
         };
-        let err = client
-            .update_client(&ctx, client_id, header.try_into().unwrap())
-            .unwrap_err();
-        assert!(
-            format!("{:?}", err).contains(&format!("UnexpectedTrustedHeight: {trusted_height}")),
-            "{}",
-            err
+        let err = client.update_client(&ctx, client_id, input).unwrap_err();
+        assert_err(
+            err,
+            &format!(
+                "UnexpectedTrustedHeight: {}",
+                trusted_height.revision_height()
+            ),
         );
     }
 
