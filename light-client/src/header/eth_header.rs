@@ -222,7 +222,7 @@ impl ETHHeader {
     }
 
     fn verify_validator_rotation(&self, epoch: &Epoch) -> Result<(), Error> {
-        let offset = (self.number / epoch.turn_length() as u64 ) as usize % epoch.validators().len();
+        let offset = (self.number / epoch.turn_length() as u64) as usize % epoch.validators().len();
         let inturn_validator = &epoch.validators()[offset][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN];
         if inturn_validator == self.coinbase {
             if self.difficulty != DIFFICULTY_INTURN {
@@ -502,15 +502,18 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::Error;
-    use crate::header::eth_header::{DIFFICULTY_INTURN, DIFFICULTY_NOTURN, ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN};
+    use crate::header::eth_header::{
+        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
+        PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
+    };
 
     use rlp::RlpStream;
     use rstest::*;
 
     use crate::fixture::{localnet, Network};
+    use crate::header::epoch::Epoch;
     use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
-    use crate::header::epoch::Epoch;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
         let mut stream = RlpStream::new();
@@ -819,8 +822,11 @@ pub(crate) mod test {
         let mut header = hp.epoch_header();
         header.difficulty = DIFFICULTY_NOTURN;
         let prev = hp.previous_epoch_header();
-        match header.verify_validator_rotation(&prev.epoch.unwrap()).unwrap_err() {
-            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+        match header
+            .verify_validator_rotation(&prev.epoch.unwrap())
+            .unwrap_err()
+        {
+            Error::UnexpectedDifficultyInTurn(e1, e2, _e3) => {
                 assert_eq!(e1, header.number);
                 assert_eq!(e2, header.difficulty);
             }
@@ -834,10 +840,14 @@ pub(crate) mod test {
         let mut header = hp.epoch_header();
         header.difficulty = DIFFICULTY_INTURN;
         let prev = hp.previous_epoch_header();
-        header.coinbase =
-            prev.epoch.clone().unwrap().validators()[1][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN].to_vec();
-        match header.verify_validator_rotation(&prev.epoch.unwrap()).unwrap_err() {
-            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+        header.coinbase = prev.epoch.clone().unwrap().validators()[1]
+            [0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN]
+            .to_vec();
+        match header
+            .verify_validator_rotation(&prev.epoch.unwrap())
+            .unwrap_err()
+        {
+            Error::UnexpectedDifficultyNoTurn(e1, e2, _e3) => {
                 assert_eq!(e1, header.number);
                 assert_eq!(e2, header.difficulty);
             }

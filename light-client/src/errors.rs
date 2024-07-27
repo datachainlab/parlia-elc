@@ -347,7 +347,7 @@ impl core::fmt::Display for Error {
             }
             Error::LCPError(e1) => {
                 write!(f, "LCPError: {}", e1)
-            },
+            }
             Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
                 write!(f, "UnexpectedDifficultyInTurn : {} {} {}", e1, e2, e3)
             }

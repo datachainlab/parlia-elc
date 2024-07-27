@@ -7,7 +7,7 @@ use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 
-use crate::misc::{BlockNumber, ChainId, Validators};
+use crate::misc::{BlockNumber, ChainId};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -218,17 +218,11 @@ fn verify_finalized(
     Ok(())
 }
 
-fn unwrap_n_val<'a>(
-    n: BlockNumber,
-    n_val: &'a Option<&'a Epoch>,
-) -> Result<&'a Epoch, Error> {
+fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
     n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
 }
 
-fn unwrap_c_val<'a>(
-    n: BlockNumber,
-    c_val: &'a Option<&'a Epoch>,
-) -> Result<&'a Epoch, Error> {
+fn unwrap_c_val<'a>(n: BlockNumber, c_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
     c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(n))
 }
 
