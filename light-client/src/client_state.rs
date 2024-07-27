@@ -430,7 +430,7 @@ mod test {
         let header = header_fn(0, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
-            Error::UnexpectedPreviousValidatorsHash(h1, h2, _, _) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _) => {
                 assert_eq!(h1.revision_height(), h.number - 1);
                 assert_eq!(h2.revision_height(), h.number);
             }

@@ -113,7 +113,7 @@ fn verify_epoch<'a>(
         }
         let previous_trusted = previous_epoch.hash() == consensus_state.current_validators_hash;
         if !previous_trusted {
-            return Err(Error::UnexpectedPreviousValidatorsHash(
+            return Err(Error::UnexpectedUntrustedValidatorsHashInEpoch(
                 trusted_height,
                 height,
                 previous_epoch.hash(),
@@ -126,7 +126,7 @@ fn verify_epoch<'a>(
             .as_ref()
             .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(target.number))?;
         if epoch_info.hash() != current_epoch.hash() {
-            return Err(Error::UnexpectedCurrentValidatorsHash(
+            return Err(Error::UnexpectedCurrentValidatorsHashInEpoch(
                 trusted_height,
                 height,
                 epoch_info.hash(),
@@ -539,7 +539,7 @@ pub(crate) mod test {
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedPreviousValidatorsHash(t, h, hash, cons_hash) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(t, h, hash, cons_hash) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
                 assert_eq!(hash, previous_epoch.hash());
@@ -631,7 +631,7 @@ pub(crate) mod test {
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedCurrentValidatorsHash(t, h, header_hash, request_hash) => {
+            Error::UnexpectedCurrentValidatorsHashInEpoch(t, h, header_hash, request_hash) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(h, height);
                 assert_eq!(header_hash, hp.epoch_header().epoch.unwrap().hash());

@@ -308,28 +308,26 @@ impl ETHHeader {
     }
 }
 
-// https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
-pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Option<(Validators, u8)> {
-    //TODO ret error
+pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
     if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
-        return None;
+        return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
     }
     let num = extra_data[EXTRA_VANITY] as usize;
     if num == 0 || extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH {
-        return None;
+        return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
     }
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    if !(turn_length == 1 || (turn_length >= 3 && turn_length <= 9)) {
-        return None;
+    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
+        return Err(Error::UnexpectedTurnLength(turn_length));
     }
-    Some((
+    Ok((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
             .map(|s| s.into())
             .collect(),
-        turn_length
+        turn_length,
     ))
 }
 
@@ -468,8 +466,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let hash: Hash = keccak_256(&buffer_vec);
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
-            let (validators, turn_length) = get_validator_bytes_and_tern_term(&extra_data)
-                .ok_or_else(|| Error::MissingValidatorInEpochBlock(number))?;
+            let (validators, turn_length) = get_validator_bytes_and_tern_term(&extra_data)?;
             Some(Epoch::new(validators.into(), turn_length))
         } else {
             None
