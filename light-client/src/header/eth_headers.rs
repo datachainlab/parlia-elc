@@ -48,7 +48,7 @@ impl ETHHeaders {
             } else if h.number >= checkpoint {
                 h.verify_seal(unwrap_c_val(h.number, &c_val)?, chain_id)?;
             } else {
-                h.verify_seal(previous_epoch.as_ref(), chain_id)?;
+                h.verify_seal(previous_epoch.epoch(), chain_id)?;
             }
         }
 
@@ -147,14 +147,14 @@ impl ETHHeaders {
                         .epoch
                         .as_ref()
                         .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok((Some(trusted.as_ref()), None)),
+                    None => return Ok((Some(trusted.epoch()), None)),
                 };
 
                 // Finish if no headers over next checkpoint were found
                 let hs: Vec<&&ETHHeader> =
                     hs.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if hs.is_empty() {
-                    return Ok((Some(trusted.as_ref()), None));
+                    return Ok((Some(trusted.epoch()), None));
                 }
 
                 // Ensure n_val(400) can be borrowed by c_val(200)
@@ -168,7 +168,7 @@ impl ETHHeaders {
                         next_next_checkpoint,
                     ));
                 }
-                Ok((Some(trusted.as_ref()), Some(next_epoch)))
+                Ok((Some(trusted.epoch()), Some(next_epoch)))
             }
         }
     }

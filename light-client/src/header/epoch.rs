@@ -50,7 +50,7 @@ impl<'a> TrustedEpoch<'a> {
         self.inner.checkpoint()
     }
 
-    pub fn as_ref(&self) -> &'a Epoch {
+    pub fn epoch(&self) -> &'a Epoch {
         self.inner
     }
 
