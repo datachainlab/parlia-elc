@@ -91,6 +91,8 @@ pub enum Error {
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
     UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
     MissingTrustedCurrentValidators(BlockNumber),
+    UnexpectedDifficultyInTurn(BlockNumber, u64, usize),
+    UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
     UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
 
@@ -345,6 +347,12 @@ impl core::fmt::Display for Error {
             }
             Error::LCPError(e1) => {
                 write!(f, "LCPError: {}", e1)
+            }
+            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyInTurn : {} {} {}", e1, e2, e3)
+            }
+            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyNoTurn : {} {} {}", e1, e2, e3)
             }
             Error::UnexpectedTurnLength(e1) => {
                 write!(f, "UnexpectedTurnLength : {}", e1)
