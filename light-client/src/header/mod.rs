@@ -205,7 +205,6 @@ impl TryFrom<RawHeader> for Header {
                 .clone()
                 .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(headers.target.number))?
         } else {
-            //TODO validate turn term
             Epoch::new(
                 value.current_validators.into(),
                 value.current_turn_length as u8,
