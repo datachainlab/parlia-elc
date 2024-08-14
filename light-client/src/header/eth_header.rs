@@ -319,9 +319,7 @@ pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validator
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
-        return Err(Error::UnexpectedTurnLength(turn_length));
-    }
+    validate_turn_length(turn_length)?;
     Ok((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
@@ -329,6 +327,13 @@ pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validator
             .collect(),
         turn_length,
     ))
+}
+
+pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
+    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
+        return Err(Error::UnexpectedTurnLength(turn_length));
+    }
+    Ok(())
 }
 
 impl TryFrom<RawETHHeader> for ETHHeader {
