@@ -139,25 +139,46 @@ mod test {
     use crate::errors::Error;
     use crate::header::eth_header::ETHHeader;
 
-    use crate::header::testdata::{header_31297201, header_31297202};
+    use crate::fixture::*;
 
+    use crate::header::epoch::Epoch;
+    use crate::header::eth_headers::ETHHeaders;
+    use crate::header::vote_attestation::VoteData;
+    use crate::header::Header;
     use crate::misbehaviour::{verify_vote, Misbehaviour, VerifyVoteResult};
     use crate::misc::new_height;
     use alloc::string::ToString;
-
-    use crate::header::vote_attestation::VoteData;
+    use core::str::FromStr;
+    use light_client::types::ClientId;
     use parlia_ibc_proto::ibc::core::client::v1::Height;
-    use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Misbehaviour as RawMisbehaviour;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};
+    use rstest::rstest;
+    use std::prelude::rust_2015::Box;
 
-    fn to_raw(h: &ETHHeader) -> RawHeader {
+    fn to_raw(h: alloc::vec::Vec<u8>) -> RawHeader {
         RawHeader {
-            headers: vec![h.try_into().unwrap()],
+            headers: vec![EthHeader { header: h }],
             trusted_height: Some(Height::default()),
             account_proof: vec![],
-            current_validators: vec![h.coinbase.clone()],
-            previous_validators: vec![h.coinbase.clone()],
+            current_validators: vec![vec![0]],
+            previous_validators: vec![vec![0]],
+            previous_turn_length: 1,
+            current_turn_length: 1,
         }
+    }
+
+    fn make_header(h: ETHHeader) -> Header {
+        Header::new(
+            vec![],
+            ETHHeaders {
+                target: h.clone(),
+                all: vec![h],
+            },
+            Height::default(),
+            Epoch::new(vec![vec![0]].into(), 1),
+            Epoch::new(vec![vec![0]].into(), 1),
+        )
     }
 
     #[test]
@@ -186,12 +207,12 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_error_try_from_missing_h2() {
-        let h1 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_h2(#[case] hp: Box<dyn Network>) {
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
+            header_1: Some(to_raw(hp.epoch_header_plus_1_rlp())),
             header_2: None,
         };
         match Misbehaviour::try_from(src).unwrap_err() {
@@ -200,15 +221,15 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_success_try_from() {
-        let h1 = header_31297201();
-        let mut h2 = header_31297201();
-        h2.gas_used = h1.gas_used + 1;
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_try_from(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header();
+        let h2 = hp.epoch_header_plus_1();
         let src = RawMisbehaviour {
             client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
+            header_1: Some(to_raw(hp.epoch_header_rlp())),
+            header_2: Some(to_raw(hp.epoch_header_plus_1_rlp())),
         };
         let misbehaviour = Misbehaviour::try_from(src).unwrap();
         assert_eq!(misbehaviour.client_id.as_str(), "xx-parlia-1");
@@ -216,102 +237,120 @@ mod test {
         assert_eq!(misbehaviour.header_2.height(), new_height(0, h2.number));
     }
 
-    #[test]
-    fn test_error_verify_same_block() {
-        let h1 = header_31297201();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h1)),
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify(#[case] hp: Box<dyn Network>) {
+        let h1 = make_header(hp.epoch_header());
+        let mut h2 = hp.epoch_header();
+        h2.hash = [0u8; 32];
+        let h2 = make_header(h2);
+        let misbehaviour = Misbehaviour {
+            client_id: ClientId::from_str("xx-parlia-1").unwrap(),
+            header_1: h1.clone(),
+            header_2: h2.clone(),
         };
-        let misbehaviour = Misbehaviour::try_from(src).unwrap();
-        match misbehaviour.verify().unwrap_err() {
-            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
-                assert_eq!(e1, new_height(0, h1.number));
-                assert_eq!(e2, new_height(0, h1.number));
-                assert_eq!(e3, h1.hash);
-            }
-            err => unreachable!("{:?}", err),
-        }
-    }
-
-    #[test]
-    fn test_success_verify_same_height() {
-        let h1 = header_31297201();
-        let mut h2 = header_31297201();
-        h2.coinbase = header_31297202().coinbase;
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
-        };
-        let misbehaviour = Misbehaviour::try_from(src).unwrap();
         misbehaviour.verify().unwrap();
     }
 
-    #[test]
-    fn test_error_verify_other_height() {
-        let h1 = header_31297201();
-        let h2 = header_31297202();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_same_block(#[case] hp: Box<dyn Network>) {
+        let h1 = Header::try_from(to_raw(hp.epoch_header_rlp())).unwrap();
+        let misbehaviour = Misbehaviour {
+            client_id: ClientId::from_str("xx-parlia-1").unwrap(),
+            header_1: h1.clone(),
+            header_2: h1.clone(),
         };
-        let misbehaviour = Misbehaviour::try_from(src).unwrap();
+        match misbehaviour.verify().unwrap_err() {
+            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
+                assert_eq!(e1, h1.height());
+                assert_eq!(e2, h1.height());
+                assert_eq!(e3, *h1.block_hash());
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_other_height(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header();
+        let h2 = hp.epoch_header_plus_1();
+        let h1 = make_header(h1);
+        let h2 = make_header(h2);
+        let misbehaviour = Misbehaviour {
+            client_id: ClientId::from_str("xx-parlia-1").unwrap(),
+            header_1: h1.clone(),
+            header_2: h2.clone(),
+        };
         match misbehaviour.verify().unwrap_err() {
             Error::UnexpectedHonestVote(e1, e2) => {
-                assert_eq!(e1.revision_height(), h1.number);
-                assert_eq!(e2.revision_height(), h2.number);
+                assert_eq!(e1, h1.height());
+                assert_eq!(e2, h2.height());
             }
             err => unreachable!("{:?}", err),
         }
     }
 
-    #[test]
-    fn test_error_verify_vote_same_height() {
-        let h1 = header_31297201();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h1)),
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_vote_same_height(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header();
+        let mut h2 = hp.epoch_header();
+        h2.hash = [0u8; 32];
+        let h1 = make_header(h1);
+        let h2 = make_header(h2);
+        let misbehaviour = Misbehaviour {
+            client_id: ClientId::from_str("xx-parlia-1").unwrap(),
+            header_1: h1.clone(),
+            header_2: h2.clone(),
         };
-        let misbehaviour = Misbehaviour::try_from(src).unwrap();
         match misbehaviour.verify_votes().unwrap_err() {
             Error::UnexpectedHonestVote(e1, e2) => {
-                assert_eq!(e1.revision_height(), h1.number);
-                assert_eq!(e2, e1);
+                assert_eq!(e1, h1.height());
+                assert_eq!(e2, h2.height());
             }
             err => unreachable!("{:?}", err),
         }
     }
 
-    #[test]
-    fn test_success_verify_vote_source_number() {
-        let h1 = header_31297201();
-        let mut h2 = header_31297202();
-        h2.extra_data = h1.extra_data.clone();
-        let src = RawMisbehaviour {
-            client_id: "xx-parlia-1".to_string(),
-            header_1: Some(to_raw(&h1)),
-            header_2: Some(to_raw(&h2)),
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_vote_source_number(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
+        let mut h2 = hp.epoch_header_plus_2();
+        h2.extra_data = h1.clone().extra_data;
+        let h1 = make_header(h1);
+        let h2 = make_header(h2);
+        let misbehaviour = Misbehaviour {
+            client_id: ClientId::from_str("xx-parlia-1").unwrap(),
+            header_1: h1.clone(),
+            header_2: h2.clone(),
         };
-        let misbehaviour = Misbehaviour::try_from(src).unwrap();
         match misbehaviour.verify_votes().unwrap() {
             VerifyVoteResult::SourceNumber(n1, n2, s) => {
-                assert_eq!(n1, h1.number);
-                assert_eq!(n2, h2.number);
-                assert_eq!(s, h1.get_vote_attestation().unwrap().data.source_number)
+                assert_eq!(n1, h1.height().revision_height());
+                assert_eq!(n2, h2.height().revision_height());
+                assert_eq!(
+                    s,
+                    h1.eth_header()
+                        .target
+                        .get_vote_attestation()
+                        .unwrap()
+                        .data
+                        .source_number
+                )
             }
             err => unreachable!("{:?}", err),
         }
     }
 
-    #[test]
-    fn test_success_verify_vote_target_number() {
-        let h1 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_vote_target_number(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
         let v1 = h1.get_vote_attestation().unwrap().data;
-        let h2 = header_31297202();
+        let h2 = hp.epoch_header_plus_2();
         let mut v2 = h2.get_vote_attestation().unwrap().data;
         v2.target_number = v1.target_number;
         match verify_vote(h1.number, &v1, h2.number, &v2).unwrap() {
@@ -324,11 +363,12 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_success_verify_vote_range() {
-        let h1 = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_vote_range(#[case] hp: Box<dyn Network>) {
+        let h1 = hp.epoch_header_plus_1();
         let v1 = h1.get_vote_attestation().unwrap().data;
-        let h2 = header_31297202();
+        let h2 = hp.epoch_header_plus_2();
 
         let verify = |v1: &VoteData, v2: &VoteData| {
             match verify_vote(h1.number, v1, h2.number, v2).unwrap() {

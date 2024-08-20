@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use core::fmt::Formatter;
 
 use k256::ecdsa::signature;
-use light_client::commitments::Error as CommitmentError;
-use light_client::types::{ClientId, Height, Time, TimeError};
+use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
+use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
 
 use crate::misc::{Address, BlockNumber, Hash};
@@ -50,8 +50,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
-    MissingPreviousTrustedValidators(BlockNumber),
-    MissingCurrentTrustedValidators(BlockNumber),
+    MissingPreviousValidators(BlockNumber),
+    MissingCurrentValidators(BlockNumber),
     OutOfTrustingPeriod(Time, Time),
     HeaderFromFuture(Time, core::time::Duration, Time),
     MissingTrustedHeight,
@@ -78,6 +78,8 @@ pub enum Error {
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
     MissingValidatorInEpochBlock(BlockNumber),
+    MissingTurnLengthInEpochBlock(BlockNumber),
+    MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
     MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
@@ -89,6 +91,10 @@ pub enum Error {
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
     UnexpectedNextNextCheckpointHeader(BlockNumber, BlockNumber),
     MissingTrustedCurrentValidators(BlockNumber),
+    UnexpectedDifficultyInTurn(BlockNumber, u64, usize),
+    UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
+    UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -104,6 +110,8 @@ pub enum Error {
     InsufficientValidatorCount(BlockNumber, usize, usize),
     UnexpectedVoteAddressCount(BlockNumber, usize, usize),
     UnexpectedBLSSignatureLength(usize),
+    UnexpectedTurnLength(u8),
+    UnexpectedExtraDataLength(usize),
 
     // Misbehaviour
     MissingHeader1,
@@ -111,7 +119,11 @@ pub enum Error {
     UnexpectedClientId(String),
     UnexpectedSameBlockHash(Height, Height, Hash),
     UnexpectedHonestVote(Height, Height),
-    TrieError(BoxedTrieError),
+
+    TrieError(BoxedTrieError, Hash, Vec<Vec<u8>>, Vec<u8>),
+
+    // Framework
+    LCPError(light_client::Error),
 }
 
 impl core::fmt::Display for Error {
@@ -207,8 +219,8 @@ impl core::fmt::Display for Error {
                     e1, e2, e3, e4, e5
                 )
             }
-            Error::TrieError(e1) => {
-                write!(f, "TrieError : {:?}", e1)
+            Error::TrieError(e1, e2, e3, e4) => {
+                write!(f, "TrieError : {:?} {:?} {:?} {:?}", e1, e2, e3, e4)
             }
             Error::InvalidProofFormatError(e1) => {
                 write!(f, "InvalidProofFormatError : {:?}", e1)
@@ -254,11 +266,17 @@ impl core::fmt::Display for Error {
             Error::MissingValidatorInEpochBlock(e1) => {
                 write!(f, "MissingValidatorInEpochBlock : {:?}", e1)
             }
-            Error::MissingPreviousTrustedValidators(e1) => {
-                write!(f, "MissingPreviousTrustedValidators : {:?}", e1)
+            Error::MissingEpochInfoInEpochBlock(e1) => {
+                write!(f, "MissingEpochInfoInEpochBlock : {:?}", e1)
             }
-            Error::MissingCurrentTrustedValidators(e1) => {
-                write!(f, "MissingCurrentTrustedValidators : {:?}", e1)
+            Error::MissingTurnLengthInEpochBlock(e1) => {
+                write!(f, "MissingTurnLengthInEpochBlock : {:?}", e1)
+            }
+            Error::MissingPreviousValidators(e1) => {
+                write!(f, "MissingPreviousValidators : {:?}", e1)
+            }
+            Error::MissingCurrentValidators(e1) => {
+                write!(f, "MissingCurrentValidators : {:?}", e1)
             }
             Error::UnexpectedMixHash(e1) => {
                 write!(f, "UnexpectedMixHash : {:?}", e1)
@@ -327,8 +345,119 @@ impl core::fmt::Display for Error {
             Error::LCPCommitmentError(e1) => {
                 write!(f, "LCPCommitmentError : {}", e1)
             }
+            Error::LCPError(e1) => {
+                write!(f, "LCPError: {}", e1)
+            }
+            Error::UnexpectedDifficultyInTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyInTurn : {} {} {}", e1, e2, e3)
+            }
+            Error::UnexpectedDifficultyNoTurn(e1, e2, e3) => {
+                write!(f, "UnexpectedDifficultyNoTurn : {} {} {}", e1, e2, e3)
+            }
+            Error::UnexpectedTurnLength(e1) => {
+                write!(f, "UnexpectedTurnLength : {}", e1)
+            }
+            Error::UnexpectedExtraDataLength(e1) => {
+                write!(f, "UnexpectedExtraDataLength: {}", e1)
+            }
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::UnexpectedCurrentValidatorsHashInEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
+                    e1, e2, e3, e4
+                )
+            }
         }
     }
 }
 
-impl light_client::LightClientSpecificError for Error {}
+#[derive(Debug)]
+pub enum ClientError {
+    LatestHeight {
+        cause: Error,
+        client_id: ClientId,
+    },
+    CreateClient {
+        cause: Error,
+        client_state: Any,
+        consensus_sate: Any,
+    },
+    UpdateClient {
+        cause: Error,
+        client_id: ClientId,
+        message: Any,
+    },
+    VerifyMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        value: Vec<u8>,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
+    VerifyNonMembership {
+        cause: Error,
+        client_id: ClientId,
+        prefix: CommitmentPrefix,
+        path: String,
+        proof_height: Height,
+        proof: Vec<u8>,
+    },
+}
+
+impl core::fmt::Display for ClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ClientError::LatestHeight {
+                cause,
+                client_id
+            } => write!(
+                f,
+                "LatestHeight: cause={}\nclient_id={}",
+                cause, client_id
+            ),
+            ClientError::CreateClient {cause, client_state, consensus_sate} => write!(
+                f,
+                "CreateClient: cause={}\nclient_state={:?}\nconsensus_state={:?}",
+                cause, client_state, consensus_sate
+            ),
+            ClientError::UpdateClient{cause, client_id, message} => write!(
+                f,
+                "CreateClient: cause={}\nclient_id={:?}\nmessage={:?}",
+                cause, client_id, message
+            ),
+            ClientError::VerifyMembership {
+                cause, client_id,
+                prefix,
+                path,
+                value,
+                proof_height,
+                proof
+            } => write!(
+                f,
+                "VerifyMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nvalue={:?}\nproof_height={:?}\nproof={:?}",
+                cause, client_id, prefix, path, value, proof_height, proof
+            ),
+            ClientError::VerifyNonMembership {
+                cause, client_id,
+                prefix,
+                path,
+                proof_height,
+                proof
+            } => write!(
+                f,
+                "VerifyNonMembership: cause={}\nclient_id={:?}\nprefix={:?}\npath={:?}\nproof_height={:?}\nproof={:?}",
+                cause, client_id, prefix, path, proof_height, proof
+            ),
+        }
+    }
+}
+impl light_client::LightClientSpecificError for ClientError {}

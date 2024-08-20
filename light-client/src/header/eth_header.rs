@@ -10,7 +10,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::header::validator_set::ValidatorSet;
+use crate::header::epoch::Epoch;
 
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -27,13 +27,14 @@ const BLS_PUBKEY_LENGTH: usize = 48;
 const VALIDATOR_BYTES_LENGTH: usize = VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN + BLS_PUBKEY_LENGTH;
 const VALIDATOR_NUM_SIZE: usize = 1;
 
+const TURN_LENGTH_SIZE: usize = 1;
+
 const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
 
 const EMPTY_UNCLE_HASH: Hash =
     hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
-const EMPTY_MIX_HASH: Hash =
-    hex!("0000000000000000000000000000000000000000000000000000000000000000");
+const EMPTY_HASH: Hash = hex!("0000000000000000000000000000000000000000000000000000000000000000");
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
@@ -52,9 +53,15 @@ pub struct ETHHeader {
     pub extra_data: Vec<u8>,
     pub mix_digest: Vec<u8>,
     pub nonce: Vec<u8>,
+    pub base_fee_per_gas: Option<u64>,
+    pub withdrawals_hash: Option<Vec<u8>>,
+    pub blob_gas_used: Option<u64>,
+    pub excess_blob_gas: Option<u64>,
+    pub parent_beacon_root: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
+    pub epoch: Option<Epoch>,
 }
 
 impl ETHHeader {
@@ -88,7 +95,8 @@ impl ETHHeader {
 
     /// This returns the hash of a block prior to it being sealed.
     fn seal_hash(&self, chain_id: &ChainId) -> Result<Hash, Error> {
-        let mut stream = RlpStream::new_list(16);
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
         stream.append(&chain_id.id());
         stream.append(&self.parent_hash);
         stream.append(&self.uncle_hash);
@@ -105,6 +113,32 @@ impl ETHHeader {
         stream.append(&self.extra_data[..self.extra_data.len() - EXTRA_SEAL].to_vec());
         stream.append(&self.mix_digest);
         stream.append(&self.nonce);
+        if let Some(parent_beacon_root) = &self.parent_beacon_root {
+            if parent_beacon_root == &EMPTY_HASH {
+                if let Some(value) = &self.base_fee_per_gas {
+                    stream.append(value);
+                } else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.withdrawals_hash {
+                    stream.append(value);
+                } else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.blob_gas_used {
+                    stream.append(value);
+                } else {
+                    stream.append_empty_data();
+                }
+                if let Some(value) = &self.excess_blob_gas {
+                    stream.append(value);
+                } else {
+                    stream.append_empty_data();
+                }
+                stream.append(parent_beacon_root);
+            }
+        }
+        stream.finalize_unbounded_list();
         Ok(keccak_256(stream.out().as_ref()))
     }
 
@@ -161,7 +195,7 @@ impl ETHHeader {
     /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L755
     pub fn verify_seal(
         &self,
-        validator_set: &Validators,
+        validating_epoch: &Epoch,
         chain_id: &ChainId,
     ) -> Result<Address, Error> {
         // Resolve the authorization key and check against validators
@@ -171,7 +205,7 @@ impl ETHHeader {
         }
 
         let mut valid_signer = false;
-        for validator in validator_set.iter() {
+        for validator in validating_epoch.validators().iter() {
             if validator[0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN] == signer {
                 valid_signer = true;
                 break;
@@ -181,9 +215,31 @@ impl ETHHeader {
             return Err(Error::MissingSignerInValidator(self.number, signer));
         }
 
-        // Don't check that the difficulty corresponds to the turn-ness of the signer
+        // Ensure that the difficulty corresponds to the turn-ness of the signer
+        self.verify_validator_rotation(validating_epoch)?;
 
         Ok(signer)
+    }
+
+    fn verify_validator_rotation(&self, epoch: &Epoch) -> Result<(), Error> {
+        let offset = (self.number / epoch.turn_length() as u64) as usize % epoch.validators().len();
+        let inturn_validator = &epoch.validators()[offset][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN];
+        if inturn_validator == self.coinbase {
+            if self.difficulty != DIFFICULTY_INTURN {
+                return Err(Error::UnexpectedDifficultyInTurn(
+                    self.number,
+                    self.difficulty,
+                    offset,
+                ));
+            }
+        } else if self.difficulty != DIFFICULTY_NOTURN {
+            return Err(Error::UnexpectedDifficultyNoTurn(
+                self.number,
+                self.difficulty,
+                offset,
+            ));
+        }
+        Ok(())
     }
 
     pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
@@ -236,7 +292,10 @@ impl ETHHeader {
             {
                 return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
             }
-            let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE + (num * VALIDATOR_BYTES_LENGTH);
+            let start = EXTRA_VANITY
+                + VALIDATOR_NUM_SIZE
+                + (num * VALIDATOR_BYTES_LENGTH)
+                + TURN_LENGTH_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
             &self.extra_data[start..end]
         };
@@ -244,37 +303,37 @@ impl ETHHeader {
         Rlp::new(attestation_bytes).try_into()
     }
 
-    // https://github.com/bnb-chain/bsc/blob/33e6f840d25edb95385d23d284846955327b0fcd/consensus/parlia/parlia.go#L342
-    pub fn get_validator_bytes(&self) -> Option<Validators> {
-        if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
-            return None;
-        }
-        let num = self.extra_data[EXTRA_VANITY] as usize;
-        if num == 0
-            || self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH
-        {
-            return None;
-        }
-        let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
-        let end = start + num * VALIDATOR_BYTES_LENGTH;
-        Some(
-            self.extra_data[start..end]
-                .chunks(VALIDATOR_BYTES_LENGTH)
-                .map(|s| s.into())
-                .collect(),
-        )
-    }
-
-    pub fn get_validator_set(&self) -> Result<ValidatorSet, Error> {
-        Ok(self
-            .get_validator_bytes()
-            .ok_or_else(|| Error::MissingValidatorInEpochBlock(self.number))?
-            .into())
-    }
-
     pub fn is_epoch(&self) -> bool {
         self.number % BLOCKS_PER_EPOCH == 0
     }
+}
+
+pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
+    if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
+        return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
+    }
+    let num = extra_data[EXTRA_VANITY] as usize;
+    if num == 0 || extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH {
+        return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
+    }
+    let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
+    let end = start + num * VALIDATOR_BYTES_LENGTH;
+    let turn_length = extra_data[end];
+    validate_turn_length(turn_length)?;
+    Ok((
+        extra_data[start..end]
+            .chunks(VALIDATOR_BYTES_LENGTH)
+            .map(|s| s.into())
+            .collect(),
+        turn_length,
+    ))
+}
+
+pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
+    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
+        return Err(Error::UnexpectedTurnLength(turn_length));
+    }
+    Ok(())
 }
 
 impl TryFrom<RawETHHeader> for ETHHeader {
@@ -303,6 +362,10 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let mix_digest: Vec<u8> = rlp.try_next_as_val()?;
         let nonce: Vec<u8> = rlp.try_next_as_val()?;
         let base_fee_per_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let withdrawals_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -322,7 +385,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // Ensure that the mix digest is zero as we don't have fork protection currently
-        if mix_digest != EMPTY_MIX_HASH {
+        if mix_digest != EMPTY_HASH {
             return Err(Error::UnexpectedMixHash(number));
         }
         // Ensure that the block doesn't contain any uncles which are meaningless in PoA
@@ -341,11 +404,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // create block hash
-        let mut size = 15;
-        if base_fee_per_gas.is_some() {
-            size += 1;
-        }
-        let mut stream = RlpStream::new_list(size);
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
         stream.append(&parent_hash);
         stream.append(&uncle_hash);
         stream.append(&coinbase);
@@ -361,12 +421,61 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         stream.append(&extra_data);
         stream.append(&mix_digest);
         stream.append(&nonce);
-        //https://github.com/bnb-chain/bsc/blob/bb6bdc055d1a7f1f049c924028ad8aaf04291b3b/core/types/gen_header_rlp.go#L43
-        if let Some(v) = base_fee_per_gas {
-            stream.append(&v);
+
+        if base_fee_per_gas.is_some()
+            || withdrawals_hash.is_some()
+            || blob_gas_used.is_some()
+            || excess_blob_gas.is_some()
+            || parent_beacon_root.is_some()
+        {
+            if let Some(v) = base_fee_per_gas {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
         }
+        if withdrawals_hash.is_some()
+            || blob_gas_used.is_some()
+            || excess_blob_gas.is_some()
+            || parent_beacon_root.is_some()
+        {
+            if let Some(v) = &withdrawals_hash {
+                stream.append(v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if blob_gas_used.is_some() || excess_blob_gas.is_some() || parent_beacon_root.is_some() {
+            if let Some(v) = blob_gas_used {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if excess_blob_gas.is_some() || parent_beacon_root.is_some() {
+            if let Some(v) = excess_blob_gas {
+                stream.append(&v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        if parent_beacon_root.is_some() {
+            if let Some(v) = &parent_beacon_root {
+                stream.append(v);
+            } else {
+                stream.append_empty_data();
+            }
+        }
+        stream.finalize_unbounded_list();
         let buffer_vec: Vec<u8> = stream.out().to_vec();
         let hash: Hash = keccak_256(&buffer_vec);
+
+        let epoch = if number % BLOCKS_PER_EPOCH == 0 {
+            let (validators, turn_length) = get_validator_bytes_and_tern_term(&extra_data)?;
+            Some(Epoch::new(validators.into(), turn_length))
+        } else {
+            None
+        };
 
         Ok(Self {
             parent_hash,
@@ -384,7 +493,13 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             extra_data,
             mix_digest,
             nonce,
+            base_fee_per_gas,
+            excess_blob_gas,
+            withdrawals_hash,
+            blob_gas_used,
+            parent_beacon_root,
             hash,
+            epoch,
         })
     }
 }
@@ -393,45 +508,48 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_header::{
-        ETHHeader, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR,
+        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
+        PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
     };
 
     use rlp::RlpStream;
+    use rstest::*;
 
-    use crate::header::testdata::*;
+    use crate::fixture::{localnet, Network};
+    use crate::header::epoch::Epoch;
+    use alloc::boxed::Box;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
-    impl TryFrom<&ETHHeader> for RawETHHeader {
-        type Error = Error;
-
-        fn try_from(header: &ETHHeader) -> Result<Self, Self::Error> {
-            let mut stream = RlpStream::new_list(15);
-            stream.append(&header.parent_hash);
-            stream.append(&header.uncle_hash);
-            stream.append(&header.coinbase);
-            stream.append(&header.root.to_vec());
-            stream.append(&header.tx_hash);
-            stream.append(&header.receipt_hash);
-            stream.append(&header.bloom);
-            stream.append(&header.difficulty);
-            stream.append(&header.number);
-            stream.append(&header.gas_limit);
-            stream.append(&header.gas_used);
-            stream.append(&header.timestamp);
-            stream.append(&header.extra_data);
-            stream.append(&header.mix_digest);
-            stream.append(&header.nonce);
-            Ok(RawETHHeader {
-                header: stream.out().to_vec(),
-            })
+    fn to_raw(header: &ETHHeader) -> RawETHHeader {
+        let mut stream = RlpStream::new();
+        stream.begin_unbounded_list();
+        stream.append(&header.parent_hash);
+        stream.append(&header.uncle_hash);
+        stream.append(&header.coinbase);
+        stream.append(&header.root.to_vec());
+        stream.append(&header.tx_hash);
+        stream.append(&header.receipt_hash);
+        stream.append(&header.bloom);
+        stream.append(&header.difficulty);
+        stream.append(&header.number);
+        stream.append(&header.gas_limit);
+        stream.append(&header.gas_used);
+        stream.append(&header.timestamp);
+        stream.append(&header.extra_data);
+        stream.append(&header.mix_digest);
+        stream.append(&header.nonce);
+        stream.finalize_unbounded_list();
+        RawETHHeader {
+            header: stream.out().to_vec(),
         }
     }
 
-    #[test]
-    fn test_error_try_from_missing_vanity() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_vanity(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY - 1].to_vec();
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::MissingVanityInExtraData(number, actual, min) => {
@@ -443,11 +561,12 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_missing_signature() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_missing_signature(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.extra_data = [0u8; EXTRA_VANITY + EXTRA_SEAL - 1].to_vec();
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::MissingSignatureInExtraData(number, actual, min) => {
@@ -459,11 +578,12 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_mix_hash() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_mix_hash(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.mix_digest = vec![];
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::UnexpectedMixHash(number) => {
@@ -473,11 +593,12 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_uncle_hash() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_uncle_hash(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.uncle_hash = vec![];
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::UnexpectedUncleHash(number) => {
@@ -487,11 +608,12 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_difficulty() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_difficulty(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.difficulty = 10;
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::UnexpectedDifficulty(number, actual) => {
@@ -502,11 +624,12 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_error_try_from_unexpected_nonce() {
-        let mut header = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_try_from_unexpected_nonce(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header_plus_1();
         header.nonce = vec![];
-        let raw = RawETHHeader::try_from(&header).unwrap();
+        let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
             Error::UnexpectedNonce(number) => {
@@ -516,34 +639,30 @@ pub(crate) mod test {
         };
     }
 
-    #[test]
-    fn test_success_verify_seal() {
-        let validators = validators_in_31297000();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_seal(#[case] hp: Box<dyn Network>) {
+        let prev_epoch = hp.previous_epoch_header().epoch.unwrap();
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for block in blocks {
-            if let Err(e) = block.verify_seal(&validators, &mainnet()) {
+            if let Err(e) = block.verify_seal(&prev_epoch, &hp.network()) {
                 unreachable!("{} {:?}", block.number, e);
             }
         }
     }
 
-    #[test]
-    fn test_error_verify_seal() {
-        let validators = validators_in_31297000();
-        let mut blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
-        ];
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_seal(#[case] hp: Box<dyn Network>) {
+        let prev_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut blocks = vec![hp.epoch_header_plus_1(), hp.epoch_header_plus_2()];
 
         for block in blocks.iter_mut() {
-            let result = block.verify_seal(&validators[0..1].to_vec(), &mainnet());
+            let result = block.verify_seal(&Epoch::new(vec![].into(), 1), &hp.network());
             match result.unwrap_err() {
                 Error::MissingSignerInValidator(number, address) => {
                     assert_eq!(block.number, number);
@@ -555,7 +674,7 @@ pub(crate) mod test {
 
         for mut block in blocks.iter_mut() {
             block.coinbase = vec![];
-            let result = block.verify_seal(&validators, &mainnet());
+            let result = block.verify_seal(&prev_epoch, &hp.network());
             match result.unwrap_err() {
                 Error::UnexpectedCoinbase(number) => assert_eq!(block.number, number),
                 e => unreachable!("{:?}", e),
@@ -563,13 +682,13 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_success_verify_cascading_fields() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_cascading_fields(#[case] hp: Box<dyn Network>) {
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for (i, block) in blocks.iter().enumerate() {
             if i == 0 {
@@ -581,10 +700,11 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_verify_cascading_fields() {
-        let parent = header_31297199();
-        let mut block = header_31297200();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_cascading_fields(#[case] hp: Box<dyn Network>) {
+        let parent = hp.epoch_header();
+        let mut block = hp.epoch_header_plus_1();
         block.gas_limit = 10000;
         block.gas_used = parent.gas_limit + 1;
         let result = block.verify_cascading_fields(&parent);
@@ -597,8 +717,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let parent = header_31297199();
-        let block = header_31297201();
+        let parent = hp.epoch_header();
+        let block = hp.epoch_header_plus_2();
         let result = block.verify_cascading_fields(&parent);
         match result.unwrap_err() {
             Error::UnexpectedHeaderRelation(
@@ -619,8 +739,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let parent = header_31297199();
-        let mut block = header_31297200();
+        let parent = hp.epoch_header();
+        let mut block = hp.epoch_header_plus_1();
         block.gas_used = 0;
         block.gas_limit = 0;
         let result = block.verify_cascading_fields(&parent);
@@ -628,19 +748,19 @@ pub(crate) mod test {
             Error::UnexpectedGasDiff(number, diff, limit) => {
                 assert_eq!(block.number, number);
                 assert_eq!(parent.gas_limit / PARAMS_GAS_LIMIT_BOUND_DIVISOR, limit);
-                assert_eq!(140000000, diff);
+                assert_eq!(parent.gas_limit - block.gas_limit, diff);
             }
             err => unreachable!("{:?}", err),
         }
     }
 
-    #[test]
-    fn test_success_verify_vote_attestation() {
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_vote_attestation(#[case] hp: Box<dyn Network>) {
         let blocks = vec![
-            header_31297199(),
-            header_31297200(),
-            header_31297201(),
-            header_31297202(),
+            hp.epoch_header(),
+            hp.epoch_header_plus_1(),
+            hp.epoch_header_plus_2(),
         ];
         for (i, block) in blocks.iter().enumerate() {
             if i == 0 {
@@ -652,10 +772,11 @@ pub(crate) mod test {
         }
     }
 
-    #[test]
-    fn test_error_verify_vote_attestation() {
-        let header = header_31297201();
-        let parent = header_31297201();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_vote_attestation(#[case] hp: Box<dyn Network>) {
+        let header = hp.epoch_header_plus_1();
+        let parent = hp.epoch_header_plus_1();
         let err = header.verify_vote_attestation(&parent).unwrap_err();
         match err {
             Error::UnexpectedTargetVoteAttestationRelation(
@@ -670,10 +791,10 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let mut block = header_31297200();
+        let mut block = hp.epoch_header_plus_1();
         block.extra_data = vec![];
         let err = block
-            .verify_vote_attestation(&header_31297199())
+            .verify_vote_attestation(&hp.epoch_header())
             .unwrap_err();
         match err {
             Error::UnexpectedVoteLength(size) => {
@@ -682,8 +803,8 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
 
-        let header = header_31297202();
-        let mut parent = header_31297201();
+        let header = hp.epoch_header_plus_2();
+        let mut parent = hp.epoch_header_plus_1();
         parent.extra_data = header.extra_data.clone();
         let err = header.verify_vote_attestation(&parent).unwrap_err();
         match err {
@@ -695,6 +816,45 @@ pub(crate) mod test {
             ) => {
                 assert_eq!(parent.number - 1, source);
                 assert_eq!(parent.number, parent_target);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_validator_rotation_inturn(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.difficulty = DIFFICULTY_NOTURN;
+        let prev = hp.previous_epoch_header();
+        match header
+            .verify_validator_rotation(&prev.epoch.unwrap())
+            .unwrap_err()
+        {
+            Error::UnexpectedDifficultyInTurn(e1, e2, _e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
+            }
+            err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_validator_rotation_noturn(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.difficulty = DIFFICULTY_INTURN;
+        let prev = hp.previous_epoch_header();
+        header.coinbase = prev.epoch.clone().unwrap().validators()[1]
+            [0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN]
+            .to_vec();
+        match header
+            .verify_validator_rotation(&prev.epoch.unwrap())
+            .unwrap_err()
+        {
+            Error::UnexpectedDifficultyNoTurn(e1, e2, _e3) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, header.difficulty);
             }
             err => unreachable!("{:?}", err),
         }
