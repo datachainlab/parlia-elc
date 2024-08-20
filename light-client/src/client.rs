@@ -1044,11 +1044,14 @@ mod test {
         let any: Any = any.try_into().unwrap();
         let misbehavior = Misbehaviour::try_from(any.clone()).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
-        mock_consensus_state.insert(misbehavior.header_1.trusted_height(), ConsensusState {
-            current_validators_hash: misbehavior.header_1.current_epoch_validators_hash(),
-            previous_validators_hash: misbehavior.header_1.previous_epoch_validators_hash(),
-            ..Default::default()
-        });
+        mock_consensus_state.insert(
+            misbehavior.header_1.trusted_height(),
+            ConsensusState {
+                current_validators_hash: misbehavior.header_1.current_epoch_validators_hash(),
+                previous_validators_hash: misbehavior.header_1.previous_epoch_validators_hash(),
+                ..Default::default()
+            },
+        );
         let ctx = MockClientReader {
             client_state: Some(ClientState {
                 chain_id: ChainId::new(9999),

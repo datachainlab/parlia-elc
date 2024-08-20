@@ -246,8 +246,8 @@ mod test {
         let h2 = make_header(h2);
         let misbehaviour = Misbehaviour {
             client_id: ClientId::from_str("xx-parlia-1").unwrap(),
-            header_1: h1.clone(),
-            header_2: h2.clone(),
+            header_1: h1,
+            header_2: h2,
         };
         misbehaviour.verify().unwrap();
     }
