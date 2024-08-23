@@ -287,16 +287,14 @@ impl ETHHeader {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
-            if self.extra_data.len()
-                <= EXTRA_VANITY + EXTRA_SEAL + VALIDATOR_NUM_SIZE + num * VALIDATOR_BYTES_LENGTH
-            {
-                return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
-            }
             let start = EXTRA_VANITY
                 + VALIDATOR_NUM_SIZE
                 + (num * VALIDATOR_BYTES_LENGTH)
                 + TURN_LENGTH_SIZE;
             let end = self.extra_data.len() - EXTRA_SEAL;
+            if end <= start {
+                return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
+            }
             &self.extra_data[start..end]
         };
 
@@ -313,7 +311,7 @@ pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validator
         return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
     }
     let num = extra_data[EXTRA_VANITY] as usize;
-    if num == 0 || extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH {
+    if num == 0 || extra_data.len() < EXTRA_VANITY + EXTRA_SEAL + num * VALIDATOR_BYTES_LENGTH {
         return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
     }
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
