@@ -6,6 +6,9 @@
 
 NOTE: This project is currently under heavy development. Features may change or break.
 
+## Supported Versions
+- [lcp v0.2.9](https://github.com/datachainlab/lcp/releases/tag/v0.2.9)
+
 ## Documents
 
 - [Parlia light client spec](./SPEC.md)
