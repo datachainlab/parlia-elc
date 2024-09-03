@@ -6,6 +6,10 @@
 
 NOTE: This project is currently under heavy development. Features may change or break.
 
+## Supported Versions
+- [lcp v0.2.9](https://github.com/datachainlab/lcp/releases/tag/v0.2.9)
+- [BSC v1.4.13](https://github.com/bnb-chain/bsc/releases/tag/v1.4.13)
+
 ## Documents
 
 - [Parlia light client spec](./SPEC.md)
