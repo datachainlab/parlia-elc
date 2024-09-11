@@ -1,5 +1,5 @@
 #![no_std]
-
+#![allow(clippy::result_large_err)]
 #[cfg_attr(not(test), macro_use)]
 extern crate alloc;
 #[cfg(test)]

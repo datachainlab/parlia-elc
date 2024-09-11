@@ -83,10 +83,7 @@ impl ETHHeader {
         let signer = VerifyingKey::recover_from_prehash(&seal_hash, &signature, rid)
             .map_err(|e| Error::UnexpectedSignature(self.number, e))?;
         let point = signer.as_affine().to_encoded_point(false);
-        let pubkey: Vec<u8> = point
-            .to_bytes()
-            .try_into()
-            .map_err(|_e| Error::UnexpectedEncodedPoint(self.number))?;
+        let pubkey: Vec<u8> = point.to_bytes().into();
         let address: Address = keccak_256(&pubkey[1..])[12..]
             .try_into()
             .map_err(|_e| Error::UnexpectedAddress(self.number))?;
