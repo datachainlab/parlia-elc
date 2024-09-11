@@ -670,7 +670,7 @@ pub(crate) mod test {
             };
         }
 
-        for mut block in blocks.iter_mut() {
+        for block in blocks.iter_mut() {
             block.coinbase = vec![];
             let result = block.verify_seal(&prev_epoch, &hp.network());
             match result.unwrap_err() {
