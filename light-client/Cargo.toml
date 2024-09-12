@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-light-client = { git = "https://github.com/datachainlab/lcp", rev = "v0.2.9", default-features = false, features=["ibc"] }
+light-client = { git = "https://github.com/datachainlab/lcp", rev = "v0.2.10", default-features = false }
 
 rlp = { version = "0.5.2", default-features = false }
 prost = { version = "0.11", default-features = false }
@@ -28,8 +28,8 @@ milagro_bls = { git = "https://github.com/datachainlab/milagro_bls", rev = "bc2b
 hex-literal = "0.4.1"
 
 [dev-dependencies]
-store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.2.9", default-features = false }
-time = { version = "0.3", default-features = false, features = ["macros", "parsing"] }
+store = { git = "https://github.com/datachainlab/lcp.git", rev = "v0.2.10", default-features = false }
+time = { version = "0.3", default-features = false }
 rstest = "0.18"
 
 [features]

@@ -68,7 +68,6 @@ pub enum Error {
     UnexpectedDifficulty(BlockNumber, u64),
     UnexpectedNonce(BlockNumber),
     UnexpectedRecoveryId(BlockNumber),
-    UnexpectedEncodedPoint(BlockNumber),
     UnexpectedAddress(BlockNumber),
     UnexpectedCoinbase(BlockNumber),
     MissingSignerInValidator(BlockNumber, Address),
@@ -178,7 +177,6 @@ impl core::fmt::Display for Error {
             Error::UnexpectedDifficulty(e1, e2) => write!(f, "UnexpectedDifficulty: {} {}", e1, e2),
             Error::UnexpectedNonce(e) => write!(f, "UnexpectedNonce: {}", e),
             Error::UnexpectedRecoveryId(e) => write!(f, "UnexpectedRecoveryId: {}", e),
-            Error::UnexpectedEncodedPoint(e) => write!(f, "UnexpectedEncodedPoint: {}", e),
             Error::UnexpectedAddress(e) => write!(f, "UnexpectedAddress: {}", e),
             Error::UnexpectedCoinbase(e) => write!(f, "UnexpectedCoinbase: {}", e),
             Error::MissingSignerInValidator(e1, e2) => {
