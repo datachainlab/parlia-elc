@@ -91,12 +91,16 @@ impl<'a> UntrustedEpoch<'a> {
                 trusted_validator_count += 1;
             }
         }
-        let required = ceil_div(trusted_validators.len(), 3);
+        let required = Self::threshold(trusted_validators.len());
         (
             trusted_validator_count >= required,
             trusted_validator_count,
             required,
         )
+    }
+
+    fn threshold(validators_len: usize) -> usize {
+        validators_len - ceil_div(validators_len * 2, 3) + 1
     }
 }
 
@@ -294,5 +298,19 @@ mod test {
             2,
         );
         assert_untrusted(vec![vec![1], vec![2]], 2);
+    }
+
+    #[test]
+    pub fn test_trust_threshold() {
+        assert_eq!(1, UntrustedEpoch::threshold(1));
+        assert_eq!(1, UntrustedEpoch::threshold(2));
+        assert_eq!(2, UntrustedEpoch::threshold(3));
+        assert_eq!(2, UntrustedEpoch::threshold(4));
+        assert_eq!(2, UntrustedEpoch::threshold(5));
+        assert_eq!(3, UntrustedEpoch::threshold(6));
+        assert_eq!(3, UntrustedEpoch::threshold(7));
+        assert_eq!(3, UntrustedEpoch::threshold(8));
+        assert_eq!(4, UntrustedEpoch::threshold(9));
+        assert_eq!(8, UntrustedEpoch::threshold(21));
     }
 }
