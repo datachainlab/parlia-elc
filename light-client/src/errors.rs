@@ -116,8 +116,8 @@ pub enum Error {
     MissingHeader1,
     MissingHeader2,
     UnexpectedClientId(String),
-    UnexpectedDifferentHeight(Height, Height),
-    UnexpectedSameBlockHash(Height),
+    UnexpectedSameBlockHash(Height, Height, Hash),
+    UnexpectedHonestVote(Height, Height),
 
     TrieError(BoxedTrieError, Hash, Vec<Vec<u8>>, Vec<u8>),
 
@@ -203,11 +203,11 @@ impl core::fmt::Display for Error {
             Error::MissingHeader1 => write!(f, "MissingHeader1"),
             Error::MissingHeader2 => write!(f, "MissingHeader2"),
             Error::UnexpectedClientId(e1) => write!(f, "UnexpectedClientId : {}", e1),
-            Error::UnexpectedDifferentHeight(e1, e2) => {
-                write!(f, "UnexpectedDifferentHeight : {} {}", e1, e2)
+            Error::UnexpectedSameBlockHash(e1, e2, e3) => {
+                write!(f, "UnexpectedSameBlockHash : {} {} {:?}", e1, e2, e3)
             }
-            Error::UnexpectedSameBlockHash(e1) => {
-                write!(f, "UnexpectedSameBlockHash : {}", e1)
+            Error::UnexpectedHonestVote(e1, e2) => {
+                write!(f, "UnexpectedHonestVote : {} {}", e1, e2)
             }
             Error::UnknownMisbehaviourType(e1) => write!(f, "UnknownMisbehaviourType : {}", e1),
             Error::UnexpectedStateValue(e1, e2, e3, e4, e5) => {

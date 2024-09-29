@@ -13,7 +13,8 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
 use crate::header::eth_headers::ETHHeaders;
-use crate::misc::{new_height, new_timestamp, ChainId, Hash};
+use crate::header::vote_attestation::VoteData;
+use crate::misc::{new_height, new_timestamp, BlockNumber, ChainId, Hash};
 
 use super::errors::Error;
 
@@ -73,6 +74,16 @@ impl Header {
 
     pub fn block_hash(&self) -> &Hash {
         &self.headers.target.hash
+    }
+
+    pub fn votes(&self) -> Vec<(BlockNumber, VoteData)> {
+        let mut votes = vec![];
+        for h in self.headers.all.iter() {
+            if let Ok(vote) = h.get_vote_attestation() {
+                votes.push((h.number, vote.data));
+            }
+        }
+        votes
     }
 
     pub fn verify(
