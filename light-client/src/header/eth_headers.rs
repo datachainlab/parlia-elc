@@ -29,13 +29,8 @@ impl ETHHeaders {
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let (c_val, n_val) = self.verify_header_size(
-            epoch,
-            checkpoint,
-            next_checkpoint,
-            previous_epoch,
-            current_epoch,
-        )?;
+        let (c_val, n_val) =
+            self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -123,7 +118,6 @@ impl ETHHeaders {
         epoch: u64,
         checkpoint: u64,
         next_checkpoint: u64,
-        previous_epoch: &TrustedEpoch,
         current_epoch: &'a EitherEpoch,
     ) -> Result<(Option<&'a Epoch>, Option<&'b Epoch>), Error> {
         let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
