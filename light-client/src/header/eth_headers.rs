@@ -60,9 +60,15 @@ impl ETHHeaders {
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
             if h.number > next_checkpoint {
-                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
+                let voted_vals =
+                    vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
+                //TODO validate voted_vals contain 1/3 of trusted
             } else if h.number > checkpoint {
-                vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
+                let voted_vals =
+                    vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
+                if let Untrusted(_) = current_epoch {
+                    //TODO validate voted_vals contain 1/3 of trusted
+                }
             } else {
                 vote.verify(h.number, p_val)?;
             }
@@ -136,7 +142,7 @@ impl ETHHeaders {
                 if hs.is_empty() {
                     Ok((None, None))
                 } else {
-                    Ok((Some(untrusted.try_borrow(previous_epoch)?), None))
+                    Ok((Some(untrusted.borrow()), None))
                 }
             }
             // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
@@ -159,7 +165,6 @@ impl ETHHeaders {
 
                 // Ensure n_val(400) can be borrowed by c_val(200)
                 let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
-                UntrustedEpoch::new(next_epoch).try_borrow(trusted)?;
 
                 // Ensure headers are before the next_next_checkpoint
                 if hs.iter().any(|h| h.number >= next_next_checkpoint) {

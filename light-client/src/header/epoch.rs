@@ -71,6 +71,10 @@ impl<'a> UntrustedEpoch<'a> {
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
     }
+
+    pub fn borrow(&self) -> &'a Epoch {
+        self.inner
+    }
     pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Epoch, Error> {
         let (result, found, required) = self.contains(trusted_epoch);
         if result {

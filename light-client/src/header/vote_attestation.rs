@@ -45,7 +45,11 @@ pub struct VoteAttestation {
 }
 
 impl VoteAttestation {
-    pub fn verify(&self, number: BlockNumber, validators: &Validators) -> Result<(), Error> {
+    pub fn verify(
+        &self,
+        number: BlockNumber,
+        validators: &Validators,
+    ) -> Result<Vec<usize>, Error> {
         if self.vote_address_set.count() > validators.len() {
             return Err(Error::UnexpectedVoteAddressCount(
                 number,
@@ -53,6 +57,7 @@ impl VoteAttestation {
                 validators.len(),
             ));
         }
+        let mut voted = Vec::new();
         let mut voted_addr = Vec::new();
         for (i, val) in validators.iter().enumerate() {
             if !self.vote_address_set.get(i) {
@@ -62,9 +67,8 @@ impl VoteAttestation {
             let bls_pub_key = PublicKey::from_bytes(bls_pub_key_bytes)
                 .map_err(|e| Error::UnexpectedBLSPubkey(number, e))?;
             voted_addr.push(bls_pub_key);
+            voted.push(i)
         }
-
-        // TODO At least one of the 1/3 of trusted validators must participate in vote attestation
 
         let required = ceil_div(validators.len() * 2, 3);
         if voted_addr.len() < required {
@@ -84,7 +88,7 @@ impl VoteAttestation {
                 pub_keys_ref.len(),
             ));
         }
-        Ok(())
+        Ok(voted)
     }
 }
 
