@@ -64,6 +64,8 @@ impl VoteAttestation {
             voted_addr.push(bls_pub_key);
         }
 
+        // TODO At least one of the 1/3 of trusted validators must participate in vote attestation
+
         let required = ceil_div(validators.len() * 2, 3);
         if voted_addr.len() < required {
             return Err(Error::InsufficientValidatorCount(
