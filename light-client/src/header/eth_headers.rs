@@ -5,9 +5,9 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 use crate::errors::Error;
 use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
-use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
+use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
-use crate::misc::{BlockNumber, ChainId};
+use crate::misc::{ceil_div, BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -57,12 +57,12 @@ impl ETHHeaders {
             if h.number > next_checkpoint {
                 let voted_vals =
                     vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
-                //TODO validate voted_vals contain 1/3 of trusted
+                verify_untrusted_validators(previous_epoch, &voted_vals)?
             } else if h.number > checkpoint {
                 let voted_vals =
                     vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
                 if let Untrusted(_) = current_epoch {
-                    //TODO validate voted_vals contain 1/3 of trusted
+                    verify_untrusted_validators(previous_epoch, &voted_vals)?
                 }
             } else {
                 vote.verify(h.number, p_val)?;
@@ -225,6 +225,26 @@ fn unwrap_c_val<'a>(n: BlockNumber, c_val: &'a Option<&'a Epoch>) -> Result<&'a 
     c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(n))
 }
 
+fn verify_untrusted_validators(trusted: &TrustedEpoch, voted: &Validators) -> Result<(), Error> {
+    let validators_len = trusted.validators().len();
+    let mut voted_in_trusted = 0;
+    for v in voted.iter() {
+        if trusted.validators().contains(v) {
+            voted_in_trusted += 1;
+        }
+    }
+    let required = validators_len - ceil_div(validators_len * 2, 3) + 1;
+    if voted_in_trusted >= required {
+        Ok(())
+    } else {
+        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
+            trusted.epoch().hash(),
+            voted_in_trusted,
+            required,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
@@ -236,7 +256,7 @@ mod test {
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
     use crate::header::Header;
-    use crate::misc::{ChainId, Validators};
+    use crate::misc::Validators;
     use hex_literal::hex;
     use light_client::types::Any;
     use rstest::rstest;

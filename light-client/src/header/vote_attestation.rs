@@ -49,7 +49,7 @@ impl VoteAttestation {
         &self,
         number: BlockNumber,
         validators: &Validators,
-    ) -> Result<Vec<usize>, Error> {
+    ) -> Result<Validators, Error> {
         if self.vote_address_set.count() > validators.len() {
             return Err(Error::UnexpectedVoteAddressCount(
                 number,
@@ -67,7 +67,7 @@ impl VoteAttestation {
             let bls_pub_key = PublicKey::from_bytes(bls_pub_key_bytes)
                 .map_err(|e| Error::UnexpectedBLSPubkey(number, e))?;
             voted_addr.push(bls_pub_key);
-            voted.push(i)
+            voted.push(val.clone())
         }
 
         let required = ceil_div(validators.len() * 2, 3);
