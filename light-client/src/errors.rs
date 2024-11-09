@@ -80,7 +80,6 @@ pub enum Error {
     MissingTurnLengthInEpochBlock(BlockNumber),
     MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
-    MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
@@ -318,9 +317,6 @@ impl core::fmt::Display for Error {
             }
             Error::MissingNextValidatorSet(e1) => {
                 write!(f, "MissingNextValidatorSet : {}", e1)
-            }
-            Error::MissingCurrentValidatorSet(e1) => {
-                write!(f, "MissingCurrentValidatorSet : {}", e1)
             }
             Error::MissingValidatorToVerifySeal(e1) => {
                 write!(f, "MissingValidatorToVerifySeal : {:?}", e1)
