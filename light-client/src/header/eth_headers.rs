@@ -29,8 +29,7 @@ impl ETHHeaders {
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let (c_val, n_val) =
-            self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
+        let n_val = self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -41,7 +40,7 @@ impl ETHHeaders {
             if h.number >= next_checkpoint {
                 h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
             } else if h.number >= checkpoint {
-                h.verify_seal(unwrap_c_val(h.number, &c_val)?, chain_id)?;
+                h.verify_seal(current_epoch.epoch(), chain_id)?;
             } else {
                 h.verify_seal(previous_epoch.epoch(), chain_id)?;
             }
@@ -57,12 +56,15 @@ impl ETHHeaders {
             if h.number > next_checkpoint {
                 let voted_vals =
                     vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
-                verify_untrusted_validators(previous_epoch, &voted_vals)?
+                if let Trusted(current_epoch) = current_epoch {
+                    current_epoch.verify_untrusted_validators(&voted_vals)?;
+                } else {
+                    // TODO unexpected untrusted epoch
+                }
             } else if h.number > checkpoint {
-                let voted_vals =
-                    vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
+                let voted_vals = vote.verify(h.number, current_epoch.epoch().validators())?;
                 if let Untrusted(_) = current_epoch {
-                    verify_untrusted_validators(previous_epoch, &voted_vals)?
+                    previous_epoch.verify_untrusted_validators(&voted_vals)?;
                 }
             } else {
                 vote.verify(h.number, p_val)?;
@@ -113,17 +115,17 @@ impl ETHHeaders {
         ))
     }
 
-    fn verify_header_size<'a, 'b>(
-        &'b self,
+    fn verify_header_size(
+        &self,
         epoch: u64,
         checkpoint: u64,
         next_checkpoint: u64,
-        current_epoch: &'a EitherEpoch,
-    ) -> Result<(Option<&'a Epoch>, Option<&'b Epoch>), Error> {
+        current_epoch: &EitherEpoch,
+    ) -> Result<Option<&Epoch>, Error> {
         let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
-            Untrusted(untrusted) => {
+            Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
                 if hs.iter().any(|h| h.number >= next_checkpoint) {
                     return Err(Error::UnexpectedNextCheckpointHeader(
@@ -131,30 +133,24 @@ impl ETHHeaders {
                         next_checkpoint,
                     ));
                 }
-
-                // Ensure c_val is validated by trusted p_val when the checkpoint header is found
-                if hs.is_empty() {
-                    Ok((None, None))
-                } else {
-                    Ok((Some(untrusted.borrow()), None))
-                }
+                Ok(None)
             }
             // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
-            Trusted(trusted) => {
+            Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
                 let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
                     Some(h) => h
                         .epoch
                         .as_ref()
                         .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok((Some(trusted.epoch()), None)),
+                    None => return Ok(None),
                 };
 
                 // Finish if no headers over next checkpoint were found
                 let hs: Vec<&&ETHHeader> =
                     hs.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if hs.is_empty() {
-                    return Ok((Some(trusted.epoch()), None));
+                    return Ok(None);
                 }
 
                 // Ensure n_val(400) can be borrowed by c_val(200)
@@ -167,7 +163,7 @@ impl ETHHeaders {
                         next_next_checkpoint,
                     ));
                 }
-                Ok((Some(trusted.epoch()), Some(next_epoch)))
+                Ok(Some(next_epoch))
             }
         }
     }

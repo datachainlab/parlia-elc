@@ -58,7 +58,7 @@ impl<'a> TrustedEpoch<'a> {
         Self { inner }
     }
 
-    pub fn verify_untrusted_validators(&self,  voted_vals: &Validators) -> Result<(), Error> {
+    pub fn verify_untrusted_validators(&self, voted_vals: &Validators) -> Result<(), Error> {
         let (result, found, required) = self.contains(voted_vals);
         if result {
             return Ok(());
@@ -101,7 +101,6 @@ impl<'a> UntrustedEpoch<'a> {
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
     }
-
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -118,10 +117,10 @@ impl<'a> EitherEpoch<'a> {
         }
     }
 
-    pub fn validators(&self) -> &Validators {
+    pub fn epoch(&self) -> &'a Epoch {
         match self {
-            EitherEpoch::Trusted(v) => v.validators(),
-            EitherEpoch::Untrusted(v) => v.validators(),
+            EitherEpoch::Trusted(v) => v.inner,
+            EitherEpoch::Untrusted(v) => v.inner,
         }
     }
 }
@@ -129,11 +128,11 @@ impl<'a> EitherEpoch<'a> {
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
-    use crate::header::epoch::{Epoch, TrustedEpoch, UntrustedEpoch, ValidatorSet};
+    use crate::header::epoch::{Epoch, TrustedEpoch, ValidatorSet};
 
     #[test]
-    pub fn test_untrusted_epoch_try_borrow() {
-        let mut _assert_trusted = |x, y, c_val_borrowable| {
+    pub fn test_untrusted_epoch_with_voter() {
+        let mut _assert_trusted = |x, y, success: bool| {
             let trusted_validators: ValidatorSet = vec![
                 vec![1],
                 vec![2],
@@ -146,34 +145,17 @@ mod test {
             .into();
             let trusted_epoch = Epoch::new(trusted_validators, 1);
             let trusted_epoch = TrustedEpoch::new(&trusted_epoch);
-            let untrusted_epoch = Epoch::new(
-                ValidatorSet {
-                    validators: x,
-                    hash: [0; 32],
-                },
-                1,
-            );
-            let untrusted_epoch = UntrustedEpoch::new(&untrusted_epoch);
-            let (result, count, required) = untrusted_epoch.contains(&trusted_epoch);
-            assert_eq!(result, c_val_borrowable);
+            let (result, count, required) = trusted_epoch.contains(&x);
+            assert_eq!(result, success);
             assert_eq!(count, y);
             assert_eq!(required, 3);
-            match untrusted_epoch.try_borrow(&trusted_epoch) {
-                Ok(borrowed) => {
-                    if c_val_borrowable {
-                        assert_eq!(borrowed, untrusted_epoch.inner);
-                    } else {
-                        unreachable!("unexpected borrowed")
-                    }
-                }
+            match trusted_epoch.verify_untrusted_validators(&x) {
+                Ok(_) => assert!(success),
                 Err(e) => {
-                    if c_val_borrowable {
-                        unreachable!("unexpected error {:?}", e);
-                    } else {
-                        match e {
-                            Error::InsufficientTrustedValidatorsInUntrustedValidators(_, _, _) => {}
-                            e => unreachable!("unexpected error type {:?}", e),
-                        }
+                    assert!(!success);
+                    match e {
+                        Error::InsufficientTrustedValidatorsInUntrustedValidators(_, _, _) => {}
+                        e => unreachable!("unexpected error type {:?}", e),
                     }
                 }
             }

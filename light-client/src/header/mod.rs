@@ -465,9 +465,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            EitherEpoch::Untrusted(r) => {
-                assert!(r.try_borrow(&p_val).is_err())
-            }
+            EitherEpoch::Untrusted(r) => {}
             _ => unreachable!("unexpected trusted"),
         }
 
