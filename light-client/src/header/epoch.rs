@@ -57,6 +57,36 @@ impl<'a> TrustedEpoch<'a> {
     pub fn new(inner: &'a Epoch) -> Self {
         Self { inner }
     }
+
+    pub fn verify_untrusted_validators(&self,  voted_vals: &Validators) -> Result<(), Error> {
+        let (result, found, required) = self.contains(voted_vals);
+        if result {
+            return Ok(());
+        }
+        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
+            self.inner.hash,
+            found,
+            required,
+        ))
+    }
+
+    pub fn contains(&self, voted_vals: &Validators) -> (bool, usize, usize) {
+        let mut trusted_validator_count = 0;
+        for x1 in voted_vals {
+            if self.validators().contains(x1) {
+                trusted_validator_count += 1;
+            }
+        }
+        let required = Self::threshold(self.validators().len());
+        (
+            trusted_validator_count >= required,
+            trusted_validator_count,
+            required,
+        )
+    }
+    fn threshold(validators_len: usize) -> usize {
+        validators_len - ceil_div(validators_len * 2, 3) + 1
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -72,40 +102,6 @@ impl<'a> UntrustedEpoch<'a> {
         self.inner.checkpoint()
     }
 
-    pub fn borrow(&self) -> &'a Epoch {
-        self.inner
-    }
-    pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Epoch, Error> {
-        let (result, found, required) = self.contains(trusted_epoch);
-        if result {
-            return Ok(self.inner);
-        }
-        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
-            self.inner.hash,
-            found,
-            required,
-        ))
-    }
-
-    fn contains(&self, trusted_epoch: &TrustedEpoch) -> (bool, usize, usize) {
-        let trusted_validators = trusted_epoch.validators();
-        let mut trusted_validator_count = 0;
-        for x1 in self.inner.validators() {
-            if trusted_validators.contains(x1) {
-                trusted_validator_count += 1;
-            }
-        }
-        let required = Self::threshold(trusted_validators.len());
-        (
-            trusted_validator_count >= required,
-            trusted_validator_count,
-            required,
-        )
-    }
-
-    fn threshold(validators_len: usize) -> usize {
-        validators_len - ceil_div(validators_len * 2, 3) + 1
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -119,6 +115,13 @@ impl<'a> EitherEpoch<'a> {
         match self {
             EitherEpoch::Trusted(v) => v.checkpoint(),
             EitherEpoch::Untrusted(v) => v.checkpoint(),
+        }
+    }
+
+    pub fn validators(&self) -> &Validators {
+        match self {
+            EitherEpoch::Trusted(v) => v.validators(),
+            EitherEpoch::Untrusted(v) => v.validators(),
         }
     }
 }
@@ -306,15 +309,15 @@ mod test {
 
     #[test]
     pub fn test_trust_threshold() {
-        assert_eq!(1, UntrustedEpoch::threshold(1));
-        assert_eq!(1, UntrustedEpoch::threshold(2));
-        assert_eq!(2, UntrustedEpoch::threshold(3));
-        assert_eq!(2, UntrustedEpoch::threshold(4));
-        assert_eq!(2, UntrustedEpoch::threshold(5));
-        assert_eq!(3, UntrustedEpoch::threshold(6));
-        assert_eq!(3, UntrustedEpoch::threshold(7));
-        assert_eq!(3, UntrustedEpoch::threshold(8));
-        assert_eq!(4, UntrustedEpoch::threshold(9));
-        assert_eq!(8, UntrustedEpoch::threshold(21));
+        assert_eq!(1, TrustedEpoch::threshold(1));
+        assert_eq!(1, TrustedEpoch::threshold(2));
+        assert_eq!(2, TrustedEpoch::threshold(3));
+        assert_eq!(2, TrustedEpoch::threshold(4));
+        assert_eq!(2, TrustedEpoch::threshold(5));
+        assert_eq!(3, TrustedEpoch::threshold(6));
+        assert_eq!(3, TrustedEpoch::threshold(7));
+        assert_eq!(3, TrustedEpoch::threshold(8));
+        assert_eq!(4, TrustedEpoch::threshold(9));
+        assert_eq!(8, TrustedEpoch::threshold(21));
     }
 }
