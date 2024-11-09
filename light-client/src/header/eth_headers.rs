@@ -35,7 +35,6 @@ impl ETHHeaders {
         self.verify_cascading_fields()?;
 
         // Ensure valid seals
-        let p_val = previous_epoch.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
                 h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
@@ -51,25 +50,16 @@ impl ETHHeaders {
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
-        for h in &[child, grand_child] {
-            let vote = h.get_vote_attestation()?;
-            if h.number > next_checkpoint {
-                let voted_vals =
-                    vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
-                if let Trusted(current_epoch) = current_epoch {
-                    current_epoch.verify_untrusted_validators(&voted_vals)?;
-                } else {
-                    // TODO unexpected untrusted epoch
-                }
-            } else if h.number > checkpoint {
-                let voted_vals = vote.verify(h.number, current_epoch.epoch().validators())?;
-                if let Untrusted(_) = current_epoch {
-                    previous_epoch.verify_untrusted_validators(&voted_vals)?;
-                }
-            } else {
-                vote.verify(h.number, p_val)?;
-            }
-        }
+        verify_vote(
+            child,
+            grand_child,
+            checkpoint,
+            next_checkpoint,
+            current_epoch,
+            previous_epoch,
+            &n_val,
+        )?;
+
         Ok(())
     }
 
@@ -215,6 +205,36 @@ fn verify_finalized(
 
 fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
     n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
+}
+
+fn verify_vote(
+    child: &ETHHeader,
+    grand_child: &ETHHeader,
+    checkpoint: BlockNumber,
+    next_checkpoint: BlockNumber,
+    current_epoch: &EitherEpoch,
+    previous_epoch: &TrustedEpoch,
+    n_val: &Option<&Epoch>,
+) -> Result<(), Error> {
+    for h in &[child, grand_child] {
+        let vote = h.get_vote_attestation()?;
+        if h.number > next_checkpoint {
+            let voted_vals = vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
+            if let Trusted(current_epoch) = current_epoch {
+                current_epoch.verify_voter(&voted_vals)?;
+            } else {
+                // TODO unexpected untrusted epoch
+            }
+        } else if h.number > checkpoint {
+            let voted_vals = vote.verify(h.number, current_epoch.epoch().validators())?;
+            if let Untrusted(_) = current_epoch {
+                previous_epoch.verify_voter(&voted_vals)?;
+            }
+        } else {
+            vote.verify(h.number, &previous_epoch.validators())?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -58,8 +58,8 @@ impl<'a> TrustedEpoch<'a> {
         Self { inner }
     }
 
-    pub fn verify_untrusted_validators(&self, voted_vals: &Validators) -> Result<(), Error> {
-        let (result, found, required) = self.contains(voted_vals);
+    pub fn verify_voter(&self, voter: &Validators) -> Result<(), Error> {
+        let (result, found, required) = self.contains(voter);
         if result {
             return Ok(());
         }
@@ -70,9 +70,9 @@ impl<'a> TrustedEpoch<'a> {
         ))
     }
 
-    pub fn contains(&self, voted_vals: &Validators) -> (bool, usize, usize) {
+    pub fn contains(&self, voter: &Validators) -> (bool, usize, usize) {
         let mut trusted_validator_count = 0;
-        for x1 in voted_vals {
+        for x1 in voter {
             if self.validators().contains(x1) {
                 trusted_validator_count += 1;
             }
@@ -131,7 +131,7 @@ mod test {
     use crate::header::epoch::{Epoch, TrustedEpoch, ValidatorSet};
 
     #[test]
-    pub fn test_untrusted_epoch_with_voter() {
+    pub fn test_verify_voter() {
         let mut _assert_trusted = |x, y, success: bool| {
             let trusted_validators: ValidatorSet = vec![
                 vec![1],
@@ -149,7 +149,7 @@ mod test {
             assert_eq!(result, success);
             assert_eq!(count, y);
             assert_eq!(required, 3);
-            match trusted_epoch.verify_untrusted_validators(&x) {
+            match trusted_epoch.verify_voter(&x) {
                 Ok(_) => assert!(success),
                 Err(e) => {
                     assert!(!success);
