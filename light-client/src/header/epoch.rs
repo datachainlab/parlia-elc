@@ -58,21 +58,25 @@ impl<'a> TrustedEpoch<'a> {
         Self { inner }
     }
 
-    pub fn verify_voter(&self, voter: &Validators) -> Result<(), Error> {
-        let (result, found, required) = self.contains(voter);
+    pub fn verify_untrusted_voters(&self, untrusted_voter: &Validators) -> Result<(), Error> {
+        let (result, found, required) =
+            self.contains_at_least_one_honest_validator(untrusted_voter);
         if result {
             return Ok(());
         }
-        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
+        Err(Error::InsufficientHonestValidator(
             self.inner.hash,
             found,
             required,
         ))
     }
 
-    pub fn contains(&self, voter: &Validators) -> (bool, usize, usize) {
+    pub fn contains_at_least_one_honest_validator(
+        &self,
+        untrusted_voters: &Validators,
+    ) -> (bool, usize, usize) {
         let mut trusted_validator_count = 0;
-        for x1 in voter {
+        for x1 in untrusted_voters {
             if self.validators().contains(x1) {
                 trusted_validator_count += 1;
             }
@@ -145,16 +149,17 @@ mod test {
             .into();
             let trusted_epoch = Epoch::new(trusted_validators, 1);
             let trusted_epoch = TrustedEpoch::new(&trusted_epoch);
-            let (result, count, required) = trusted_epoch.contains(&x);
+            let (result, count, required) =
+                trusted_epoch.contains_at_least_one_honest_validator(&x);
             assert_eq!(result, success);
             assert_eq!(count, y);
             assert_eq!(required, 3);
-            match trusted_epoch.verify_voter(&x) {
+            match trusted_epoch.verify_untrusted_voters(&x) {
                 Ok(_) => assert!(success),
                 Err(e) => {
                     assert!(!success);
                     match e {
-                        Error::InsufficientTrustedValidatorsInUntrustedValidators(_, _, _) => {}
+                        Error::InsufficientHonestValidator(_, _, _) => {}
                         e => unreachable!("unexpected error type {:?}", e),
                     }
                 }

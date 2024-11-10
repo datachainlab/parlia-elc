@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
@@ -7,7 +6,7 @@ use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
-use crate::misc::{BlockNumber, ChainId};
+use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -35,6 +34,7 @@ impl ETHHeaders {
         self.verify_cascading_fields()?;
 
         // Ensure valid seals
+        let p_val = previous_epoch.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
                 h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
@@ -50,14 +50,26 @@ impl ETHHeaders {
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
-        verify_vote(
-            child,
+        let mut last_voters: Validators = Vec::new();
+        for h in &[child, grand_child] {
+            let vote = h.get_vote_attestation()?;
+            last_voters = if h.number > next_checkpoint {
+                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?
+            } else if h.number > checkpoint {
+                vote.verify(h.number, current_epoch.epoch().validators())?
+            } else {
+                vote.verify(h.number, p_val)?
+            };
+        }
+
+        // Ensure voters for grand child are valid
+        verify_voters(
+            &last_voters,
             grand_child,
-            checkpoint,
             next_checkpoint,
+            checkpoint,
             current_epoch,
             previous_epoch,
-            &n_val,
         )?;
 
         Ok(())
@@ -207,31 +219,29 @@ fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a 
     n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
 }
 
-fn verify_vote(
-    child: &ETHHeader,
+fn verify_voters(
+    voters: &Validators,
     grand_child: &ETHHeader,
-    checkpoint: BlockNumber,
     next_checkpoint: BlockNumber,
+    checkpoint: BlockNumber,
     current_epoch: &EitherEpoch,
     previous_epoch: &TrustedEpoch,
-    n_val: &Option<&Epoch>,
 ) -> Result<(), Error> {
-    for h in &[child, grand_child] {
-        let vote = h.get_vote_attestation()?;
-        if h.number > next_checkpoint {
-            let voted_vals = vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
-            if let Trusted(current_epoch) = current_epoch {
-                current_epoch.verify_voter(&voted_vals)?;
-            } else {
-                // TODO unexpected untrusted epoch
+    if grand_child.number > next_checkpoint {
+        match current_epoch {
+            Trusted(e) => {
+                e.verify_untrusted_voters(voters)?;
             }
-        } else if h.number > checkpoint {
-            let voted_vals = vote.verify(h.number, current_epoch.epoch().validators())?;
-            if let Untrusted(_) = current_epoch {
-                previous_epoch.verify_voter(&voted_vals)?;
+            _ => {
+                return Err(Error::UnexpectedUntrustedValidators(
+                    grand_child.number,
+                    next_checkpoint,
+                ))
             }
-        } else {
-            vote.verify(h.number, &previous_epoch.validators())?;
+        }
+    } else if grand_child.number > checkpoint {
+        if let Untrusted(_) = current_epoch {
+            previous_epoch.verify_untrusted_voters(voters)?;
         }
     }
     Ok(())

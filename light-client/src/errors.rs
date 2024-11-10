@@ -83,7 +83,7 @@ pub enum Error {
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
-    InsufficientTrustedValidatorsInUntrustedValidators(Hash, usize, usize),
+    InsufficientHonestValidator(Hash, usize, usize),
     MissingValidatorToVerifySeal(BlockNumber),
     MissingValidatorToVerifyVote(BlockNumber),
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
@@ -93,6 +93,7 @@ pub enum Error {
     UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
     UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -308,12 +309,8 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
-            Error::InsufficientTrustedValidatorsInUntrustedValidators(e1, e2, e3) => {
-                write!(
-                    f,
-                    "InsufficientTrustedValidatorsInUntrustedValidators : {:?} {} {}",
-                    e1, e2, e3
-                )
+            Error::InsufficientHonestValidator(e1, e2, e3) => {
+                write!(f, "InsufficientHonestValidator : {:?} {} {}", e1, e2, e3)
             }
             Error::MissingNextValidatorSet(e1) => {
                 write!(f, "MissingNextValidatorSet : {}", e1)
@@ -367,6 +364,9 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
+            }
+            Error::UnexpectedUntrustedValidators(e1, e2) => {
+                write!(f, "UnexpectedUntrustedValidators : {} {}", e1, e2)
             }
         }
     }
