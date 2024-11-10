@@ -221,25 +221,23 @@ fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a 
 
 fn verify_voters(
     voters: &Validators,
-    grand_child: &ETHHeader,
+    h: &ETHHeader,
     next_checkpoint: BlockNumber,
     checkpoint: BlockNumber,
     current_epoch: &EitherEpoch,
     previous_epoch: &TrustedEpoch,
 ) -> Result<(), Error> {
-    if grand_child.number > next_checkpoint {
+    if h.number > next_checkpoint {
         match current_epoch {
-            Trusted(e) => {
-                e.verify_untrusted_voters(voters)?;
-            }
+            Trusted(e) => e.verify_untrusted_voters(voters)?,
             _ => {
                 return Err(Error::UnexpectedUntrustedValidators(
-                    grand_child.number,
+                    h.number,
                     next_checkpoint,
                 ))
             }
         }
-    } else if grand_child.number > checkpoint {
+    } else if h.number > checkpoint {
         if let Untrusted(_) = current_epoch {
             previous_epoch.verify_untrusted_voters(voters)?;
         }
@@ -253,7 +251,7 @@ mod test {
 
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{get_validator_bytes_and_tern_term, ETHHeader};
-    use crate::header::eth_headers::ETHHeaders;
+    use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
@@ -431,6 +429,95 @@ mod test {
         let any: Any = header.try_into().unwrap();
         let header = Header::try_from(any).unwrap();
         header.headers.verify_finalized().unwrap();
+    }
+
+    #[test]
+    fn test_success_verify_voters() {
+        let mut h = localnet().previous_epoch_header();
+        let p_vals = vec![vec![1], vec![2]];
+        let p_epoch = Epoch::new(p_vals.into(), 1);
+        let pt_epoch = TrustedEpoch::new(&p_epoch);
+        let c_vals = vec![vec![1], vec![2]];
+        let c_epoch = Epoch::new(c_vals.into(), 1);
+
+        // after next checkpoint
+        h.number = 412;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+
+        // after checkpoint
+        h.number = 212;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+
+        // other
+        h.number = 211;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_error_verify_voters() {
+        let mut h = localnet().previous_epoch_header();
+        let p_vals = vec![vec![1], vec![2]];
+        let p_epoch = Epoch::new(p_vals.into(), 1);
+        let pt_epoch = TrustedEpoch::new(&p_epoch);
+        let c_vals = vec![vec![1], vec![2]];
+        let c_epoch = Epoch::new(c_vals.into(), 1);
+
+        // after next checkpoint
+        h.number = 412;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
+        verify_voters(
+            &vec![vec![0]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
+
+        // after checkpoint
+        h.number = 212;
+        verify_voters(
+            &vec![vec![0]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
     }
 
     #[test]
