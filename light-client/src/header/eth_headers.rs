@@ -256,7 +256,7 @@ mod test {
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
     use crate::header::Header;
-    use crate::misc::Validators;
+    use crate::misc::{ChainId, Validators};
     use hex_literal::hex;
     use light_client::types::Any;
     use rstest::rstest;
