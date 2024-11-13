@@ -59,6 +59,7 @@ pub enum Error {
     NegativeMaxClockDrift,
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
+    UnexpectedRevisionNumber(u64),
     UnexpectedHeaderRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
@@ -160,6 +161,9 @@ impl core::fmt::Display for Error {
                 write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
+            Error::UnexpectedRevisionNumber(e1) => {
+                write!(f, "UnexpectedRevisionNumber: {}", e1)
+            }
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
             }
