@@ -165,6 +165,10 @@ impl InnerLightClient {
         let height = client_state.latest_height;
         let timestamp = consensus_state.timestamp;
 
+        if height.revision_height() == 0 {
+            return Err(Error::UnexpectedRevisionHeight(height.revision_height()));
+        }
+
         Ok(CreateClientResult {
             height,
             message: UpdateStateProxyMessage {
@@ -589,6 +593,26 @@ mod test {
             }
             _ => unreachable!("invalid commitment"),
         }
+    }
+    #[test]
+    fn test_error_create_client() {
+        let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
+        let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
+        let client = ParliaLightClient::default();
+        let mock_consensus_state = BTreeMap::new();
+        let ctx = MockClientReader {
+            client_state: None,
+            consensus_state: mock_consensus_state,
+        };
+        let mut any_client_state: Any = client_state.try_into().unwrap();
+        let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
+        client_state.latest_height = Height::new(0, 0);
+        any_client_state = client_state.try_into().unwrap();
+        let any_consensus_state: Any = consensus_state.try_into().unwrap();
+        let result = client
+            .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
+            .unwrap_err();
+        assert_err(result, "UnexpectedRevisionHeight");
     }
 
     #[rstest]
