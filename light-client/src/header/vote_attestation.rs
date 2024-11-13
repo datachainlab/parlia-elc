@@ -148,7 +148,7 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 mod test {
     use crate::errors::Error;
     use crate::fixture::*;
-    use crate::header::eth_header::{get_validator_bytes_and_tern_term, ETHHeader};
+    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::vote_attestation::{
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,
@@ -239,7 +239,7 @@ mod test {
             hash: [0u8; 32],
             epoch: None,
         };
-        let (val, turn) = get_validator_bytes_and_tern_term(&header.extra_data).unwrap();
+        let (val, turn) = get_validator_bytes_and_turn_length(&header.extra_data).unwrap();
         assert_eq!(val.len(), 8);
         assert_eq!(turn, 4);
         let err = header.get_vote_attestation().unwrap_err();

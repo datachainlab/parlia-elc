@@ -303,7 +303,7 @@ impl ETHHeader {
     }
 }
 
-pub fn get_validator_bytes_and_tern_term(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
+pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
     if extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
         return Err(Error::UnexpectedExtraDataLength(extra_data.len()));
     }
@@ -466,7 +466,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let hash: Hash = keccak_256(&buffer_vec);
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
-            let (validators, turn_length) = get_validator_bytes_and_tern_term(&extra_data)?;
+            let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
             Some(Epoch::new(validators.into(), turn_length))
         } else {
             None
