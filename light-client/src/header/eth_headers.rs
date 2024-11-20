@@ -19,6 +19,15 @@ pub struct ETHHeaders {
 }
 
 impl ETHHeaders {
+    /// Verifies the headers in the `ETHHeaders` struct.
+    ///
+    /// This function performs several checks to ensure the validity of the headers:
+    /// 1. Ensures the header after the next or next checkpoint does not exist.
+    /// 2. Verifies the size of the headers within the specified epoch range.
+    /// 3. Ensures all headers are successfully chained.
+    /// 4. Validates the seals of all headers.
+    /// 5. Ensures the target header is finalized.
+    /// 6. Ensures the BLS signature is correct.
     pub fn verify(
         &self,
         chain_id: &ChainId,
@@ -70,6 +79,10 @@ impl ETHHeaders {
         Ok(())
     }
 
+    /// Verifies that all headers in the `all` vector have valid cascading fields.
+    ///
+    /// This function iterates through the `all` vector of `ETHHeader` objects and ensures that each
+    /// header (except the last one) has valid cascading fields with its subsequent header.
     fn verify_cascading_fields(&self) -> Result<(), Error> {
         for (i, header) in self.all.iter().enumerate() {
             if i < self.all.len() - 1 {
@@ -80,6 +93,10 @@ impl ETHHeaders {
         Ok(())
     }
 
+    /// Verifies that the headers are finalized.
+    ///
+    /// Only one set of three consecutive valid headers must exist.
+    /// This means that if [x, x+1, x+2] is valid then x+3 must not exist.
     fn verify_finalized(&self) -> Result<(&ETHHeader, &ETHHeader), Error> {
         if self.all.len() < 3 {
             return Err(Error::InvalidVerifyingHeaderLength(
@@ -112,6 +129,10 @@ impl ETHHeaders {
         ))
     }
 
+    /// Verifies the size of the headers within the specified epoch range.
+    ///
+    /// This function filters the headers to include only those that are within the specified
+    /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size<'a, 'b>(
         &'b self,
         epoch: u64,
