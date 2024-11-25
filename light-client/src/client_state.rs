@@ -171,6 +171,13 @@ impl TryFrom<RawClientState> for ClientState {
 
         let chain_id = ChainId::new(value.chain_id);
 
+        if chain_id.version() != raw_latest_height.revision_number {
+            return Err(Error::UnexpectedLatestHeightRevision(
+                chain_id.version(),
+                raw_latest_height.revision_number,
+            ));
+        }
+
         let latest_height = new_height(
             raw_latest_height.revision_number,
             raw_latest_height.revision_height,
@@ -498,6 +505,19 @@ mod test {
         let err = ClientState::try_from(cs.clone()).unwrap_err();
         match err {
             Error::MissingLatestHeight => {}
+            err => unreachable!("{:?}", err),
+        }
+
+        cs.latest_height = Some(Height {
+            revision_number: 1,
+            revision_height: 0,
+        });
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedLatestHeightRevision(e1, e2) => {
+                assert_eq!(e1, 0);
+                assert_eq!(e2, 1);
+            }
             err => unreachable!("{:?}", err),
         }
 
