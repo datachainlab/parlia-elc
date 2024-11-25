@@ -61,6 +61,7 @@ pub enum Error {
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     UnexpectedHeaderRevision(u64, u64),
+    UnexpectedLatestHeightRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
@@ -163,6 +164,9 @@ impl core::fmt::Display for Error {
             Error::EmptyHeader => write!(f, "EmptyHeader"),
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
+            }
+            Error::UnexpectedLatestHeightRevision(e1, e2) => {
+                write!(f, "UnexpectedLatestHeightRevision: {} {}", e1, e2)
             }
             Error::UnexpectedSignature(e1, e2) => write!(f, "UnexpectedSignature: {} {}", e1, e2),
             Error::MissingVanityInExtraData(e1, e2, e3) => {
