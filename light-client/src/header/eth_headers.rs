@@ -126,7 +126,7 @@ impl ETHHeaders {
     ) -> Result<Option<&Epoch>, Error> {
         let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
         match current_epoch {
-            // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
+            // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
             Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
                 if hs.iter().any(|h| h.number >= next_checkpoint) {
@@ -137,7 +137,7 @@ impl ETHHeaders {
                 }
                 Ok(None)
             }
-            // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
+            // ex) t=201 then 201 <= h < 611 (at least 1 honest n_val(400) can be in c_val(200))
             Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
                 let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
@@ -155,7 +155,6 @@ impl ETHHeaders {
                     return Ok(None);
                 }
 
-                // Ensure n_val(400) can be borrowed by c_val(200)
                 let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
 
                 // Ensure headers are before the next_next_checkpoint
