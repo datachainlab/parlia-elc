@@ -41,3 +41,11 @@ jobs:
         with:
           command: test
           args: --release --features=std --manifest-path light-client/Cargo.toml
+      - uses: actions-rs/cargo@v1
+        name: unit-test-dev-test
+        with:
+          command: test
+          args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test
+        env:
+          MINIMUM_TIMESTAMP_SUPPORTED: 1731495592
+          MINIMUM_HEIGHT_SUPPORTED: 100

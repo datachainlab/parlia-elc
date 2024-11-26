@@ -11,6 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
+use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
@@ -97,12 +98,23 @@ impl ClientState {
     }
 
     fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+        // Ensure header has supported timestamp
+        let ts = header.timestamp()?;
+
+        #[allow(clippy::absurd_extreme_comparisons)]
+        if ts.as_unix_timestamp_secs() < MINIMUM_TIMESTAMP_SUPPORTED {
+            return Err(Error::UnsupportedMinimumTimestamp(ts));
+        }
+        #[allow(clippy::absurd_extreme_comparisons)]
+        if header.height().revision_height() < MINIMUM_HEIGHT_SUPPORTED {
+            return Err(Error::UnsupportedMinimumHeight(header.height()));
+        }
         // Ensure last consensus state is within the trusting period
         validate_within_trusting_period(
             now,
             self.trusting_period,
             self.max_clock_drift,
-            header.timestamp()?,
+            ts,
             cs.timestamp,
         )?;
 
@@ -158,6 +170,13 @@ impl TryFrom<RawClientState> for ClientState {
             .ok_or(Error::MissingLatestHeight)?;
 
         let chain_id = ChainId::new(value.chain_id);
+
+        if chain_id.version() != raw_latest_height.revision_number {
+            return Err(Error::UnexpectedLatestHeightRevision(
+                chain_id.version(),
+                raw_latest_height.revision_number,
+            ));
+        }
 
         let latest_height = new_height(
             raw_latest_height.revision_number,
@@ -489,6 +508,19 @@ mod test {
             err => unreachable!("{:?}", err),
         }
 
+        cs.latest_height = Some(Height {
+            revision_number: 1,
+            revision_height: 0,
+        });
+        let err = ClientState::try_from(cs.clone()).unwrap_err();
+        match err {
+            Error::UnexpectedLatestHeightRevision(e1, e2) => {
+                assert_eq!(e1, 0);
+                assert_eq!(e2, 1);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
         cs.latest_height = Some(Height::default());
         let err = ClientState::try_from(cs.clone()).unwrap_err();
         match err {
@@ -671,6 +703,71 @@ mod test {
             }
         } else {
             panic!("expected error");
+        }
+    }
+    #[cfg(feature = "dev")]
+    mod dev_test {
+        use crate::client_state::ClientState;
+        use crate::consensus_state::ConsensusState;
+        use crate::errors::Error;
+        use crate::fixture::localnet;
+        use crate::header::eth_headers::ETHHeaders;
+        use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+        use crate::header::Header;
+        use crate::misc::new_timestamp;
+        use parlia_ibc_proto::ibc::core::client::v1::Height;
+
+        #[test]
+        fn test_supported_timestamp() {
+            let header = Header::new(
+                vec![1],
+                ETHHeaders {
+                    target: localnet().previous_epoch_header(),
+                    all: vec![],
+                },
+                Height::default(),
+                localnet().previous_epoch_header().epoch.unwrap(),
+                localnet().epoch_header().epoch.unwrap(),
+            );
+            let cs = ClientState::default();
+            let cons_state = ConsensusState::default();
+            let err = cs
+                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
+                .unwrap_err();
+            match err {
+                Error::UnsupportedMinimumTimestamp(e1) => {
+                    assert_eq!(e1, header.timestamp().unwrap());
+                }
+                err => unreachable!("{:?}", err),
+            }
+        }
+
+        #[test]
+        fn test_supported_height() {
+            let mut header = Header::new(
+                vec![1],
+                ETHHeaders {
+                    target: localnet().previous_epoch_header(),
+                    all: vec![],
+                },
+                Height::default(),
+                localnet().previous_epoch_header().epoch.unwrap(),
+                localnet().epoch_header().epoch.unwrap(),
+            );
+            header.eth_header_mut().target.timestamp = MINIMUM_TIMESTAMP_SUPPORTED;
+            header.eth_header_mut().target.number = MINIMUM_HEIGHT_SUPPORTED - 1;
+
+            let cs = ClientState::default();
+            let cons_state = ConsensusState::default();
+            let err = cs
+                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
+                .unwrap_err();
+            match err {
+                Error::UnsupportedMinimumHeight(e1) => {
+                    assert_eq!(e1, header.height());
+                }
+                err => unreachable!("{:?}", err),
+            }
         }
     }
 }
