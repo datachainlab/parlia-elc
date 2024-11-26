@@ -140,7 +140,7 @@ interface ETHHeader {
 }
 ```
 
-## Misbehavior
+## misbehaviour
 
 The `Misbehaviour` type is used for detecting misbehaviour and freezing the client - to prevent further packet flow - if applicable. Parlia client `Misbehaviour` consists of two headers at the same height both of which the light client would have considered valid.
 
@@ -244,15 +244,15 @@ Primary verification according to BEP-126's finality rule involves:
 However, there may be cases where the VoteAttestation cannot directly determine the finality of the submitted header.
 In such cases, a valid descendant header is verified, which is included in the `headers` and can directly confirm its finality through VoteAttestation.
 
-## Misbehavior predicate
+## misbehaviour predicate
 
-The predicate will check if a submission contains evidence of Misbehavior.
+The predicate will check if a submission contains evidence of misbehaviour.
 If there are two different valid headers for the same height, the client will be frozen, preventing any further state updates.
 
 ```typescript
 function submitMisbehaviour(
     clientId: ClientId,
-    misbehaviour: Misbehavior
+    misbehaviour: misbehaviour
 ): ClientState {
     // assert heights are equal
     assert(misbehaviour.header1.getHeight() == misbehaviour.header2.getHeight())
