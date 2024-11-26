@@ -29,6 +29,7 @@ pub mod validator_set;
 pub mod vote_attestation;
 
 pub mod epoch;
+pub mod hardfork;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
@@ -271,6 +272,10 @@ pub(crate) mod test {
     impl Header {
         pub(crate) fn eth_header(&self) -> &ETHHeaders {
             &self.headers
+        }
+
+        pub(crate) fn eth_header_mut(&mut self) -> &mut ETHHeaders {
+            &mut self.headers
         }
 
         pub(crate) fn new(
