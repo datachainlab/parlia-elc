@@ -571,7 +571,7 @@ mod test {
     fn test_success_create_client() {
         let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
         let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let mock_consensus_state = BTreeMap::new();
         let ctx = MockClientReader {
             client_state: None,
@@ -673,7 +673,7 @@ mod test {
     ) {
         let any: Any = header.try_into().unwrap();
         let header = Header::try_from(any.clone()).unwrap();
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
         let trusted_cs = ConsensusState {
@@ -743,7 +743,7 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_update_state_continuous(#[case] hp: Box<dyn Network>) {
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let header_groups = hp.success_update_client_continuous_input();
 
@@ -800,7 +800,7 @@ mod test {
         let header = input.header;
         let any: Any = header.try_into().unwrap();
 
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
 
@@ -877,7 +877,7 @@ mod test {
         let header = Header::try_from(input.clone()).unwrap();
         let trusted_height = header.trusted_height();
 
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(&client.client_type(), 1).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
         mock_consensus_state.insert(trusted_height, ConsensusState::default());
@@ -977,7 +977,7 @@ mod test {
         latest_height: Height,
         frozen: bool,
     ) -> Result<VerifyMembershipResult, light_client::Error> {
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(client.client_type().as_str(), 0).unwrap();
         let mut mock_consensus_state = BTreeMap::new();
         mock_consensus_state.insert(
@@ -1008,7 +1008,7 @@ mod test {
 
     #[test]
     fn test_success_submit_misbehavior() {
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(client.client_type().as_str(), 1).unwrap();
 
         // Detect misbehavior
@@ -1071,7 +1071,7 @@ mod test {
             consensus_state: BTreeMap::new(),
         };
 
-        let client = ParliaLightClient::default();
+        let client = ParliaLightClient;
         let client_id = ClientId::new(client.client_type().as_str(), 1).unwrap();
 
         // fail: exactly same block

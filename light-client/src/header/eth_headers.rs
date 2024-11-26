@@ -1,13 +1,12 @@
 use alloc::vec::Vec;
-
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
 use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
-use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
+use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
-use crate::misc::{BlockNumber, ChainId};
+use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
 use super::BLOCKS_PER_EPOCH;
@@ -29,13 +28,7 @@ impl ETHHeaders {
         let epoch = self.target.number / BLOCKS_PER_EPOCH;
         let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
         let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let (c_val, n_val) = self.verify_header_size(
-            epoch,
-            checkpoint,
-            next_checkpoint,
-            previous_epoch,
-            current_epoch,
-        )?;
+        let n_val = self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -46,7 +39,7 @@ impl ETHHeaders {
             if h.number >= next_checkpoint {
                 h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
             } else if h.number >= checkpoint {
-                h.verify_seal(unwrap_c_val(h.number, &c_val)?, chain_id)?;
+                h.verify_seal(current_epoch.epoch(), chain_id)?;
             } else {
                 h.verify_seal(previous_epoch.epoch(), chain_id)?;
             }
@@ -57,16 +50,28 @@ impl ETHHeaders {
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
+        let mut last_voters: Validators = Vec::new();
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
-            if h.number > next_checkpoint {
-                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?;
+            last_voters = if h.number > next_checkpoint {
+                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?
             } else if h.number > checkpoint {
-                vote.verify(h.number, unwrap_c_val(h.number, &c_val)?.validators())?;
+                vote.verify(h.number, current_epoch.epoch().validators())?
             } else {
-                vote.verify(h.number, p_val)?;
-            }
+                vote.verify(h.number, p_val)?
+            };
         }
+
+        // Ensure voters for grand child are valid
+        verify_voters(
+            &last_voters,
+            grand_child,
+            next_checkpoint,
+            checkpoint,
+            current_epoch,
+            previous_epoch,
+        )?;
+
         Ok(())
     }
 
@@ -112,18 +117,17 @@ impl ETHHeaders {
         ))
     }
 
-    fn verify_header_size<'a, 'b>(
-        &'b self,
+    fn verify_header_size(
+        &self,
         epoch: u64,
         checkpoint: u64,
         next_checkpoint: u64,
-        previous_epoch: &TrustedEpoch,
-        current_epoch: &'a EitherEpoch,
-    ) -> Result<(Option<&'a Epoch>, Option<&'b Epoch>), Error> {
+        current_epoch: &EitherEpoch,
+    ) -> Result<Option<&Epoch>, Error> {
         let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
         match current_epoch {
-            // ex) t=200 then  200 <= h < 411 (c_val(200) can be borrowed by p_val)
-            Untrusted(untrusted) => {
+            // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
+            Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
                 if hs.iter().any(|h| h.number >= next_checkpoint) {
                     return Err(Error::UnexpectedNextCheckpointHeader(
@@ -131,35 +135,27 @@ impl ETHHeaders {
                         next_checkpoint,
                     ));
                 }
-
-                // Ensure c_val is validated by trusted p_val when the checkpoint header is found
-                if hs.is_empty() {
-                    Ok((None, None))
-                } else {
-                    Ok((Some(untrusted.try_borrow(previous_epoch)?), None))
-                }
+                Ok(None)
             }
-            // ex) t=201 then 201 <= h < 611 (n_val(400) can be borrowed by c_val(200))
-            Trusted(trusted) => {
+            // ex) t=201 then 201 <= h < 611 (at least 1 honest n_val(400) can be in c_val(200))
+            Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
                 let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
                     Some(h) => h
                         .epoch
                         .as_ref()
                         .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok((Some(trusted.epoch()), None)),
+                    None => return Ok(None),
                 };
 
                 // Finish if no headers over next checkpoint were found
                 let hs: Vec<&&ETHHeader> =
                     hs.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if hs.is_empty() {
-                    return Ok((Some(trusted.epoch()), None));
+                    return Ok(None);
                 }
 
-                // Ensure n_val(400) can be borrowed by c_val(200)
                 let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
-                UntrustedEpoch::new(next_epoch).try_borrow(trusted)?;
 
                 // Ensure headers are before the next_next_checkpoint
                 if hs.iter().any(|h| h.number >= next_next_checkpoint) {
@@ -168,7 +164,7 @@ impl ETHHeaders {
                         next_next_checkpoint,
                     ));
                 }
-                Ok((Some(trusted.epoch()), Some(next_epoch)))
+                Ok(Some(next_epoch))
             }
         }
     }
@@ -222,8 +218,30 @@ fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a 
     n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
 }
 
-fn unwrap_c_val<'a>(n: BlockNumber, c_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
-    c_val.ok_or_else(|| Error::MissingCurrentValidatorSet(n))
+fn verify_voters(
+    voters: &Validators,
+    h: &ETHHeader,
+    next_checkpoint: BlockNumber,
+    checkpoint: BlockNumber,
+    current_epoch: &EitherEpoch,
+    previous_epoch: &TrustedEpoch,
+) -> Result<(), Error> {
+    if h.number > next_checkpoint {
+        match current_epoch {
+            Trusted(e) => e.verify_untrusted_voters(voters)?,
+            _ => {
+                return Err(Error::UnexpectedUntrustedValidators(
+                    h.number,
+                    next_checkpoint,
+                ))
+            }
+        }
+    } else if h.number > checkpoint {
+        if let Untrusted(_) = current_epoch {
+            previous_epoch.verify_untrusted_voters(voters)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -232,12 +250,12 @@ mod test {
 
     use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{get_validator_bytes_and_tern_term, ETHHeader};
-    use crate::header::eth_headers::ETHHeaders;
+    use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
     use crate::header::Header;
-    use crate::misc::{ChainId, Validators};
+    use crate::misc::Validators;
     use hex_literal::hex;
     use light_client::types::Any;
     use rstest::rstest;
@@ -410,6 +428,95 @@ mod test {
         let any: Any = header.try_into().unwrap();
         let header = Header::try_from(any).unwrap();
         header.headers.verify_finalized().unwrap();
+    }
+
+    #[test]
+    fn test_success_verify_voters() {
+        let mut h = localnet().previous_epoch_header();
+        let p_vals = vec![vec![1], vec![2]];
+        let p_epoch = Epoch::new(p_vals.into(), 1);
+        let pt_epoch = TrustedEpoch::new(&p_epoch);
+        let c_vals = vec![vec![1], vec![2]];
+        let c_epoch = Epoch::new(c_vals.into(), 1);
+
+        // after next checkpoint
+        h.number = 412;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+
+        // after checkpoint
+        h.number = 212;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+
+        // other
+        h.number = 211;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_error_verify_voters() {
+        let mut h = localnet().previous_epoch_header();
+        let p_vals = vec![vec![1], vec![2]];
+        let p_epoch = Epoch::new(p_vals.into(), 1);
+        let pt_epoch = TrustedEpoch::new(&p_epoch);
+        let c_vals = vec![vec![1], vec![2]];
+        let c_epoch = Epoch::new(c_vals.into(), 1);
+
+        // after next checkpoint
+        h.number = 412;
+        verify_voters(
+            &vec![vec![1]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
+        verify_voters(
+            &vec![vec![0]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
+
+        // after checkpoint
+        h.number = 212;
+        verify_voters(
+            &vec![vec![0]],
+            &h,
+            411,
+            211,
+            &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
+            &pt_epoch,
+        )
+        .unwrap_err();
     }
 
     #[test]
