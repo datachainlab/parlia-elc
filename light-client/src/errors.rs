@@ -32,6 +32,7 @@ pub enum Error {
     UnexpectedCommitmentSlot(Vec<u8>),
     ClientFrozen(ClientId),
     UnexpectedProofHeight(Height, Height),
+    UnexpectedRevisionHeight(u64),
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -371,6 +372,9 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
+            }
+            Error::UnexpectedRevisionHeight(e1) => {
+                write!(f, "UnexpectedRevisionHeight : {}", e1)
             }
         }
     }
