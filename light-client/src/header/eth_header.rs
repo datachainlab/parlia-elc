@@ -152,6 +152,8 @@ impl ETHHeader {
         epoch_count * BLOCKS_PER_EPOCH
     }
 
+    /// Verifies that all headers in the `ETHHeader` struct have valid cascading fields.
+    ///
     /// https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L380
     pub fn verify_cascading_fields(&self, parent: &ETHHeader) -> Result<(), Error> {
         if self.gas_used > self.gas_limit {
@@ -189,6 +191,8 @@ impl ETHHeader {
         Ok(())
     }
 
+    /// Verifies the seal of the current `ETHHeader`.
+    ///
     /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L755
     pub fn verify_seal(
         &self,
@@ -218,6 +222,12 @@ impl ETHHeader {
         Ok(signer)
     }
 
+    /// Verifies the validator rotation for the current `ETHHeader`.
+    ///
+    /// This function checks if the validator rotation is correct by comparing the coinbase address
+    /// with the expected in-turn validator address based on the current block number and epoch.
+    /// It ensures that the difficulty corresponds to the turn-ness of the signer.
+    ///
     fn verify_validator_rotation(&self, epoch: &Epoch) -> Result<(), Error> {
         let offset = (self.number / epoch.turn_length() as u64) as usize % epoch.validators().len();
         let inturn_validator = &epoch.validators()[offset][0..VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN];
@@ -239,6 +249,11 @@ impl ETHHeader {
         Ok(())
     }
 
+    /// Verifies the target attestation of the current `ETHHeader` against its parent header.
+    ///
+    /// This function checks the target vote attestation of the current header to ensure that
+    /// the target block is the direct parent of the current block.
+    ///
     pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
         let target_vote_attestation = self.get_vote_attestation()?;
         let target_data = &target_vote_attestation.data;
@@ -255,6 +270,8 @@ impl ETHHeader {
         Ok(target_vote_attestation)
     }
 
+    /// Verifies the vote attestation of the current `ETHHeader` against its parent header.
+    ///
     /// https://github.com/bnb-chain/bsc/blob/7a19cd27b61b342d24a1584efc7fa00de4a5b4f5/consensus/parlia/parlia.go#L416
     pub fn verify_vote_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
         let vote_attestation = self.verify_target_attestation(parent)?;

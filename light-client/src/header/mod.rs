@@ -93,6 +93,12 @@ impl Header {
     }
 }
 
+/// Verifies the vote attestation of the current `ETHHeader` against its parent header.
+///
+/// This function checks the vote attestation of the current header to ensure that
+/// the target block is the direct parent of the current block and the source block
+/// is the highest justified block.
+///
 fn verify_epoch<'a>(
     consensus_state: &ConsensusState,
     target: &ETHHeader,
