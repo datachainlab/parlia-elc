@@ -51,6 +51,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
+    UnsupportedMinimumTimestamp(Time),
+    UnsupportedMinimumHeight(Height),
     MissingPreviousValidators(BlockNumber),
     MissingCurrentValidators(BlockNumber),
     OutOfTrustingPeriod(Time, Time),
@@ -376,6 +378,12 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
+            }
+            Error::UnsupportedMinimumTimestamp(e1) => {
+                write!(f, "UnsupportedMinimumTimestamp : {:?}", e1)
+            }
+            Error::UnsupportedMinimumHeight(e1) => {
+                write!(f, "UnsupportedMinimumHeight : {:?}", e1)
             }
             Error::UnexpectedRevisionHeight(e1) => {
                 write!(f, "UnexpectedRevisionHeight : {}", e1)
