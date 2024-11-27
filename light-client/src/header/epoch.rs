@@ -57,6 +57,40 @@ impl<'a> TrustedEpoch<'a> {
     pub fn new(inner: &'a Epoch) -> Self {
         Self { inner }
     }
+
+    pub fn verify_untrusted_voters(&self, untrusted_voter: &Validators) -> Result<(), Error> {
+        let (result, found, required) =
+            self.contains_at_least_one_honest_validator(untrusted_voter);
+        if result {
+            return Ok(());
+        }
+        Err(Error::InsufficientHonestValidator(
+            self.inner.hash,
+            found,
+            required,
+        ))
+    }
+
+    pub fn contains_at_least_one_honest_validator(
+        &self,
+        untrusted_voters: &Validators,
+    ) -> (bool, usize, usize) {
+        let mut trusted_validator_count = 0;
+        for x1 in untrusted_voters {
+            if self.validators().contains(x1) {
+                trusted_validator_count += 1;
+            }
+        }
+        let required = Self::threshold(self.validators().len());
+        (
+            trusted_validator_count >= required,
+            trusted_validator_count,
+            required,
+        )
+    }
+    fn threshold(validators_len: usize) -> usize {
+        validators_len - ceil_div(validators_len * 2, 3) + 1
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -70,37 +104,6 @@ impl<'a> UntrustedEpoch<'a> {
     }
     pub fn checkpoint(&self) -> u64 {
         self.inner.checkpoint()
-    }
-    pub fn try_borrow(&'a self, trusted_epoch: &TrustedEpoch) -> Result<&'a Epoch, Error> {
-        let (result, found, required) = self.contains(trusted_epoch);
-        if result {
-            return Ok(self.inner);
-        }
-        Err(Error::InsufficientTrustedValidatorsInUntrustedValidators(
-            self.inner.hash,
-            found,
-            required,
-        ))
-    }
-
-    fn contains(&self, trusted_epoch: &TrustedEpoch) -> (bool, usize, usize) {
-        let trusted_validators = trusted_epoch.validators();
-        let mut trusted_validator_count = 0;
-        for x1 in self.inner.validators() {
-            if trusted_validators.contains(x1) {
-                trusted_validator_count += 1;
-            }
-        }
-        let required = Self::threshold(trusted_validators.len());
-        (
-            trusted_validator_count >= required,
-            trusted_validator_count,
-            required,
-        )
-    }
-
-    fn threshold(validators_len: usize) -> usize {
-        validators_len - ceil_div(validators_len * 2, 3) + 1
     }
 }
 
@@ -117,16 +120,23 @@ impl<'a> EitherEpoch<'a> {
             EitherEpoch::Untrusted(v) => v.checkpoint(),
         }
     }
+
+    pub fn epoch(&self) -> &'a Epoch {
+        match self {
+            EitherEpoch::Trusted(v) => v.inner,
+            EitherEpoch::Untrusted(v) => v.inner,
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
-    use crate::header::epoch::{Epoch, TrustedEpoch, UntrustedEpoch, ValidatorSet};
+    use crate::header::epoch::{Epoch, TrustedEpoch, ValidatorSet};
 
     #[test]
-    pub fn test_untrusted_epoch_try_borrow() {
-        let mut _assert_trusted = |x, y, c_val_borrowable| {
+    pub fn test_verify_voter() {
+        let mut _assert_trusted = |x, y, success: bool| {
             let trusted_validators: ValidatorSet = vec![
                 vec![1],
                 vec![2],
@@ -139,34 +149,18 @@ mod test {
             .into();
             let trusted_epoch = Epoch::new(trusted_validators, 1);
             let trusted_epoch = TrustedEpoch::new(&trusted_epoch);
-            let untrusted_epoch = Epoch::new(
-                ValidatorSet {
-                    validators: x,
-                    hash: [0; 32],
-                },
-                1,
-            );
-            let untrusted_epoch = UntrustedEpoch::new(&untrusted_epoch);
-            let (result, count, required) = untrusted_epoch.contains(&trusted_epoch);
-            assert_eq!(result, c_val_borrowable);
+            let (result, count, required) =
+                trusted_epoch.contains_at_least_one_honest_validator(&x);
+            assert_eq!(result, success);
             assert_eq!(count, y);
             assert_eq!(required, 3);
-            match untrusted_epoch.try_borrow(&trusted_epoch) {
-                Ok(borrowed) => {
-                    if c_val_borrowable {
-                        assert_eq!(borrowed, untrusted_epoch.inner);
-                    } else {
-                        unreachable!("unexpected borrowed")
-                    }
-                }
+            match trusted_epoch.verify_untrusted_voters(&x) {
+                Ok(_) => assert!(success),
                 Err(e) => {
-                    if c_val_borrowable {
-                        unreachable!("unexpected error {:?}", e);
-                    } else {
-                        match e {
-                            Error::InsufficientTrustedValidatorsInUntrustedValidators(_, _, _) => {}
-                            e => unreachable!("unexpected error type {:?}", e),
-                        }
+                    assert!(!success);
+                    match e {
+                        Error::InsufficientHonestValidator(_, _, _) => {}
+                        e => unreachable!("unexpected error type {:?}", e),
                     }
                 }
             }
@@ -302,15 +296,15 @@ mod test {
 
     #[test]
     pub fn test_trust_threshold() {
-        assert_eq!(1, UntrustedEpoch::threshold(1));
-        assert_eq!(1, UntrustedEpoch::threshold(2));
-        assert_eq!(2, UntrustedEpoch::threshold(3));
-        assert_eq!(2, UntrustedEpoch::threshold(4));
-        assert_eq!(2, UntrustedEpoch::threshold(5));
-        assert_eq!(3, UntrustedEpoch::threshold(6));
-        assert_eq!(3, UntrustedEpoch::threshold(7));
-        assert_eq!(3, UntrustedEpoch::threshold(8));
-        assert_eq!(4, UntrustedEpoch::threshold(9));
-        assert_eq!(8, UntrustedEpoch::threshold(21));
+        assert_eq!(1, TrustedEpoch::threshold(1));
+        assert_eq!(1, TrustedEpoch::threshold(2));
+        assert_eq!(2, TrustedEpoch::threshold(3));
+        assert_eq!(2, TrustedEpoch::threshold(4));
+        assert_eq!(2, TrustedEpoch::threshold(5));
+        assert_eq!(3, TrustedEpoch::threshold(6));
+        assert_eq!(3, TrustedEpoch::threshold(7));
+        assert_eq!(3, TrustedEpoch::threshold(8));
+        assert_eq!(4, TrustedEpoch::threshold(9));
+        assert_eq!(8, TrustedEpoch::threshold(21));
     }
 }
