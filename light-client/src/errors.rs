@@ -32,6 +32,7 @@ pub enum Error {
     UnexpectedCommitmentSlot(Vec<u8>),
     ClientFrozen(ClientId),
     UnexpectedProofHeight(Height, Height),
+    UnexpectedRevisionHeight(u64),
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -50,6 +51,8 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
+    UnsupportedMinimumTimestamp(Time),
+    UnsupportedMinimumHeight(Height),
     MissingPreviousValidators(BlockNumber),
     MissingCurrentValidators(BlockNumber),
     OutOfTrustingPeriod(Time, Time),
@@ -60,6 +63,7 @@ pub enum Error {
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     UnexpectedHeaderRevision(u64, u64),
+    UnexpectedLatestHeightRevision(u64, u64),
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
@@ -80,11 +84,10 @@ pub enum Error {
     MissingTurnLengthInEpochBlock(BlockNumber),
     MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
-    MissingCurrentValidatorSet(BlockNumber),
     UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
-    InsufficientTrustedValidatorsInUntrustedValidators(Hash, usize, usize),
+    InsufficientHonestValidator(Hash, usize, usize),
     MissingValidatorToVerifySeal(BlockNumber),
     MissingValidatorToVerifyVote(BlockNumber),
     UnexpectedNextCheckpointHeader(BlockNumber, BlockNumber),
@@ -94,6 +97,7 @@ pub enum Error {
     UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
     UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -162,6 +166,9 @@ impl core::fmt::Display for Error {
             Error::EmptyHeader => write!(f, "EmptyHeader"),
             Error::UnexpectedHeaderRevision(e1, e2) => {
                 write!(f, "UnexpectedHeaderRevision: {} {}", e1, e2)
+            }
+            Error::UnexpectedLatestHeightRevision(e1, e2) => {
+                write!(f, "UnexpectedLatestHeightRevision: {} {}", e1, e2)
             }
             Error::UnexpectedSignature(e1, e2) => write!(f, "UnexpectedSignature: {} {}", e1, e2),
             Error::MissingVanityInExtraData(e1, e2, e3) => {
@@ -309,18 +316,11 @@ impl core::fmt::Display for Error {
             Error::UnexpectedVoteRelation(e1, e2, e3) => {
                 write!(f, "UnexpectedVoteRelation : {} {} {:?}", e1, e2, e3)
             }
-            Error::InsufficientTrustedValidatorsInUntrustedValidators(e1, e2, e3) => {
-                write!(
-                    f,
-                    "InsufficientTrustedValidatorsInUntrustedValidators : {:?} {} {}",
-                    e1, e2, e3
-                )
+            Error::InsufficientHonestValidator(e1, e2, e3) => {
+                write!(f, "InsufficientHonestValidator : {:?} {} {}", e1, e2, e3)
             }
             Error::MissingNextValidatorSet(e1) => {
                 write!(f, "MissingNextValidatorSet : {}", e1)
-            }
-            Error::MissingCurrentValidatorSet(e1) => {
-                write!(f, "MissingCurrentValidatorSet : {}", e1)
             }
             Error::MissingValidatorToVerifySeal(e1) => {
                 write!(f, "MissingValidatorToVerifySeal : {:?}", e1)
@@ -371,6 +371,18 @@ impl core::fmt::Display for Error {
                     "UnexpectedCurrentValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
                     e1, e2, e3, e4
                 )
+            }
+            Error::UnexpectedUntrustedValidators(e1, e2) => {
+                write!(f, "UnexpectedUntrustedValidators : {} {}", e1, e2)
+            }
+            Error::UnsupportedMinimumTimestamp(e1) => {
+                write!(f, "UnsupportedMinimumTimestamp : {:?}", e1)
+            }
+            Error::UnsupportedMinimumHeight(e1) => {
+                write!(f, "UnsupportedMinimumHeight : {:?}", e1)
+            }
+            Error::UnexpectedRevisionHeight(e1) => {
+                write!(f, "UnexpectedRevisionHeight : {}", e1)
             }
         }
     }

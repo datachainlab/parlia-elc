@@ -45,7 +45,11 @@ pub struct VoteAttestation {
 }
 
 impl VoteAttestation {
-    pub fn verify(&self, number: BlockNumber, validators: &Validators) -> Result<(), Error> {
+    pub fn verify(
+        &self,
+        number: BlockNumber,
+        validators: &Validators,
+    ) -> Result<Validators, Error> {
         if self.vote_address_set.count() > validators.len() {
             return Err(Error::UnexpectedVoteAddressCount(
                 number,
@@ -53,6 +57,7 @@ impl VoteAttestation {
                 validators.len(),
             ));
         }
+        let mut voted = Vec::new();
         let mut voted_addr = Vec::new();
         for (i, val) in validators.iter().enumerate() {
             if !self.vote_address_set.get(i) {
@@ -62,6 +67,7 @@ impl VoteAttestation {
             let bls_pub_key = PublicKey::from_bytes(bls_pub_key_bytes)
                 .map_err(|e| Error::UnexpectedBLSPubkey(number, e))?;
             voted_addr.push(bls_pub_key);
+            voted.push(val.clone())
         }
 
         let required = ceil_div(validators.len() * 2, 3);
@@ -82,7 +88,7 @@ impl VoteAttestation {
                 pub_keys_ref.len(),
             ));
         }
-        Ok(())
+        Ok(voted)
     }
 }
 
@@ -148,7 +154,7 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 mod test {
     use crate::errors::Error;
     use crate::fixture::*;
-    use crate::header::eth_header::{get_validator_bytes_and_tern_term, ETHHeader};
+    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::vote_attestation::{
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,
@@ -239,7 +245,7 @@ mod test {
             hash: [0u8; 32],
             epoch: None,
         };
-        let (val, turn) = get_validator_bytes_and_tern_term(&header.extra_data).unwrap();
+        let (val, turn) = get_validator_bytes_and_turn_length(&header.extra_data).unwrap();
         assert_eq!(val.len(), 8);
         assert_eq!(turn, 4);
         let err = header.get_vote_attestation().unwrap_err();

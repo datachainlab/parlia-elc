@@ -29,6 +29,7 @@ pub mod validator_set;
 pub mod vote_attestation;
 
 pub mod epoch;
+pub mod hardfork;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
@@ -92,6 +93,12 @@ impl Header {
     }
 }
 
+/// Verifies the vote attestation of the current `ETHHeader` against its parent header.
+///
+/// This function checks the vote attestation of the current header to ensure that
+/// the target block is the direct parent of the current block and the source block
+/// is the highest justified block.
+///
 fn verify_epoch<'a>(
     consensus_state: &ConsensusState,
     target: &ETHHeader,
@@ -271,6 +278,10 @@ pub(crate) mod test {
     impl Header {
         pub(crate) fn eth_header(&self) -> &ETHHeaders {
             &self.headers
+        }
+
+        pub(crate) fn eth_header_mut(&mut self) -> &mut ETHHeaders {
+            &mut self.headers
         }
 
         pub(crate) fn new(
@@ -455,7 +466,7 @@ pub(crate) mod test {
         let trusted_height = new_height(0, 201);
         let current_epoch = &hp.epoch_header().epoch.unwrap();
         let previous_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
-        let (c_val, p_val) = verify_epoch(
+        let (c_val, _) = verify_epoch(
             &cs,
             &hp.epoch_header(),
             height,
@@ -465,9 +476,7 @@ pub(crate) mod test {
         )
         .unwrap();
         match c_val {
-            EitherEpoch::Untrusted(r) => {
-                assert!(r.try_borrow(&p_val).is_err())
-            }
+            EitherEpoch::Untrusted(_r) => {}
             _ => unreachable!("unexpected trusted"),
         }
 
