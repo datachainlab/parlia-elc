@@ -58,6 +58,7 @@ pub struct ETHHeader {
     pub blob_gas_used: Option<u64>,
     pub excess_blob_gas: Option<u64>,
     pub parent_beacon_root: Option<Vec<u8>>,
+    pub requests_hash: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
@@ -133,6 +134,11 @@ impl ETHHeader {
                     stream.append_empty_data();
                 }
                 stream.append(parent_beacon_root);
+
+                // https://github.com/bnb-chain/bsc/blob/e2f2111a85fecabb4782099338aca21bf58bde09/core/types/block.go#L776
+                if let Some(value) = &self.requests_hash {
+                    stream.append(value);
+                }
             }
         }
         stream.finalize_unbounded_list();
@@ -378,6 +384,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let requests_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -445,6 +452,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             withdrawals_hash,
             blob_gas_used,
             parent_beacon_root,
+            requests_hash,
             hash,
             epoch,
         })
