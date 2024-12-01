@@ -58,6 +58,7 @@ pub struct ETHHeader {
     pub blob_gas_used: Option<u64>,
     pub excess_blob_gas: Option<u64>,
     pub parent_beacon_root: Option<Vec<u8>>,
+    pub requests_hash: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
@@ -133,6 +134,11 @@ impl ETHHeader {
                     stream.append_empty_data();
                 }
                 stream.append(parent_beacon_root);
+
+                // https://github.com/bnb-chain/bsc/blob/e2f2111a85fecabb4782099338aca21bf58bde09/core/types/block.go#L776
+                if let Some(value) = &self.requests_hash {
+                    stream.append(value);
+                }
             }
         }
         stream.finalize_unbounded_list();
@@ -378,6 +384,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let requests_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -415,72 +422,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             return Err(Error::UnexpectedNonce(number));
         }
 
-        // create block hash
-        let mut stream = RlpStream::new();
-        stream.begin_unbounded_list();
-        stream.append(&parent_hash);
-        stream.append(&uncle_hash);
-        stream.append(&coinbase);
-        stream.append(&root.to_vec());
-        stream.append(&tx_hash);
-        stream.append(&receipt_hash);
-        stream.append(&bloom);
-        stream.append(&difficulty);
-        stream.append(&number);
-        stream.append(&gas_limit);
-        stream.append(&gas_used);
-        stream.append(&timestamp);
-        stream.append(&extra_data);
-        stream.append(&mix_digest);
-        stream.append(&nonce);
-
-        if base_fee_per_gas.is_some()
-            || withdrawals_hash.is_some()
-            || blob_gas_used.is_some()
-            || excess_blob_gas.is_some()
-            || parent_beacon_root.is_some()
-        {
-            if let Some(v) = base_fee_per_gas {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if withdrawals_hash.is_some()
-            || blob_gas_used.is_some()
-            || excess_blob_gas.is_some()
-            || parent_beacon_root.is_some()
-        {
-            if let Some(v) = &withdrawals_hash {
-                stream.append(v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if blob_gas_used.is_some() || excess_blob_gas.is_some() || parent_beacon_root.is_some() {
-            if let Some(v) = blob_gas_used {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if excess_blob_gas.is_some() || parent_beacon_root.is_some() {
-            if let Some(v) = excess_blob_gas {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if parent_beacon_root.is_some() {
-            if let Some(v) = &parent_beacon_root {
-                stream.append(v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        stream.finalize_unbounded_list();
-        let buffer_vec: Vec<u8> = stream.out().to_vec();
-        let hash: Hash = keccak_256(&buffer_vec);
+        let hash: Hash = keccak_256(value.header.as_slice());
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
             let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
@@ -510,6 +452,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             withdrawals_hash,
             blob_gas_used,
             parent_beacon_root,
+            requests_hash,
             hash,
             epoch,
         })
