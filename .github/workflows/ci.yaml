@@ -49,3 +49,10 @@ jobs:
         env:
           MINIMUM_TIMESTAMP_SUPPORTED: 1731495592
           MINIMUM_HEIGHT_SUPPORTED: 100
+      - uses: actions-rs/cargo@v1
+        name: unit-test-dev-test-pascal
+        with:
+          command: test
+          args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test_pascal
+        env:
+          PASCAL_TIMESTAMP: 1

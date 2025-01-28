@@ -20,11 +20,14 @@ fn main() {
             std::env::var("MINIMUM_TIMESTAMP_SUPPORTED").unwrap_or_else(|_| "0".to_string());
         let minimum_height_supported =
             std::env::var("MINIMUM_HEIGHT_SUPPORTED").unwrap_or_else(|_| "0".to_string());
+        let pascal_timestamp =
+            std::env::var("PASCAL_TIMESTAMP").unwrap_or_else(|_| "0".to_string());
         writeln!(
             file,
-            "pub const MINIMUM_TIMESTAMP_SUPPORTED: u64 = {};\npub const MINIMUM_HEIGHT_SUPPORTED: u64 = {};",
+            "pub const MINIMUM_TIMESTAMP_SUPPORTED: u64 = {};\npub const MINIMUM_HEIGHT_SUPPORTED: u64 = {};\npub const PASCAL_TIMESTAMP: u64 = {};",
             minimum_time_stamp_supported,
-            minimum_height_supported
+            minimum_height_supported,
+            pascal_timestamp
         )
             .unwrap();
     }

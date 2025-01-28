@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 use crate::header::epoch::Epoch;
-
+use crate::header::hardfork::PASCAL_TIMESTAMP;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
@@ -431,6 +431,10 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             None
         };
 
+        if PASCAL_TIMESTAMP > 0 && timestamp >= PASCAL_TIMESTAMP && requests_hash.is_none() {
+            return Err(Error::MissingRequestsHash(number));
+        }
+
         Ok(Self {
             parent_hash,
             uncle_hash,
@@ -470,10 +474,9 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::localnet::Localnet;
     use crate::fixture::{decode_header, localnet, Network};
     use crate::header::epoch::Epoch;
-    use crate::misc::ChainId;
+
     use alloc::boxed::Box;
     use hex_literal::hex;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
@@ -831,5 +834,32 @@ pub(crate) mod test {
             .unwrap();
         assert!(&header.requests_hash.is_some());
         assert_eq!(32, header.requests_hash.unwrap().len());
+    }
+
+    #[cfg(feature = "dev")]
+    mod dev_test_pascal {
+        use crate::errors::Error;
+        use crate::fixture::{decode_header, localnet};
+        use crate::header::eth_header::ETHHeader;
+        use hex_literal::hex;
+        use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+
+        #[test]
+        fn test_error_missing_request_hash() {
+            // number = 401
+            let raw_header = localnet().epoch_header_plus_1_rlp();
+            let raw_header = EthHeader { header: raw_header };
+            let result = ETHHeader::try_from(raw_header).unwrap_err();
+            match result {
+                Error::MissingRequestsHash(_) => {}
+                _ => unreachable!(),
+            }
+        }
+
+        #[test]
+        fn test_success_after_bep466() {
+            let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
+            decode_header(header);
+        }
     }
 }

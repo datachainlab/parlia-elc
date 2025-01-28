@@ -98,6 +98,7 @@ pub enum Error {
     UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
+    MissingRequestsHash(BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -383,6 +384,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedRevisionHeight(e1) => {
                 write!(f, "UnexpectedRevisionHeight : {}", e1)
+            }
+            Error::MissingRequestsHash(e1) => {
+                write!(f, "MissingRequestsHash : {}", e1)
             }
         }
     }
