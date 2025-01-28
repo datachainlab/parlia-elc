@@ -55,4 +55,6 @@ jobs:
           command: test
           args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test_pascal
         env:
+          MINIMUM_TIMESTAMP_SUPPORTED: 1
+          MINIMUM_HEIGHT_SUPPORTED: 1
           PASCAL_TIMESTAMP: 1
