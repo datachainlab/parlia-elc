@@ -1156,7 +1156,7 @@ mod test {
     }
 
     #[cfg(feature = "dev")]
-    mod dev_test {
+    mod dev_test_min {
         use crate::client::test::MockClientReader;
         use crate::client::ParliaLightClient;
         use crate::client_state::ClientState;

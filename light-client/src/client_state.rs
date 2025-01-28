@@ -706,7 +706,7 @@ mod test {
         }
     }
     #[cfg(feature = "dev")]
-    mod dev_test {
+    mod dev_test_min {
         use crate::client_state::ClientState;
         use crate::consensus_state::ConsensusState;
         use crate::errors::Error;
