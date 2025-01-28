@@ -431,6 +431,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             None
         };
 
+        #[allow(clippy::absurd_extreme_comparisons)]
         if PASCAL_TIMESTAMP > 0 && timestamp >= PASCAL_TIMESTAMP && requests_hash.is_none() {
             return Err(Error::MissingRequestsHash(number));
         }
