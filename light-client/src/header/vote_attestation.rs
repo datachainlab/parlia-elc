@@ -242,6 +242,7 @@ mod test {
             blob_gas_used: None,
             excess_blob_gas: None,
             parent_beacon_root: None,
+            requests_hash: None,
             hash: [0u8; 32],
             epoch: None,
         };

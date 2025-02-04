@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 use crate::header::epoch::Epoch;
-
+use crate::header::hardfork::PASCAL_TIMESTAMP;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
@@ -58,6 +58,7 @@ pub struct ETHHeader {
     pub blob_gas_used: Option<u64>,
     pub excess_blob_gas: Option<u64>,
     pub parent_beacon_root: Option<Vec<u8>>,
+    pub requests_hash: Option<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
@@ -133,6 +134,11 @@ impl ETHHeader {
                     stream.append_empty_data();
                 }
                 stream.append(parent_beacon_root);
+
+                // https://github.com/bnb-chain/bsc/blob/e2f2111a85fecabb4782099338aca21bf58bde09/core/types/block.go#L776
+                if let Some(value) = &self.requests_hash {
+                    stream.append(value);
+                }
             }
         }
         stream.finalize_unbounded_list();
@@ -378,6 +384,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
+        let requests_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -415,72 +422,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             return Err(Error::UnexpectedNonce(number));
         }
 
-        // create block hash
-        let mut stream = RlpStream::new();
-        stream.begin_unbounded_list();
-        stream.append(&parent_hash);
-        stream.append(&uncle_hash);
-        stream.append(&coinbase);
-        stream.append(&root.to_vec());
-        stream.append(&tx_hash);
-        stream.append(&receipt_hash);
-        stream.append(&bloom);
-        stream.append(&difficulty);
-        stream.append(&number);
-        stream.append(&gas_limit);
-        stream.append(&gas_used);
-        stream.append(&timestamp);
-        stream.append(&extra_data);
-        stream.append(&mix_digest);
-        stream.append(&nonce);
-
-        if base_fee_per_gas.is_some()
-            || withdrawals_hash.is_some()
-            || blob_gas_used.is_some()
-            || excess_blob_gas.is_some()
-            || parent_beacon_root.is_some()
-        {
-            if let Some(v) = base_fee_per_gas {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if withdrawals_hash.is_some()
-            || blob_gas_used.is_some()
-            || excess_blob_gas.is_some()
-            || parent_beacon_root.is_some()
-        {
-            if let Some(v) = &withdrawals_hash {
-                stream.append(v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if blob_gas_used.is_some() || excess_blob_gas.is_some() || parent_beacon_root.is_some() {
-            if let Some(v) = blob_gas_used {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if excess_blob_gas.is_some() || parent_beacon_root.is_some() {
-            if let Some(v) = excess_blob_gas {
-                stream.append(&v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        if parent_beacon_root.is_some() {
-            if let Some(v) = &parent_beacon_root {
-                stream.append(v);
-            } else {
-                stream.append_empty_data();
-            }
-        }
-        stream.finalize_unbounded_list();
-        let buffer_vec: Vec<u8> = stream.out().to_vec();
-        let hash: Hash = keccak_256(&buffer_vec);
+        let hash: Hash = keccak_256(value.header.as_slice());
 
         let epoch = if number % BLOCKS_PER_EPOCH == 0 {
             let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
@@ -488,6 +430,11 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         } else {
             None
         };
+
+        #[allow(clippy::absurd_extreme_comparisons)]
+        if PASCAL_TIMESTAMP > 0 && timestamp >= PASCAL_TIMESTAMP && requests_hash.is_none() {
+            return Err(Error::MissingRequestsHash(number));
+        }
 
         Ok(Self {
             parent_hash,
@@ -510,6 +457,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             withdrawals_hash,
             blob_gas_used,
             parent_beacon_root,
+            requests_hash,
             hash,
             epoch,
         })
@@ -527,9 +475,11 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::{localnet, Network};
+    use crate::fixture::{decode_header, localnet, Network};
     use crate::header::epoch::Epoch;
+
     use alloc::boxed::Box;
+    use hex_literal::hex;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
@@ -869,6 +819,48 @@ pub(crate) mod test {
                 assert_eq!(e2, header.difficulty);
             }
             err => unreachable!("{:?}", err),
+        }
+    }
+    #[test]
+    fn test_success_bep466_header() {
+        let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
+        let header = decode_header(header);
+        let chain_id = localnet().network();
+
+        let prev_epoch = hex!("f90484a0cdbf04705a1f6ed4989217c1e89f4c0ab22b3122df2f48c09e2fef3d0aa4b5b4a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794b2e42bc54d19116d2348ac83461e2e0915d508ada08b3fad7b45691957d1bf905d2601a14e12d48d1da89205d22b4eb582af803e3da0629579638c8423e2836b6ad04eed7a7dcda123a3f4b6d2ab488121fac9df6c10a03cd1ebc99cd975182c58de47be968c97658cff4c465e20654185f408a851403cb9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028207088402625a008229a884678f47eeb90223d883010503846765746888676f312e32332e35856c696e75780000002f5b9772048fdaaa7e6631e438625ca25c857a3727ea28e565b5ad484c80ff8ed9a2aff68923f36e8975c377abd0c62a8a66ac0d2519b3eb4c14951312006c9e8b3829dc68cab6bcf0a7876ea32e7a748c697d01345145485561305b24958ec28bac0db09ee3e6cfc1769fd72b493a6c44118598abb600bec65e66aafd23acd46e0d1e0bda9d8101dbbdbf369fd9a13701eafb76870cb220843b8c6476824bfa15ad21d1bf47e3df7d8d99b105a24ebca95a84b035e6af22880b9eaf1d6a4a233920a57ecf09f8a6b89d7f5ca3cfe6484fe04db2de85453e0936b441c339a26d10cfa71b50b611e87c256a23edc8b7e55558abe1a7ff94262bacb53d600e657270ee6af9172c5a31c24498a162147dd7e1bfdcef9107f8ae0fb860a70e55ed7260c28c69880ca12370872c2059f0540ca88c1cb7a6ba772ed6e7f62a5e11c31e117ea483a4c6b46cf213681092f5273512ad15e030f52c3485838801a5ae99ece187028adbf6f543b34bd4a48199dc9b58ea47b16d06049a370a65f848820706a0ab18ec6cce429c9918cb4f354ffda5c0119871589de4829c9871ee7eddbce0ed820707a0cdbf04705a1f6ed4989217c1e89f4c0ab22b3122df2f48c09e2fef3d0aa4b5b48099019414f8ca7f80176785458468355225878402b80bbe64de4de083cbd909163b1c8dd0564e07516e6bbd0ec64381847f8f3d94d75992fd04243b538ba9348d01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
+        let prev_epoch = decode_header(prev_epoch);
+
+        header
+            .verify_seal(&prev_epoch.epoch.unwrap(), &chain_id)
+            .unwrap();
+        assert!(&header.requests_hash.is_some());
+        assert_eq!(32, header.requests_hash.unwrap().len());
+    }
+
+    #[cfg(feature = "dev")]
+    mod dev_test_pascal {
+        use crate::errors::Error;
+        use crate::fixture::{decode_header, localnet};
+        use crate::header::eth_header::ETHHeader;
+        use hex_literal::hex;
+        use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+
+        #[test]
+        fn test_error_missing_request_hash() {
+            // number = 401
+            let raw_header = localnet().epoch_header_plus_1_rlp();
+            let raw_header = EthHeader { header: raw_header };
+            let result = ETHHeader::try_from(raw_header).unwrap_err();
+            match result {
+                Error::MissingRequestsHash(_) => {}
+                _ => unreachable!(),
+            }
+        }
+
+        #[test]
+        fn test_success_after_bep466() {
+            let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
+            decode_header(header);
         }
     }
 }

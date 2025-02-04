@@ -26,3 +26,13 @@ This is available in dev feature only.
 ```sh
 BSC_BLOCKS_PER_EPOCH=20 cargo build --features=dev
 ```
+
+### Build Parameters
+
+Parameters can be specified to check for acceptable headers at build time.
+
+| Name | Description                                                                                                                                     | 
+| --- |-------------------------------------------------------------------------------------------------------------------------------------------------| 
+| `MINIMUM_TIMESTAMP_SUPPORTED` | Timestamp of the lowest header this light client will accept                                                                                    | 
+| `MINIMUM_HEIGHT_SUPPORTED` | Height of the lowest header this light client will accept                                                                                       | 
+| `PASCAL_TIMESTAMP` | Timestamp of the first Pascal Hardfork header, used to check the header structure after Pascal Hardfork; if 0 is specified, no check is made.   | 
