@@ -98,7 +98,7 @@ pub enum Error {
     UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
     UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
-    MissingRequestsHash(BlockNumber),
+    MissingRequestsHash(BlockNumber, u64, u64),
     UnexpectedRequestsHash(BlockNumber, Vec<u8>),
     UnexpectedHeaderRLP(BlockNumber),
 
@@ -387,8 +387,8 @@ impl core::fmt::Display for Error {
             Error::UnexpectedRevisionHeight(e1) => {
                 write!(f, "UnexpectedRevisionHeight : {}", e1)
             }
-            Error::MissingRequestsHash(e1) => {
-                write!(f, "MissingRequestsHash : {}", e1)
+            Error::MissingRequestsHash(e1, e2, e3) => {
+                write!(f, "MissingRequestsHash : {} {} {}", e1, e2, e3)
             }
             Error::UnexpectedRequestsHash(e1, e2) => {
                 write!(f, "UnexpectedRequestsHash : {} {:?}", e1, e2)

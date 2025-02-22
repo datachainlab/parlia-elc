@@ -434,7 +434,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         if PASCAL_TIMESTAMP > 0 {
             if timestamp >= PASCAL_TIMESTAMP {
                 if requests_hash.is_none() {
-                    return Err(Error::MissingRequestsHash(number));
+                    return Err(Error::MissingRequestsHash(number, timestamp, PASCAL_TIMESTAMP));
                 }
                 // Ensure no more header element.
                 if rlp.try_next().is_ok() {
