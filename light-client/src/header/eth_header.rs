@@ -317,18 +317,17 @@ impl ETHHeader {
 
     pub fn previous_epoch_block_number(&self) -> BlockNumber {
         let current_epoch = self.current_epoch_block_number();
-        if current_epoch < ROLENTZ_HEIGHT {
-            return current_epoch - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
-        }
-        let prev_candidate = current_epoch - BLOCKS_PER_EPOCH;
-        if prev_candidate >= ROLENTZ_HEIGHT {
-            return prev_candidate;
-        }
-        // previous is before rolentz
-        let blocks_to_rolentz = ROLENTZ_HEIGHT - prev_candidate;
-        let epochs_to_rolentz =
-            (blocks_to_rolentz / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
-        prev_candidate + epochs_to_rolentz
+        previous_epoch_block_number_from(current_epoch)
+    }
+
+    pub fn next_epoch_block_number(&self) -> BlockNumber {
+        let current_epoch = self.current_epoch_block_number();
+        next_epoch_block_number_from(current_epoch)
+    }
+
+    pub fn next_next_epoch_block_number(&self) -> BlockNumber {
+        let next_epoch = self.next_epoch_block_number();
+        next_epoch_block_number_from(next_epoch)
     }
 }
 
@@ -350,7 +349,22 @@ pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
     before_epoch + after_epoch
 }
 
-pub fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
+fn previous_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
+    if base_epoch_block_number < ROLENTZ_HEIGHT {
+        return base_epoch_block_number - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+    }
+    let prev_candidate = base_epoch_block_number - BLOCKS_PER_EPOCH;
+    if prev_candidate >= ROLENTZ_HEIGHT {
+        return prev_candidate;
+    }
+    // previous is before rolentz
+    let blocks_to_rolentz = ROLENTZ_HEIGHT - prev_candidate;
+    let epochs_to_rolentz =
+        (blocks_to_rolentz / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+    prev_candidate + epochs_to_rolentz
+}
+
+fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
     if base_epoch_block_number >= ROLENTZ_HEIGHT {
         return base_epoch_block_number + BLOCKS_PER_EPOCH;
     }

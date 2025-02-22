@@ -8,7 +8,7 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
-use super::eth_header::{next_epoch_block_number_from, ETHHeader};
+use super::eth_header::ETHHeader;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -36,12 +36,11 @@ impl ETHHeaders {
         let current_epoch_block_number = self.target.current_epoch_block_number();
         let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
 
-        let next_epoch_block_number = next_epoch_block_number_from(current_epoch_block_number);
+        let next_epoch_block_number = self.target.next_epoch_block_number();
         let next_checkpoint = next_epoch_block_number + current_epoch.checkpoint();
 
-        let next_next_epoch_block_number = next_epoch_block_number_from(next_epoch_block_number);
         let n_val = self.verify_header_size(
-            next_next_epoch_block_number,
+            self.target.next_next_epoch_block_number(),
             checkpoint,
             next_checkpoint,
             current_epoch,
@@ -277,9 +276,7 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::eth_header::{
-        get_validator_bytes_and_turn_length, next_epoch_block_number_from, ETHHeader,
-    };
+    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
@@ -647,7 +644,8 @@ mod test {
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
             let epoch = headers.target.current_epoch_block_number();
-            let next_epoch_checkpoint = next_epoch_block_number_from(epoch) + c_val.checkpoint();
+            let next_epoch_checkpoint =
+                headers.target.next_epoch_block_number() + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -701,9 +699,9 @@ mod test {
                  include_limit: bool| {
             let n_val = n_val_header.epoch.clone().unwrap();
             let epoch = headers.target.current_epoch_block_number();
-            let next_epoch = next_epoch_block_number_from(epoch);
+            let next_epoch = headers.target.next_epoch_block_number();
             let next_next_epoch_checkpoint =
-                next_epoch_block_number_from(next_epoch) + n_val.checkpoint();
+                headers.target.next_next_epoch_block_number() + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
