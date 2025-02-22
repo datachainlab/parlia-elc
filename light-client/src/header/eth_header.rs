@@ -350,18 +350,15 @@ pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
 }
 
 fn previous_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
-    if base_epoch_block_number < ROLENTZ_HEIGHT {
+    if base_epoch_block_number <= ROLENTZ_HEIGHT {
         return base_epoch_block_number - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
     }
     let prev_candidate = base_epoch_block_number - BLOCKS_PER_EPOCH;
     if prev_candidate >= ROLENTZ_HEIGHT {
         return prev_candidate;
     }
-    // previous is before rolentz
-    let blocks_to_rolentz = ROLENTZ_HEIGHT - prev_candidate;
-    let epochs_to_rolentz =
-        (blocks_to_rolentz / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
-    prev_candidate + epochs_to_rolentz
+    //FIXME: OK? rolentz == 2201 ? then 2200
+    (ROLENTZ_HEIGHT / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ
 }
 
 fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
@@ -528,10 +525,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 #[cfg(test)]
 pub(crate) mod test {
     use crate::errors::Error;
-    use crate::header::eth_header::{
-        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
-        PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
-    };
+    use crate::header::eth_header::{current_epoch_block_number, next_epoch_block_number_from, previous_epoch_block_number_from, ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY, PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN};
 
     use rlp::RlpStream;
     use rstest::*;
@@ -542,6 +536,8 @@ pub(crate) mod test {
     use alloc::boxed::Box;
     use hex_literal::hex;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+    use crate::header::constant::{BLOCKS_PER_EPOCH, BLOCKS_PER_EPOCH_BEFORE_ROLENTZ};
+    use crate::header::hardfork::ROLENTZ_HEIGHT;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
         let mut stream = RlpStream::new();
@@ -898,6 +894,82 @@ pub(crate) mod test {
         assert_eq!(32, header.requests_hash.unwrap().len());
     }
 
+    #[test]
+    fn test_current_epoch_number() {
+        let is_epoch = ROLENTZ_HEIGHT % BLOCKS_PER_EPOCH_BEFORE_ROLENTZ == 0;
+        if is_epoch {
+            // Around rolentz
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT - 1), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT), ROLENTZ_HEIGHT);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + 1), ROLENTZ_HEIGHT);
+
+            // Around rolentz + [199,201]
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ - 1), ROLENTZ_HEIGHT);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ), ROLENTZ_HEIGHT);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ + 1), ROLENTZ_HEIGHT);
+
+            // Around rolentz + 1 epoch
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH - 1), ROLENTZ_HEIGHT);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+            assert_eq!(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH + 1), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+        } else {
+           //TODO test for rolents being not epoch
+            unreachable!("Not implemented");
+        }
+    }
+
+    #[test]
+    fn test_previous_epoch_number() {
+        let is_epoch = ROLENTZ_HEIGHT % BLOCKS_PER_EPOCH_BEFORE_ROLENTZ == 0;
+        if is_epoch {
+            // Around rolentz
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT - 1)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ * 2);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + 1)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+
+            // Around rolentz + [199,201]
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ - 1)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ + 1)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+
+            // Around rolentz + 1 epoch
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH - 1)), ROLENTZ_HEIGHT - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH)), ROLENTZ_HEIGHT);
+            assert_eq!(previous_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH + 1)), ROLENTZ_HEIGHT);
+
+            assert_eq!(previous_epoch_block_number_from(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ), ROLENTZ_HEIGHT);
+            assert_eq!(previous_epoch_block_number_from(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH), ROLENTZ_HEIGHT);
+        } else {
+            //TODO test for rolents being not epoch
+            unreachable!("Not implemented");
+        }
+
+    }
+
+    #[test]
+    fn test_next_epoch_number() {
+        let is_epoch = ROLENTZ_HEIGHT % BLOCKS_PER_EPOCH_BEFORE_ROLENTZ == 0;
+        if is_epoch {
+            // Around rolentz
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT - 1)), ROLENTZ_HEIGHT);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + 1)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+
+            // Around rolentz + [199,201]
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ - 1)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ + 1)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+
+            // Around rolentz + 1 epoch
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH - 1)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH * 2);
+            assert_eq!(next_epoch_block_number_from(current_epoch_block_number(ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH + 1)), ROLENTZ_HEIGHT + BLOCKS_PER_EPOCH * 2);
+        } else {
+            //TODO test for rolents being not epoch
+            unreachable!("Not implemented");
+        }
+    }
+
     #[cfg(feature = "dev")]
     mod dev_test_after_pascal {
         use crate::errors::Error;
@@ -943,9 +1015,10 @@ pub(crate) mod test {
     mod dev_test_before_pascal {
         use crate::errors::Error;
         use crate::fixture::{decode_header, localnet};
-        use crate::header::eth_header::ETHHeader;
+        use crate::header::eth_header::{current_epoch_block_number, ETHHeader};
         use hex_literal::hex;
         use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+        use crate::header::hardfork::ROLENTZ_HEIGHT;
 
         #[test]
         fn test_error_request_hash() {
