@@ -1,1 +1,2 @@
-pub const BLOCKS_PER_EPOCH: u64 = 200;
+pub const BLOCKS_PER_EPOCH: u64 = 1000;
+pub const BLOCKS_PER_EPOCH_BEFORE_ROLENTZ: u64 = 200;

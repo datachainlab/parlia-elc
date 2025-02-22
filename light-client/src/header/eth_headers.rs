@@ -8,8 +8,7 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
-use super::eth_header::ETHHeader;
-use super::BLOCKS_PER_EPOCH;
+use super::eth_header::{next_epoch_block_number_from, ETHHeader};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -34,10 +33,19 @@ impl ETHHeaders {
         previous_epoch: &TrustedEpoch,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
-        let epoch = self.target.number / BLOCKS_PER_EPOCH;
-        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
-        let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let n_val = self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
+        let current_epoch_block_number = self.target.current_epoch_block_number();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let next_epoch_block_number = next_epoch_block_number_from(current_epoch_block_number);
+        let next_checkpoint = next_epoch_block_number + current_epoch.checkpoint();
+
+        let next_next_epoch_block_number = next_epoch_block_number_from(next_epoch_block_number);
+        let n_val = self.verify_header_size(
+            next_next_epoch_block_number,
+            checkpoint,
+            next_checkpoint,
+            current_epoch,
+        )?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -140,7 +148,7 @@ impl ETHHeaders {
     /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size(
         &self,
-        epoch: u64,
+        next_next_epoch_block_number: BlockNumber,
         checkpoint: u64,
         next_checkpoint: u64,
         current_epoch: &EitherEpoch,
@@ -176,7 +184,7 @@ impl ETHHeaders {
                     return Ok(None);
                 }
 
-                let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
+                let next_next_checkpoint = next_next_epoch_block_number + next_epoch.checkpoint();
 
                 // Ensure headers are before the next_next_checkpoint
                 if hs.iter().any(|h| h.number >= next_next_checkpoint) {
@@ -269,8 +277,9 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::constant::BLOCKS_PER_EPOCH;
-    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
+    use crate::header::eth_header::{
+        get_validator_bytes_and_turn_length, next_epoch_block_number_from, ETHHeader,
+    };
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
@@ -637,8 +646,8 @@ mod test {
                  c_val: &EitherEpoch,
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_epoch_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + c_val.checkpoint();
+            let epoch = headers.target.current_epoch_block_number();
+            let next_epoch_checkpoint = next_epoch_block_number_from(epoch) + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -691,8 +700,10 @@ mod test {
                  n_val_header: ETHHeader,
                  include_limit: bool| {
             let n_val = n_val_header.epoch.clone().unwrap();
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_next_epoch_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + n_val.checkpoint();
+            let epoch = headers.target.current_epoch_block_number();
+            let next_epoch = next_epoch_block_number_from(epoch);
+            let next_next_epoch_checkpoint =
+                next_epoch_block_number_from(next_epoch) + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);

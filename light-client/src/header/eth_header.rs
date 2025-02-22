@@ -10,12 +10,11 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::header::constant::{BLOCKS_PER_EPOCH, BLOCKS_PER_EPOCH_BEFORE_ROLENTZ};
 use crate::header::epoch::Epoch;
-use crate::header::hardfork::PASCAL_TIMESTAMP;
+use crate::header::hardfork::{PASCAL_TIMESTAMP, ROLENTZ_HEIGHT};
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
-
-use super::BLOCKS_PER_EPOCH;
 
 const DIFFICULTY_INTURN: u64 = 2;
 const DIFFICULTY_NOTURN: u64 = 1;
@@ -290,7 +289,7 @@ impl ETHHeader {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
-        let attestation_bytes = if self.number % BLOCKS_PER_EPOCH != 0 {
+        let attestation_bytes = if !self.is_epoch() {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
@@ -309,8 +308,57 @@ impl ETHHeader {
     }
 
     pub fn is_epoch(&self) -> bool {
-        self.number % BLOCKS_PER_EPOCH == 0
+        is_epoch(self.number)
     }
+
+    pub fn current_epoch_block_number(&self) -> BlockNumber {
+        current_epoch_block_number(self.number)
+    }
+
+    pub fn previous_epoch_block_number(&self) -> BlockNumber {
+        let current_epoch = self.current_epoch_block_number();
+        if current_epoch < ROLENTZ_HEIGHT {
+            return current_epoch - BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+        }
+        let prev_candidate = current_epoch - BLOCKS_PER_EPOCH;
+        if prev_candidate >= ROLENTZ_HEIGHT {
+            return prev_candidate;
+        }
+        // previous is before rolentz
+        let blocks_to_rolentz = ROLENTZ_HEIGHT - prev_candidate;
+        let epochs_to_rolentz =
+            (blocks_to_rolentz / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+        prev_candidate + epochs_to_rolentz
+    }
+}
+
+fn is_epoch(number: BlockNumber) -> bool {
+    if number >= ROLENTZ_HEIGHT {
+        return number % BLOCKS_PER_EPOCH == 0;
+    }
+    number % BLOCKS_PER_EPOCH_BEFORE_ROLENTZ == 0
+}
+
+pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
+    if number < ROLENTZ_HEIGHT {
+        return (number / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+    }
+    let before_epoch =
+        (ROLENTZ_HEIGHT / BLOCKS_PER_EPOCH_BEFORE_ROLENTZ) * BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+    let after = number - before_epoch;
+    let after_epoch = (after / BLOCKS_PER_EPOCH) * BLOCKS_PER_EPOCH;
+    before_epoch + after_epoch
+}
+
+pub fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
+    if base_epoch_block_number >= ROLENTZ_HEIGHT {
+        return base_epoch_block_number + BLOCKS_PER_EPOCH;
+    }
+    let next_candidate = base_epoch_block_number + BLOCKS_PER_EPOCH_BEFORE_ROLENTZ;
+    if next_candidate <= ROLENTZ_HEIGHT {
+        return next_candidate;
+    }
+    base_epoch_block_number + BLOCKS_PER_EPOCH
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -410,7 +458,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch = if number % BLOCKS_PER_EPOCH == 0 {
+        let epoch = if is_epoch(number) {
             let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
             Some(Epoch::new(validators.into(), turn_length))
         } else {
