@@ -145,19 +145,6 @@ impl ETHHeader {
         Ok(keccak_256(stream.out().as_ref()))
     }
 
-    pub fn previous_epoch(&self) -> BlockNumber {
-        let epoch_count = self.number / BLOCKS_PER_EPOCH;
-        if epoch_count == 0 {
-            return 0;
-        }
-        (epoch_count - 1) * BLOCKS_PER_EPOCH
-    }
-
-    pub fn current_epoch(&self) -> BlockNumber {
-        let epoch_count = self.number / BLOCKS_PER_EPOCH;
-        epoch_count * BLOCKS_PER_EPOCH
-    }
-
     /// Verifies that all headers in the `ETHHeader` struct have valid cascading fields.
     ///
     /// https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L380
