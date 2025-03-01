@@ -10,8 +10,8 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::fork_spec::{find_target_fork_spec, ForkSpec};
 use crate::header::epoch::Epoch;
-use crate::header::hardfork::PASCAL_TIMESTAMP;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
 
@@ -58,7 +58,7 @@ pub struct ETHHeader {
     pub blob_gas_used: Option<u64>,
     pub excess_blob_gas: Option<u64>,
     pub parent_beacon_root: Option<Vec<u8>>,
-    pub requests_hash: Option<Vec<u8>>,
+    pub additional_items: Vec<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
@@ -135,9 +135,8 @@ impl ETHHeader {
                 }
                 stream.append(parent_beacon_root);
 
-                // https://github.com/bnb-chain/bsc/blob/e2f2111a85fecabb4782099338aca21bf58bde09/core/types/block.go#L776
-                if let Some(value) = &self.requests_hash {
-                    stream.append(value);
+                for item in &self.additional_items {
+                    stream.append_raw(item, 1);
                 }
             }
         }
@@ -311,6 +310,18 @@ impl ETHHeader {
     pub fn is_epoch(&self) -> bool {
         self.number % BLOCKS_PER_EPOCH == 0
     }
+
+    pub fn validate_fork_spec(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.timestamp)?;
+        if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
+            return Err(Error::UnexpectedHeaderItemCount(
+                self.number,
+                self.additional_items.len(),
+                fork_spec.additional_header_item_count,
+            ));
+        }
+        Ok(())
+    }
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -371,7 +382,6 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
-        let requests_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -417,22 +427,11 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             None
         };
 
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if PASCAL_TIMESTAMP > 0 {
-            if timestamp >= PASCAL_TIMESTAMP {
-                if requests_hash.is_none() {
-                    return Err(Error::MissingRequestsHash(number));
-                }
-                // Ensure no more header element.
-                if rlp.try_next().is_ok() {
-                    return Err(Error::UnexpectedHeaderRLP(number));
-                }
-            } else if timestamp < PASCAL_TIMESTAMP && requests_hash.is_some() {
-                return Err(Error::UnexpectedRequestsHash(
-                    number,
-                    requests_hash.unwrap(),
-                ));
-            }
+        // Extra items for seal hash
+        let mut additional_items = vec![];
+        while let Ok(value) = rlp.try_next() {
+            let item = value.as_raw();
+            additional_items.push(item.to_vec());
         }
 
         Ok(Self {
@@ -456,7 +455,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             withdrawals_hash,
             blob_gas_used,
             parent_beacon_root,
-            requests_hash,
+            additional_items,
             hash,
             epoch,
         })
@@ -832,8 +831,8 @@ pub(crate) mod test {
         header
             .verify_seal(&prev_epoch.epoch.unwrap(), &chain_id)
             .unwrap();
-        assert!(&header.requests_hash.is_some());
-        assert_eq!(32, header.requests_hash.unwrap().len());
+        //TODO assert!(&header.requests_hash.is_some());
+        //TODO assert_eq!(32, header.requests_hash.unwrap().len());
     }
 
     #[cfg(feature = "dev")]

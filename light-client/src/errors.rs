@@ -101,6 +101,8 @@ pub enum Error {
     MissingRequestsHash(BlockNumber),
     UnexpectedRequestsHash(BlockNumber, Vec<u8>),
     UnexpectedHeaderRLP(BlockNumber),
+    MissingForkSpec(BlockNumber, u64),
+    UnexpectedHeaderItemCount(BlockNumber, usize, u64),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -118,6 +120,11 @@ pub enum Error {
     UnexpectedBLSSignatureLength(usize),
     UnexpectedTurnLength(u8),
     UnexpectedExtraDataLength(usize),
+
+    // Fork Spec
+    MissingTimestampOrHeightInForkSpec,
+    UnexpectedForkSpecTimestampOrder(u64, u64),
+    UnexpectedForkSpecHeightOrder(u64, u64),
 
     // Misbehaviour
     MissingHeader1,
@@ -395,6 +402,21 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedHeaderRLP(e1) => {
                 write!(f, "UnexpectedHeaderRLP : {}", e1)
+            }
+            Error::MissingForkSpec(e1, e2) => {
+                write!(f, "MissingForkSpec : {}  {}", e1, e2)
+            }
+            Error::UnexpectedHeaderItemCount(e1, e2, e3) => {
+                write!(f, "UnexpectedHeaderItemCount : {} {} {}", e1, e2, e3)
+            }
+            Error::MissingTimestampOrHeightInForkSpec => {
+                write!(f, "MissingTimestampOrHeightInForkSpec")
+            }
+            Error::UnexpectedForkSpecTimestampOrder(e1, e2) => {
+                write!(f, "UnexpectedForkSpecTimestampOrder : {} {}", e1, e2)
+            }
+            Error::UnexpectedForkSpecHeightOrder(e1, e2) => {
+                write!(f, "UnexpectedForkSpecHeightOrder : {} {}", e1, e2)
             }
         }
     }

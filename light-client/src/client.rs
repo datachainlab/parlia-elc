@@ -481,9 +481,24 @@ mod test {
     use crate::fixture::{localnet, Network};
     use crate::header::Header;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;
+
+    fn after_pascal() -> ForkSpec {
+        ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1, // requestsHash
+        }
+    }
+
+    fn before_pascal() -> ForkSpec {
+        ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 0, // requestsHash
+        }
+    }
 
     impl Default for ClientState {
         fn default() -> Self {
@@ -497,6 +512,7 @@ mod test {
                 max_clock_drift: core::time::Duration::new(1, 0),
                 latest_height: Default::default(),
                 frozen: false,
+                fork_specs: vec![after_pascal()],
             }
         }
     }
@@ -1034,7 +1050,10 @@ mod test {
             },
         );
         let ctx = MockClientReader {
-            client_state: Some(ClientState::default()),
+            client_state: Some(ClientState {
+                fork_specs: vec![before_pascal()],
+                ..Default::default()
+            }),
             consensus_state: mock_consensus_state,
         };
 
@@ -1103,6 +1122,7 @@ mod test {
         let ctx = MockClientReader {
             client_state: Some(ClientState {
                 chain_id: ChainId::new(9999),
+                fork_specs: vec![before_pascal()],
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state.clone(),

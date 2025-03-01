@@ -7,6 +7,14 @@ import "gogoproto/gogo.proto";
 import "ibc/core/client/v1/client.proto";
 import "google/protobuf/duration.proto";
 
+message ForkSpec {
+  oneof height_or_timestamp {
+    uint64 height = 1;
+    uint64 timestamp = 2;
+  }
+  uint64 additional_header_item_count = 3;
+}
+
 message ClientState {
   uint64 chain_id = 1;
 
@@ -19,6 +27,8 @@ message ClientState {
   google.protobuf.Duration max_clock_drift = 6 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
   bool frozen = 7;
+
+  repeated ForkSpec fork_specs = 8;
 }
 
 message ETHHeader {

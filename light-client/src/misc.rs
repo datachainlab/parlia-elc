@@ -73,6 +73,10 @@ impl<'a> RlpIterator<'a> {
         Self { rlp, index: 0 }
     }
 
+    pub fn item_count(&self) -> Result<usize, Error> {
+        self.rlp.item_count().map_err(Error::RLPDecodeError)
+    }
+
     pub fn try_next(&mut self) -> Result<Rlp<'a>, Error> {
         let index = self.index;
         let result = self.rlp.at(index).map_err(Error::RLPDecodeError)?;

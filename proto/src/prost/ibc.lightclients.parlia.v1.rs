@@ -1,5 +1,24 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ForkSpec {
+    #[prost(uint64, tag = "3")]
+    pub additional_header_item_count: u64,
+    #[prost(oneof = "fork_spec::HeightOrTimestamp", tags = "1, 2")]
+    pub height_or_timestamp: ::core::option::Option<fork_spec::HeightOrTimestamp>,
+}
+/// Nested message and enum types in `ForkSpec`.
+pub mod fork_spec {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum HeightOrTimestamp {
+        #[prost(uint64, tag = "1")]
+        Height(u64),
+        #[prost(uint64, tag = "2")]
+        Timestamp(u64),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClientState {
     #[prost(uint64, tag = "1")]
     pub chain_id: u64,
@@ -21,6 +40,8 @@ pub struct ClientState {
     >,
     #[prost(bool, tag = "7")]
     pub frozen: bool,
+    #[prost(message, repeated, tag = "8")]
+    pub fork_specs: ::prost::alloc::vec::Vec<ForkSpec>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

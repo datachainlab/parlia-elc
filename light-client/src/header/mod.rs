@@ -8,7 +8,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
-
+use crate::fork_spec::ForkSpec;
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
@@ -74,6 +74,13 @@ impl Header {
 
     pub fn block_hash(&self) -> &Hash {
         &self.headers.target.hash
+    }
+
+    pub fn validate_fork_specs(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        for header in &self.headers.all {
+            header.validate_fork_spec(fork_specs)?;
+        }
+        Ok(())
     }
 
     pub fn verify(

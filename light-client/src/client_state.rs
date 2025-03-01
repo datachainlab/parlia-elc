@@ -11,7 +11,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+use crate::fork_spec::ForkSpec;
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
@@ -34,6 +34,9 @@ pub struct ClientState {
     /// State
     pub latest_height: Height,
     pub frozen: bool,
+
+    /// fork specs
+    pub fork_specs: Vec<ForkSpec>,
 }
 
 impl ClientState {
@@ -98,18 +101,8 @@ impl ClientState {
     }
 
     fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
-        // Ensure header has supported timestamp
-        let ts = header.timestamp()?;
-
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if ts.as_unix_timestamp_secs() < MINIMUM_TIMESTAMP_SUPPORTED {
-            return Err(Error::UnsupportedMinimumTimestamp(ts));
-        }
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if header.height().revision_height() < MINIMUM_HEIGHT_SUPPORTED {
-            return Err(Error::UnsupportedMinimumHeight(header.height()));
-        }
         // Ensure last consensus state is within the trusting period
+        let ts = header.timestamp()?;
         validate_within_trusting_period(
             now,
             self.trusting_period,
@@ -126,6 +119,9 @@ impl ClientState {
                 header_height.revision_number(),
             ));
         }
+
+        // Ensure satisfying fork specs
+        header.validate_fork_specs(self.fork_specs.as_slice())?;
 
         // Ensure header is valid
         header.verify(&self.chain_id, cs)
@@ -207,6 +203,12 @@ impl TryFrom<RawClientState> for ClientState {
 
         let frozen = value.frozen;
 
+        let mut fork_specs = Vec::with_capacity(value.fork_specs.len());
+        for fs in value.fork_specs {
+            let fork_spec = ForkSpec::try_from(fs)?;
+            fork_specs.push(fork_spec)
+        }
+
         Ok(Self {
             chain_id,
             ibc_store_address,
@@ -215,12 +217,14 @@ impl TryFrom<RawClientState> for ClientState {
             trusting_period,
             max_clock_drift,
             frozen,
+            fork_specs,
         })
     }
 }
 
 impl From<ClientState> for RawClientState {
     fn from(value: ClientState) -> Self {
+        let fork_specs = value.fork_specs.into_iter().map(|fs| fs.into()).collect();
         Self {
             chain_id: value.chain_id.id(),
             ibc_store_address: value.ibc_store_address.to_vec(),
@@ -232,6 +236,7 @@ impl From<ClientState> for RawClientState {
             trusting_period: Some(value.trusting_period.into()),
             max_clock_drift: Some(value.max_clock_drift.into()),
             frozen: value.frozen.to_owned(),
+            fork_specs,
         }
     }
 }
@@ -296,13 +301,22 @@ mod test {
     use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use crate::header::Header;
     use crate::misc::{new_timestamp, ChainId};
     use alloc::boxed::Box;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ForkSpec as RawForkSpec;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
         ClientState as RawClientState, EthHeader,
     };
+
+    fn after_pascal() -> ForkSpec {
+        ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1, // requestsHash
+        }
+    }
 
     #[rstest]
     #[case::localnet(localnet())]
@@ -315,6 +329,7 @@ mod test {
             max_clock_drift: Default::default(),
             latest_height: Default::default(),
             frozen: false,
+            fork_specs: vec![after_pascal()],
         };
 
         // fail: check_header
@@ -411,6 +426,7 @@ mod test {
             max_clock_drift: Default::default(),
             latest_height: Default::default(),
             frozen: false,
+            fork_specs: vec![after_pascal()],
         };
         let mut cons_state = ConsensusState {
             state_root: [0u8; 32],
@@ -501,6 +517,7 @@ mod test {
             trusting_period: None,
             max_clock_drift: None,
             frozen: false,
+            fork_specs: vec![RawForkSpec::from(after_pascal())],
         };
         let err = ClientState::try_from(cs.clone()).unwrap_err();
         match err {
