@@ -29,7 +29,6 @@ pub mod validator_set;
 pub mod vote_attestation;
 
 pub mod epoch;
-pub mod hardfork;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {

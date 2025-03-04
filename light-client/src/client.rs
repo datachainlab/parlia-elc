@@ -20,7 +20,7 @@ use crate::commitment::{
 use crate::consensus_state::ConsensusState;
 use crate::errors::{ClientError, Error};
 use crate::fork_spec::HeightOrTimestamp;
-use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+use crate::header::constant::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
 use crate::header::Header;
 use crate::message::ClientMessage;
 use crate::misbehaviour::Misbehaviour;
@@ -609,7 +609,7 @@ mod test {
     #[rstest]
     #[case::localnet(localnet())]
     fn test_success_create_client(#[case] hp: Box<dyn Network>) {
-        let (client_state , consensus_state, height, timestamp) = hp.success_create_client();
+        let (client_state, consensus_state, height, timestamp) = hp.success_create_client();
         let client = ParliaLightClient;
         let mock_consensus_state = BTreeMap::new();
         let ctx = MockClientReader {
@@ -646,7 +646,7 @@ mod test {
     #[case::localnet(localnet())]
     fn test_error_create_client(#[case] hp: Box<dyn Network>) {
         let runner = |func: Box<dyn FnOnce(ClientState) -> ClientState>| {
-            let (client_state , consensus_state, _, _) = hp.success_create_client();
+            let (client_state, consensus_state, _, _) = hp.success_create_client();
             let client = ParliaLightClient;
             let mock_consensus_state = BTreeMap::new();
             let ctx = MockClientReader {
@@ -1218,20 +1218,22 @@ mod test {
         use crate::client::ParliaLightClient;
         use crate::client_state::ClientState;
         use crate::consensus_state::ConsensusState;
-        use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
-        use crate::misc::{new_height, new_timestamp};
-        use light_client::{types::Any, LightClient};
-        use std::collections::BTreeMap;
-        use std::prelude::rust_2015::Box;
-        use rstest::rstest;
         use crate::fixture::{localnet, Network};
         use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
+        use crate::header::constant::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+        use crate::misc::{new_height, new_timestamp};
+        use light_client::{types::Any, LightClient};
+        use rstest::rstest;
+        use std::collections::BTreeMap;
+        use std::prelude::rust_2015::Box;
 
         #[rstest]
         #[case::localnet(localnet())]
         fn test_supported_value(#[case] hp: Box<dyn Network>) {
-            let runner = |func: Box<dyn FnOnce(ClientState, ConsensusState) -> (ClientState, ConsensusState)>| {
-                let (client_state , consensus_state, _, _) = hp.success_create_client();
+            let runner = |func: Box<
+                dyn FnOnce(ClientState, ConsensusState) -> (ClientState, ConsensusState),
+            >| {
+                let (client_state, consensus_state, _, _) = hp.success_create_client();
                 let client = ParliaLightClient;
                 let mock_consensus_state = BTreeMap::new();
                 let ctx = MockClientReader {
@@ -1241,12 +1243,12 @@ mod test {
                 let mut any_client_state: Any = client_state.try_into().unwrap();
                 let mut any_consensus_state: Any = consensus_state.try_into().unwrap();
                 let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
-                let mut consensus_state = ConsensusState::try_from(any_consensus_state.clone()).unwrap();
+                let mut consensus_state =
+                    ConsensusState::try_from(any_consensus_state.clone()).unwrap();
                 (client_state, consensus_state) = func(client_state, consensus_state);
                 let any_client_state: Any = client_state.try_into().unwrap();
                 let any_consensus_state: Any = consensus_state.try_into().unwrap();
-                client
-                    .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
+                client.create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
             };
 
             let result = runner(Box::new(|mut client_state, mut cons_state| {
@@ -1265,12 +1267,10 @@ mod test {
             let result = runner(Box::new(|mut client_state, mut cons_state| {
                 cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
                 client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
-                client_state.fork_specs = vec![
-                    ForkSpec {
-                        height_or_timestamp: HeightOrTimestamp::Height(MINIMUM_HEIGHT_SUPPORTED - 1),
-                        additional_header_item_count: 0,
-                    }
-                ];
+                client_state.fork_specs = vec![ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(MINIMUM_HEIGHT_SUPPORTED - 1),
+                    additional_header_item_count: 0,
+                }];
                 (client_state, cons_state)
             }));
             assert_err(result.unwrap_err(), "UnsupportedMinimumHeightFork");
@@ -1278,12 +1278,10 @@ mod test {
             let result = runner(Box::new(|mut client_state, mut cons_state| {
                 cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
                 client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
-                client_state.fork_specs = vec![
-                    ForkSpec {
-                        height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED - 1),
-                        additional_header_item_count: 0,
-                    }
-                ];
+                client_state.fork_specs = vec![ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED - 1),
+                    additional_header_item_count: 0,
+                }];
                 (client_state, cons_state)
             }));
             assert_err(result.unwrap_err(), "UnsupportedMinimumTimestampFork");
@@ -1292,14 +1290,13 @@ mod test {
             runner(Box::new(|mut client_state, mut cons_state| {
                 cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
                 client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
-                client_state.fork_specs = vec![
-                    ForkSpec {
-                        height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED),
-                        additional_header_item_count: 0,
-                    }
-                ];
+                client_state.fork_specs = vec![ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED),
+                    additional_header_item_count: 0,
+                }];
                 (client_state, cons_state)
-            })).unwrap();
+            }))
+            .unwrap();
         }
     }
 }
