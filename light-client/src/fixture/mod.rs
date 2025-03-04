@@ -6,6 +6,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
+use crate::client_state::ClientState;
+use crate::consensus_state::ConsensusState;
 
 pub mod localnet;
 
@@ -37,6 +39,7 @@ pub trait Network {
     fn success_update_client_epoch_input(&self) -> UpdateClientEpochInput;
     fn success_update_client_continuous_input(&self) -> Vec<Vec<Vec<u8>>>;
     fn error_update_client_non_neighboring_epoch_input(&self) -> Vec<u8>;
+    fn success_create_client(&self) -> (Vec<u8>, Vec<u8>, u64, u64);
 }
 
 pub struct UpdateClientNonEpochInput {

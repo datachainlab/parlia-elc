@@ -19,6 +19,7 @@ use crate::commitment::{
 };
 use crate::consensus_state::ConsensusState;
 use crate::errors::{ClientError, Error};
+use crate::fork_spec::HeightOrTimestamp;
 use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
 use crate::header::Header;
 use crate::message::ClientMessage;
@@ -175,6 +176,28 @@ impl InnerLightClient {
         }
         if height.revision_height() == 0 {
             return Err(Error::UnexpectedRevisionHeight(height.revision_height()));
+        }
+
+        if client_state.fork_specs.is_empty() {
+            return Err(Error::EmptyForkSpec);
+        }
+        for spec in &client_state.fork_specs {
+            match spec.height_or_timestamp {
+                HeightOrTimestamp::Height(height) =>
+                {
+                    #[allow(clippy::absurd_extreme_comparisons)]
+                    if height < MINIMUM_HEIGHT_SUPPORTED {
+                        return Err(Error::UnsupportedMinimumHeightForkSpec(height));
+                    }
+                }
+                HeightOrTimestamp::Time(time) =>
+                {
+                    #[allow(clippy::absurd_extreme_comparisons)]
+                    if time < MINIMUM_TIMESTAMP_SUPPORTED {
+                        return Err(Error::UnsupportedMinimumTimestampForkSpec(time));
+                    }
+                }
+            }
         }
 
         Ok(CreateClientResult {
@@ -583,10 +606,10 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_success_create_client() {
-        let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
-        let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_create_client(#[case] hp: Box<dyn Network>) {
+        let (client_state , consensus_state, height, timestamp) = hp.success_create_client();
         let client = ParliaLightClient;
         let mock_consensus_state = BTreeMap::new();
         let ctx = MockClientReader {
@@ -598,13 +621,13 @@ mod test {
         let result = client
             .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
             .unwrap();
-        assert_eq!(result.height.revision_height(), 32132891);
+        assert_eq!(result.height.revision_height(), height);
         match result.message {
             ProxyMessage::UpdateState(data) => {
                 assert_eq!(data.post_height, result.height);
 
                 let cs = ConsensusState::try_from(any_consensus_state).unwrap();
-                assert_eq!(data.timestamp.as_unix_timestamp_secs(), 1695891806);
+                assert_eq!(data.timestamp.as_unix_timestamp_secs(), timestamp);
                 assert_eq!(
                     data.timestamp.as_unix_timestamp_secs(),
                     cs.timestamp.as_unix_timestamp_secs()
@@ -618,25 +641,39 @@ mod test {
             _ => unreachable!("invalid commitment"),
         }
     }
-    #[test]
-    fn test_error_create_client() {
-        let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
-        let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
-        let client = ParliaLightClient;
-        let mock_consensus_state = BTreeMap::new();
-        let ctx = MockClientReader {
-            client_state: None,
-            consensus_state: mock_consensus_state,
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_create_client(#[case] hp: Box<dyn Network>) {
+        let runner = |func: Box<dyn FnOnce(ClientState) -> ClientState>| {
+            let (client_state , consensus_state, _, _) = hp.success_create_client();
+            let client = ParliaLightClient;
+            let mock_consensus_state = BTreeMap::new();
+            let ctx = MockClientReader {
+                client_state: None,
+                consensus_state: mock_consensus_state,
+            };
+            let mut any_client_state: Any = client_state.try_into().unwrap();
+            let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
+            client_state = func(client_state);
+            let any_client_state: Any = client_state.try_into().unwrap();
+            let any_consensus_state: Any = consensus_state.try_into().unwrap();
+            client
+                .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
+                .unwrap_err()
         };
-        let mut any_client_state: Any = client_state.try_into().unwrap();
-        let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
-        client_state.latest_height = Height::new(0, 0);
-        any_client_state = client_state.try_into().unwrap();
-        let any_consensus_state: Any = consensus_state.try_into().unwrap();
-        let result = client
-            .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
-            .unwrap_err();
+
+        let result = runner(Box::new(|mut client_state| {
+            client_state.latest_height = Height::new(0, 0);
+            client_state
+        }));
         assert_err(result, "UnexpectedRevisionHeight");
+
+        let result = runner(Box::new(|mut client_state| {
+            client_state.fork_specs = vec![];
+            client_state
+        }));
+        assert_err(result, "EmptyForkSpec");
     }
 
     #[rstest]
@@ -1177,67 +1214,92 @@ mod test {
 
     #[cfg(feature = "dev")]
     mod dev_test_min {
-        use crate::client::test::MockClientReader;
+        use crate::client::test::{assert_err, MockClientReader};
         use crate::client::ParliaLightClient;
         use crate::client_state::ClientState;
         use crate::consensus_state::ConsensusState;
         use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
         use crate::misc::{new_height, new_timestamp};
-        use hex_literal::hex;
         use light_client::{types::Any, LightClient};
         use std::collections::BTreeMap;
+        use std::prelude::rust_2015::Box;
+        use rstest::rstest;
+        use crate::fixture::{localnet, Network};
+        use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 
-        #[test]
-        fn test_supported_timestamp() {
-            let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
-            let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
-            let client = ParliaLightClient::default();
-            let mock_consensus_state = BTreeMap::new();
-            let ctx = MockClientReader {
-                client_state: None,
-                consensus_state: mock_consensus_state,
+        #[rstest]
+        #[case::localnet(localnet())]
+        fn test_supported_value(#[case] hp: Box<dyn Network>) {
+            let runner = |func: Box<dyn FnOnce(ClientState, ConsensusState) -> (ClientState, ConsensusState)>| {
+                let (client_state , consensus_state, _, _) = hp.success_create_client();
+                let client = ParliaLightClient;
+                let mock_consensus_state = BTreeMap::new();
+                let ctx = MockClientReader {
+                    client_state: None,
+                    consensus_state: mock_consensus_state,
+                };
+                let mut any_client_state: Any = client_state.try_into().unwrap();
+                let mut any_consensus_state: Any = consensus_state.try_into().unwrap();
+                let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
+                let mut consensus_state = ConsensusState::try_from(any_consensus_state.clone()).unwrap();
+                (client_state, consensus_state) = func(client_state, consensus_state);
+                let any_client_state: Any = client_state.try_into().unwrap();
+                let any_consensus_state: Any = consensus_state.try_into().unwrap();
+                client
+                    .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
             };
-            let any_client_state: Any = client_state.try_into().unwrap();
-            let any_consensus_state: Any = consensus_state.try_into().unwrap();
-            let err = client
-                .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
-                .unwrap_err();
-            assert!(
-                format!("{:?}", err).contains("UnsupportedMinimumTimestamp"),
-                "{}",
-                err
-            );
-        }
 
-        #[test]
-        fn test_supported_height() {
-            let client_state = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a2000000000000000000000000000000000000000000000000000000000000000002205109b9ea90f2a040880a305320410c0843d").to_vec();
-            let consensus_state = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
-            let client = ParliaLightClient::default();
-            let mock_consensus_state = BTreeMap::new();
-            let ctx = MockClientReader {
-                client_state: None,
-                consensus_state: mock_consensus_state,
-            };
-            let any_client_state: Any = client_state.try_into().unwrap();
-            let any_consensus_state: Any = consensus_state.try_into().unwrap();
+            let result = runner(Box::new(|mut client_state, mut cons_state| {
+                cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED - 1).unwrap();
+                (client_state, cons_state)
+            }));
+            assert_err(result.unwrap_err(), "UnsupportedMinimumTimestamp");
 
-            let mut client_state: ClientState = any_client_state.try_into().unwrap();
-            client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED - 1);
-            let mut consensus_state: ConsensusState = any_consensus_state.try_into().unwrap();
-            consensus_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
+            let result = runner(Box::new(|mut client_state, mut cons_state| {
+                cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
+                client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED - 1);
+                (client_state, cons_state)
+            }));
+            assert_err(result.unwrap_err(), "UnsupportedMinimumHeight");
 
-            let any_client_state: Any = client_state.try_into().unwrap();
-            let any_consensus_state: Any = consensus_state.try_into().unwrap();
+            let result = runner(Box::new(|mut client_state, mut cons_state| {
+                cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
+                client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
+                client_state.fork_specs = vec![
+                    ForkSpec {
+                        height_or_timestamp: HeightOrTimestamp::Height(MINIMUM_HEIGHT_SUPPORTED - 1),
+                        additional_header_item_count: 0,
+                    }
+                ];
+                (client_state, cons_state)
+            }));
+            assert_err(result.unwrap_err(), "UnsupportedMinimumHeightFork");
 
-            let err = client
-                .create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
-                .unwrap_err();
-            assert!(
-                format!("{:?}", err).contains("UnsupportedMinimumHeight"),
-                "{}",
-                err
-            );
+            let result = runner(Box::new(|mut client_state, mut cons_state| {
+                cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
+                client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
+                client_state.fork_specs = vec![
+                    ForkSpec {
+                        height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED - 1),
+                        additional_header_item_count: 0,
+                    }
+                ];
+                (client_state, cons_state)
+            }));
+            assert_err(result.unwrap_err(), "UnsupportedMinimumTimestampFork");
+
+            // success
+            runner(Box::new(|mut client_state, mut cons_state| {
+                cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED).unwrap();
+                client_state.latest_height = new_height(0, MINIMUM_HEIGHT_SUPPORTED);
+                client_state.fork_specs = vec![
+                    ForkSpec {
+                        height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED),
+                        additional_header_item_count: 0,
+                    }
+                ];
+                (client_state, cons_state)
+            })).unwrap();
         }
     }
 }

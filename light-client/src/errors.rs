@@ -33,6 +33,11 @@ pub enum Error {
     ClientFrozen(ClientId),
     UnexpectedProofHeight(Height, Height),
     UnexpectedRevisionHeight(u64),
+    EmptyForkSpec,
+    UnsupportedMinimumTimestampForkSpec(u64),
+    UnsupportedMinimumHeightForkSpec(u64),
+    UnsupportedMinimumTimestamp(Time),
+    UnsupportedMinimumHeight(Height),
 
     // ConsensusState error
     AccountNotFound(Address),
@@ -51,8 +56,6 @@ pub enum Error {
     UnexpectedValidatorsHashSize(Vec<u8>),
 
     // Header error
-    UnsupportedMinimumTimestamp(Time),
-    UnsupportedMinimumHeight(Height),
     MissingPreviousValidators(BlockNumber),
     MissingCurrentValidators(BlockNumber),
     OutOfTrustingPeriod(Time, Time),
@@ -417,6 +420,15 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedForkSpecHeightOrder(e1, e2) => {
                 write!(f, "UnexpectedForkSpecHeightOrder : {} {}", e1, e2)
+            }
+            Error::EmptyForkSpec => {
+                write!(f, "EmptyForkSpec")
+            }
+            Error::UnsupportedMinimumTimestampForkSpec(e1) => {
+                write!(f, "UnsupportedMinimumTimestampForkSpec : {}", e1)
+            }
+            Error::UnsupportedMinimumHeightForkSpec(e1) => {
+                write!(f, "UnsupportedMinimumHeightForkSpec : {}", e1)
             }
         }
     }
