@@ -19,7 +19,7 @@ use crate::commitment::{
 };
 use crate::consensus_state::ConsensusState;
 use crate::errors::{ClientError, Error};
-use crate::fork_spec::{validate_sorted_asc, HeightOrTimestamp};
+use crate::fork_spec::{verify_sorted_asc, HeightOrTimestamp};
 use crate::header::constant::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
 use crate::header::Header;
 use crate::message::ClientMessage;
@@ -182,7 +182,7 @@ impl InnerLightClient {
             return Err(Error::EmptyForkSpec);
         }
 
-        validate_sorted_asc(&client_state.fork_specs)?;
+        verify_sorted_asc(&client_state.fork_specs)?;
 
         for spec in &client_state.fork_specs {
             match spec.height_or_timestamp {
