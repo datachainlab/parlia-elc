@@ -121,7 +121,7 @@ impl ClientState {
         }
 
         // Ensure satisfying fork specs
-        header.validate_fork_specs(self.fork_specs.as_slice())?;
+        header.verify_fork_rule(&self.fork_specs)?;
 
         // Ensure header is valid
         header.verify(&self.chain_id, cs)

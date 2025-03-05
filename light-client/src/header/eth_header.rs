@@ -311,7 +311,7 @@ impl ETHHeader {
         self.number % BLOCKS_PER_EPOCH == 0
     }
 
-    pub fn validate_fork_spec(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
         let fork_spec = find_target_fork_spec(fork_specs, self.number, self.timestamp)?;
         if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
             return Err(Error::UnexpectedHeaderItemCount(
@@ -476,6 +476,7 @@ pub(crate) mod test {
     use crate::fixture::{decode_header, localnet, Network};
     use crate::header::epoch::Epoch;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use alloc::boxed::Box;
     use hex_literal::hex;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
@@ -817,6 +818,75 @@ pub(crate) mod test {
                 assert_eq!(e2, header.difficulty);
             }
             err => unreachable!("{:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_fork_rule(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.additional_items = vec![vec![1], vec![2]];
+        header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+            }])
+            .unwrap();
+
+        header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64 + 1,
+                },
+            ])
+            .unwrap();
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.additional_items = vec![vec![1]];
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64 - 1,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64 - 1,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
         }
     }
 }

@@ -75,9 +75,9 @@ impl Header {
         &self.headers.target.hash
     }
 
-    pub fn validate_fork_specs(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
         for header in &self.headers.all {
-            header.validate_fork_spec(fork_specs)?;
+            header.verify_fork_rule(fork_specs)?;
         }
         Ok(())
     }
