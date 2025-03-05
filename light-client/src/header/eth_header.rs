@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
-
+use elliptic_curve::bigint::U64;
 use elliptic_curve::sec1::ToEncodedPoint;
 use hex_literal::hex;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-
 use patricia_merkle_trie::keccak::keccak_256;
+use primitive_types::U256;
 use rlp::{Rlp, RlpStream};
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
@@ -49,7 +49,7 @@ pub struct ETHHeader {
     pub number: BlockNumber,
     pub gas_limit: u64,
     pub gas_used: u64,
-    pub timestamp: u64,
+    timestamp: u64,
     pub extra_data: Vec<u8>,
     pub mix_digest: Vec<u8>,
     pub nonce: Vec<u8>,
@@ -158,15 +158,15 @@ impl ETHHeader {
 
         if parent.number != self.number - 1
             || parent.hash != self.parent_hash.as_slice()
-            || parent.timestamp >= self.timestamp
+            || parent.milli_timestamp() >= self.milli_timestamp()
         {
             return Err(Error::UnexpectedHeaderRelation(
                 parent.number,
                 self.number,
                 parent.hash,
                 self.parent_hash.clone(),
-                parent.timestamp,
-                self.timestamp,
+                parent.milli_timestamp(),
+                self.milli_timestamp(),
             ));
         }
 
@@ -312,7 +312,7 @@ impl ETHHeader {
     }
 
     pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.timestamp)?;
+        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
         if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
             return Err(Error::UnexpectedHeaderItemCount(
                 self.number,
@@ -321,6 +321,15 @@ impl ETHHeader {
             ));
         }
         Ok(())
+    }
+
+    // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
+    pub fn milli_timestamp(&self) -> u64 {
+        let mut milliseconds: u64 = 0;
+        if self.mix_digest != EMPTY_HASH {
+            milliseconds = U256::from_big_endian(&self.mix_digest).low_u64();
+        }
+        self.timestamp * 1000 + milliseconds
     }
 }
 
@@ -694,8 +703,8 @@ pub(crate) mod test {
                 assert_eq!(block.number, child_no);
                 assert_eq!(parent.hash, parent_hash);
                 assert_eq!(block.parent_hash, child_parent_hash);
-                assert_eq!(parent.timestamp, parent_ts);
-                assert_eq!(block.timestamp, child_ts);
+                assert_eq!(parent.milli_timestamp(), parent_ts);
+                assert_eq!(block.milli_timestamp(), child_ts);
             }
             err => unreachable!("{:?}", err),
         }

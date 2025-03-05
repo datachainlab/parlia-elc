@@ -336,7 +336,7 @@ mod test {
         let h = &hp.epoch_header();
         let cons_state = ConsensusState {
             state_root: [0u8; 32],
-            timestamp: new_timestamp(h.timestamp).unwrap(),
+            timestamp: new_timestamp(h.milli_timestamp()).unwrap(),
             current_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
             previous_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
         };
@@ -353,7 +353,7 @@ mod test {
             hp.previous_epoch_header().epoch.unwrap(),
             hp.epoch_header().epoch.unwrap(),
         );
-        let now = new_timestamp(h.timestamp + 1).unwrap();
+        let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
         let err = cs
             .check_header_and_update_state(now, &cons_state, header.clone())
             .unwrap_err();
@@ -437,8 +437,8 @@ mod test {
 
         // fail: validate_trusting_period
         let h = hp.epoch_header();
-        let now = new_timestamp(h.timestamp - 1).unwrap();
-        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let now = new_timestamp(h.milli_timestamp() - 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
         let header = header_fn(0, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {
@@ -448,8 +448,8 @@ mod test {
 
         // fail: revision check
         let h = hp.epoch_header();
-        let now = new_timestamp(h.timestamp + 1).unwrap();
-        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
+        let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
         let header = header_fn(1, &h, hp.epoch_header_rlp());
         let err = cs.check_header(now, &cons_state, &header).unwrap_err();
         match err {

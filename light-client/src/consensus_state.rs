@@ -61,7 +61,7 @@ impl From<ConsensusState> for RawConsensusState {
     fn from(value: ConsensusState) -> Self {
         Self {
             state_root: value.state_root.to_vec(),
-            timestamp: value.timestamp.as_unix_timestamp_secs(),
+            timestamp: (value.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64,
             current_validators_hash: value.current_validators_hash.into(),
             previous_validators_hash: value.previous_validators_hash.into(),
         }
