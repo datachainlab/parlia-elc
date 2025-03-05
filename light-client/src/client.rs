@@ -630,10 +630,13 @@ mod test {
                 assert_eq!(data.post_height, result.height);
 
                 let cs = ConsensusState::try_from(any_consensus_state).unwrap();
-                assert_eq!(data.timestamp.as_unix_timestamp_secs(), timestamp);
                 assert_eq!(
-                    data.timestamp.as_unix_timestamp_secs(),
-                    cs.timestamp.as_unix_timestamp_secs()
+                    (data.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64,
+                    timestamp
+                );
+                assert_eq!(
+                    data.timestamp.as_unix_timestamp_nanos() / 1_000_000,
+                    cs.timestamp.as_unix_timestamp_nanos() / 1_000_000
                 );
                 assert_eq!(data.emitted_states[0].0, result.height);
                 assert_eq!(data.emitted_states[0].1, any_client_state);

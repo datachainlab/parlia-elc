@@ -487,22 +487,22 @@ mod test {
 
     #[test]
     fn test_success_try_from_any() {
-        let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510af9da90f2a040880a305320410c0843d").to_vec();
+        let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651253088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a201ee222554989dda120e26ecacf756fe1235cd8d726706b57517715dde4f0c900220410dffb012a040880a305320410c0843d420410001815").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ClientState = cs.try_into().unwrap();
 
         assert_eq!(0, cs.latest_height.revision_number());
-        assert_eq!(32132783, cs.latest_height.revision_height());
-        assert_eq!(56, cs.chain_id.id());
+        assert_eq!(32223, cs.latest_height.revision_height());
+        assert_eq!(9999, cs.chain_id.id());
         assert_eq!(0, cs.chain_id.version());
         assert_eq!(86400, cs.trusting_period.as_secs());
         assert_eq!(1, cs.max_clock_drift.as_millis());
         assert_eq!(
-            hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
+            hex!("aa43d337145E8930d01cb4E60Abf6595C692921E"),
             cs.ibc_store_address
         );
         assert_eq!(
-            hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            hex!("1ee222554989dda120e26ecacf756fe1235cd8d726706b57517715dde4f0c900"),
             cs.ibc_commitments_slot
         );
     }
