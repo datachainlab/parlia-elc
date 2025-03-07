@@ -1,12 +1,9 @@
-use alloc::vec::Vec;
-
 use light_client::types::{Any, Height, Time};
 use prost::Message as _;
 
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
-use crate::commitment::decode_eip1184_rlp_proof;
 use crate::consensus_state::ConsensusState;
 
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};

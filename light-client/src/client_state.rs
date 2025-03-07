@@ -8,7 +8,6 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
 
-use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
@@ -66,7 +65,7 @@ impl ClientState {
         }
 
         let new_consensus_state = ConsensusState {
-            state_root: header.state_root().clone(),
+            state_root: *header.state_root(),
             timestamp: header.timestamp()?,
             current_validators_hash: header.current_epoch_validators_hash(),
             previous_validators_hash: header.previous_epoch_validators_hash(),
