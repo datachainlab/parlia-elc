@@ -1,6 +1,5 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-
 use light_client::commitments::{
     EmittedState, MisbehaviourProxyMessage, PrevState, TrustingPeriodContext,
     UpdateStateProxyMessage, VerifyMembershipProxyMessage,
@@ -12,11 +11,10 @@ use light_client::{
     UpdateClientResult, UpdateStateData, VerifyMembershipResult, VerifyNonMembershipResult,
 };
 use patricia_merkle_trie::keccak::keccak_256;
-
+use prost::Message;
+use parlia_ibc_proto::ibc::lightclients::parlia::v1::ProveState;
 use crate::client_state::ClientState;
-use crate::commitment::{
-    calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, verify_proof,
-};
+use crate::commitment::{calculate_ibc_commitment_storage_key, decode_eip1184_rlp_proof, resolve_account, verify_proof};
 use crate::consensus_state::ConsensusState;
 use crate::errors::{ClientError, Error};
 use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
@@ -92,6 +90,7 @@ impl LightClient for ParliaLightClient {
         proof_height: Height,
         proof: Vec<u8>,
     ) -> Result<VerifyMembershipResult, LightClientError> {
+
         InnerLightClient
             .verify_membership(
                 ctx,
@@ -389,8 +388,10 @@ impl InnerLightClient {
         path: &str,
         value: Option<Vec<u8>>,
         proof_height: &Height,
-        storage_proof_rlp: Vec<u8>,
+        proof: Vec<u8>,
     ) -> Result<StateID, Error> {
+        let prove_state = ProveState::decode(&*proof).map_err(Error::ProtoDecodeError)?;
+
         let client_state =
             ClientState::try_from(ctx.client_state(&client_id).map_err(Error::LCPError)?)?;
         if client_state.frozen {
@@ -408,8 +409,20 @@ impl InnerLightClient {
             ctx.consensus_state(&client_id, &proof_height)
                 .map_err(Error::LCPError)?,
         )?;
-        let storage_root = consensus_state.state_root;
-        let storage_proof = decode_eip1184_rlp_proof(&storage_proof_rlp)?;
+
+        // verify account
+        let account = resolve_account(
+            &consensus_state.state_root,
+            &decode_eip1184_rlp_proof(&prove_state.account_proof)?,
+            &client_state.ibc_store_address,
+        )?;
+
+        // verify storage
+        let storage_root = account
+            .storage_root
+            .try_into()
+            .map_err(Error::UnexpectedStorageRoot)?;
+        let storage_proof = decode_eip1184_rlp_proof(&prove_state.commitment_proof)?;
         verify_proof(
             &storage_root,
             &storage_proof,
@@ -634,7 +647,6 @@ mod test {
             input.trusted_previous_validators_hash,
             input.new_current_validators_hash,
             input.new_previous_validators_hash,
-            input.expected_storage_root,
             hp.ibc_store_address(),
             hp.network(),
         )
@@ -653,7 +665,6 @@ mod test {
             input.trusted_previous_validators_hash,
             new_current_validators_hash,
             new_previous_validators_hash,
-            input.expected_storage_root,
             hp.ibc_store_address(),
             hp.network(),
         )
@@ -667,7 +678,6 @@ mod test {
         trusted_previous_validator_hash: Hash,
         new_current_validator_hash: Hash,
         new_previous_validator_hash: Hash,
-        expected_storage_root: Hash,
         ibc_store_address: Address,
         chain_id: ChainId,
     ) {
@@ -703,7 +713,7 @@ mod test {
                     ConsensusState::try_from(data.new_any_consensus_state).unwrap();
                 assert_eq!(data.height, header.height());
                 assert_eq!(new_client_state.latest_height, header.height());
-                assert_eq!(new_consensus_state.state_root, expected_storage_root);
+                assert_eq!(new_consensus_state.state_root, header.state_root().clone());
                 assert_eq!(new_consensus_state.timestamp, header.timestamp().unwrap());
                 assert_eq!(
                     new_consensus_state.current_validators_hash,

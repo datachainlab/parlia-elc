@@ -65,18 +65,8 @@ impl ClientState {
             new_client_state.latest_height = header_height;
         }
 
-        // Ensure world state is valid
-        let account = resolve_account(
-            header.state_root(),
-            &header.account_proof()?,
-            &new_client_state.ibc_store_address,
-        )?;
-
         let new_consensus_state = ConsensusState {
-            state_root: account
-                .storage_root
-                .try_into()
-                .map_err(Error::UnexpectedStorageRoot)?,
+            state_root: header.state_root().clone(),
             timestamp: header.timestamp()?,
             current_validators_hash: header.current_epoch_validators_hash(),
             previous_validators_hash: header.previous_epoch_validators_hash(),
@@ -346,34 +336,6 @@ mod test {
             Error::InvalidVerifyingHeaderLength(number, size) => {
                 assert_eq!(number, h.number);
                 assert_eq!(size, header.eth_header().all.len());
-            }
-            err => unreachable!("{:?}", err),
-        }
-
-        // fail: resolve_account
-        let header = Header::new(
-            vec![1],
-            ETHHeaders {
-                target: hp.epoch_header(),
-                all: vec![
-                    hp.epoch_header(),
-                    hp.epoch_header_plus_1(),
-                    hp.epoch_header_plus_2(),
-                ],
-            },
-            Height {
-                revision_number: 0,
-                revision_height: h.number - 1,
-            },
-            hp.previous_epoch_header().epoch.unwrap(),
-            hp.epoch_header().epoch.unwrap(),
-        );
-        let err = cs
-            .check_header_and_update_state(now, &cons_state, header)
-            .unwrap_err();
-        match err {
-            Error::InvalidProofFormatError(value) => {
-                assert_eq!(value, vec![1]);
             }
             err => unreachable!("{:?}", err),
         }

@@ -47,3 +47,8 @@ message Misbehaviour {
   Header header_1 = 2;
   Header header_2 = 3;
 }
+
+message ProveState {
+  bytes account_proof = 1;
+  bytes commitment_proof = 2;
+}

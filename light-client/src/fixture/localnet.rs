@@ -67,7 +67,6 @@ impl Network for Localnet {
             trusted_height: 501,
             trusted_current_validators_hash:  hex!("92f25eb8500cae7c8548a61c6a03f4fc99690589b472b55e4c8ce25d0ce0f4d5"),
             trusted_previous_validators_hash: hex!("5b514a7e8083146842c425a71aec83368ef4628442999a6d340d623ffb360c67"),
-            expected_storage_root: hex!("e39304f0ec064a98e4b0a96432dfb0a9e4c7fd0f26a6bbcf9c75bff68c51a7a9")
         }
     }
 
@@ -79,7 +78,6 @@ impl Network for Localnet {
             trusted_previous_validators_hash: hex!("399334b2051da932262b42f25e5e59724c08df5c88d13c9d6bf5c51c33233aab"),
             new_current_validators_hash:  hex!("92f25eb8500cae7c8548a61c6a03f4fc99690589b472b55e4c8ce25d0ce0f4d5"),
             new_previous_validators_hash: hex!("5b514a7e8083146842c425a71aec83368ef4628442999a6d340d623ffb360c67"),
-            expected_storage_root: hex!("e39304f0ec064a98e4b0a96432dfb0a9e4c7fd0f26a6bbcf9c75bff68c51a7a9")
         }
     }
     fn error_update_client_non_neighboring_epoch_input(&self) -> Vec<u8> {

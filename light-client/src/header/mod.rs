@@ -33,7 +33,6 @@ pub mod hardfork;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Header {
-    account_proof: Vec<u8>,
     headers: ETHHeaders,
     trusted_height: Height,
     previous_epoch: Epoch,
@@ -50,10 +49,6 @@ impl Header {
 
     pub fn timestamp(&self) -> Result<Time, Error> {
         new_timestamp(self.headers.target.timestamp)
-    }
-
-    pub fn account_proof(&self) -> Result<Vec<Vec<u8>>, Error> {
-        decode_eip1184_rlp_proof(&self.account_proof)
     }
 
     pub fn trusted_height(&self) -> Height {
@@ -224,7 +219,6 @@ impl TryFrom<RawHeader> for Header {
         validate_turn_length(value.current_turn_length as u8)?;
 
         Ok(Self {
-            account_proof: value.account_proof,
             headers,
             trusted_height,
             previous_epoch: Epoch::new(
@@ -292,7 +286,6 @@ pub(crate) mod test {
             current_epoch: Epoch,
         ) -> Self {
             Self {
-                account_proof,
                 headers,
                 trusted_height: LCPHeight::new(
                     trusted_height.revision_number,

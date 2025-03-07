@@ -70,3 +70,11 @@ pub struct Misbehaviour {
     #[prost(message, optional, tag = "3")]
     pub header_2: ::core::option::Option<Header>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ProveState {
+    #[prost(bytes = "vec", tag = "1")]
+    pub account_proof: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub commitment_proof: ::prost::alloc::vec::Vec<u8>,
+}
