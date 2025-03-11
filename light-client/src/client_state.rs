@@ -351,7 +351,6 @@ mod test {
             let raw = RawHeader {
                 headers: vec![EthHeader { header: h_rlp }],
                 trusted_height: Some(trusted_height),
-                account_proof: vec![],
                 current_validators: if h.is_epoch() {
                     h.epoch.clone().unwrap().validators().clone()
                 } else {
