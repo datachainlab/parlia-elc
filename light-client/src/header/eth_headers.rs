@@ -275,11 +275,10 @@ mod test {
 
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-    use crate::header::validator_set::ValidatorSet;
-    use crate::header::Header;
+
     use crate::misc::Validators;
     use hex_literal::hex;
-    use light_client::types::Any;
+
     use rstest::rstest;
     use std::prelude::rust_2015::{Box, Vec};
     use std::vec;
@@ -446,7 +445,6 @@ mod test {
 
     #[test]
     fn test_success_verify_finalized_including_not_finalized_block() {
-        let target = localnet().epoch_header();
         let mut target_1 = localnet().epoch_header_plus_1();
         target_1.extra_data = vec![];
         let headers = ETHHeaders {

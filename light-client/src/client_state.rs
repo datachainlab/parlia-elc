@@ -315,7 +315,6 @@ mod test {
             previous_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
         };
         let header = Header::new(
-            vec![1],
             ETHHeaders {
                 target: hp.epoch_header(),
                 all: vec![],
@@ -680,7 +679,6 @@ mod test {
         #[test]
         fn test_supported_timestamp() {
             let header = Header::new(
-                vec![1],
                 ETHHeaders {
                     target: localnet().previous_epoch_header(),
                     all: vec![],
@@ -705,7 +703,6 @@ mod test {
         #[test]
         fn test_supported_height() {
             let mut header = Header::new(
-                vec![1],
                 ETHHeaders {
                     target: localnet().previous_epoch_header(),
                     all: vec![],

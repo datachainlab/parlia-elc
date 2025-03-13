@@ -259,9 +259,8 @@ pub(crate) mod test {
     use crate::header::{verify_epoch, Header};
     use crate::misc::{new_height, Hash, Validators};
     use alloc::boxed::Box;
-    use alloc::vec::Vec;
-    use hex_literal::hex;
-    use light_client::types::{Any, Height as LCPHeight, Time};
+
+    use light_client::types::{Height as LCPHeight, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};
     use rstest::rstest;
@@ -276,7 +275,6 @@ pub(crate) mod test {
         }
 
         pub(crate) fn new(
-            account_proof: Vec<u8>,
             headers: ETHHeaders,
             trusted_height: Height,
             previous_epoch: Epoch,
