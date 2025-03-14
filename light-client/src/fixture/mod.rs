@@ -44,7 +44,6 @@ pub struct UpdateClientNonEpochInput {
     pub trusted_height: u64,
     pub trusted_current_validators_hash: Hash,
     pub trusted_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub struct UpdateClientEpochInput {
@@ -54,7 +53,6 @@ pub struct UpdateClientEpochInput {
     pub trusted_previous_validators_hash: Hash,
     pub new_current_validators_hash: Hash,
     pub new_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub fn localnet() -> Box<dyn Network> {

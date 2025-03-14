@@ -25,6 +25,7 @@ pub enum Error {
     UnknownMisbehaviourType(String),
     UnexpectedClientType(String),
     LCPCommitmentError(CommitmentError),
+    VerifyAccountError(alloc::boxed::Box<Error>),
 
     // ClientState error
     MissingLatestHeight,
@@ -395,6 +396,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedHeaderRLP(e1) => {
                 write!(f, "UnexpectedHeaderRLP : {}", e1)
+            }
+            Error::VerifyAccountError(e1) => {
+                write!(f, "VerifyAccountError : {}", e1)
             }
         }
     }

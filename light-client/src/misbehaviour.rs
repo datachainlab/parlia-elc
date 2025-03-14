@@ -85,7 +85,6 @@ mod test {
         RawHeader {
             headers: vec![EthHeader { header: h }],
             trusted_height: Some(Height::default()),
-            account_proof: vec![],
             current_validators: vec![coinbase.clone()],
             previous_validators: vec![coinbase],
             previous_turn_length: 1,
