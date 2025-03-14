@@ -270,6 +270,7 @@ pub(crate) mod test {
             &self.headers
         }
 
+        #[cfg(feature = "dev")]
         pub(crate) fn eth_header_mut(&mut self) -> &mut ETHHeaders {
             &mut self.headers
         }
