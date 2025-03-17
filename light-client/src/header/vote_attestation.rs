@@ -154,7 +154,7 @@ impl<'a> TryFrom<Rlp<'a>> for VoteAttestation {
 mod test {
     use crate::errors::Error;
     use crate::fixture::*;
-    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
+    use crate::header::eth_header::get_validator_bytes_and_turn_length;
     use crate::header::vote_attestation::{
         VoteAddressBitSet, VoteAttestation, VoteData, BLS_SIGNATURE_LENGTH,
         MAX_ATTESTATION_EXTRA_LENGTH,

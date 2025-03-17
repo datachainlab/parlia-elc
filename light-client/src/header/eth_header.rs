@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use elliptic_curve::bigint::U64;
 use elliptic_curve::sec1::ToEncodedPoint;
 use hex_literal::hex;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
