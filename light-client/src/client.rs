@@ -1108,7 +1108,7 @@ mod test {
         );
         let ctx = MockClientReader {
             client_state: Some(ClientState {
-                fork_specs: vec![before_pascal()],
+                fork_specs: vec![after_pascal()],
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state,
@@ -1179,7 +1179,7 @@ mod test {
         let ctx = MockClientReader {
             client_state: Some(ClientState {
                 chain_id: ChainId::new(9999),
-                fork_specs: vec![before_pascal()],
+                fork_specs: vec![after_pascal()],
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state.clone(),
