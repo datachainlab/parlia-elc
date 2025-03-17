@@ -8,7 +8,6 @@ use prost::Message as _;
 use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientState;
 
-use crate::commitment::resolve_account;
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
 use crate::fork_spec::ForkSpec;
@@ -68,18 +67,8 @@ impl ClientState {
             new_client_state.latest_height = header_height;
         }
 
-        // Ensure world state is valid
-        let account = resolve_account(
-            header.state_root(),
-            &header.account_proof()?,
-            &new_client_state.ibc_store_address,
-        )?;
-
         let new_consensus_state = ConsensusState {
-            state_root: account
-                .storage_root
-                .try_into()
-                .map_err(Error::UnexpectedStorageRoot)?,
+            state_root: *header.state_root(),
             timestamp: header.timestamp()?,
             current_validators_hash: header.current_epoch_validators_hash(),
             previous_validators_hash: header.previous_epoch_validators_hash(),
@@ -341,7 +330,6 @@ mod test {
             previous_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
         };
         let header = Header::new(
-            vec![1],
             ETHHeaders {
                 target: hp.epoch_header(),
                 all: vec![],
@@ -364,34 +352,6 @@ mod test {
             }
             err => unreachable!("{:?}", err),
         }
-
-        // fail: resolve_account
-        let header = Header::new(
-            vec![1],
-            ETHHeaders {
-                target: hp.epoch_header(),
-                all: vec![
-                    hp.epoch_header(),
-                    hp.epoch_header_plus_1(),
-                    hp.epoch_header_plus_2(),
-                ],
-            },
-            Height {
-                revision_number: 0,
-                revision_height: h.number - 1,
-            },
-            hp.previous_epoch_header().epoch.unwrap(),
-            hp.epoch_header().epoch.unwrap(),
-        );
-        let err = cs
-            .check_header_and_update_state(now, &cons_state, header)
-            .unwrap_err();
-        match err {
-            Error::InvalidProofFormatError(value) => {
-                assert_eq!(value, vec![1]);
-            }
-            err => unreachable!("{:?}", err),
-        }
     }
 
     #[rstest]
@@ -405,7 +365,6 @@ mod test {
             let raw = RawHeader {
                 headers: vec![EthHeader { header: h_rlp }],
                 trusted_height: Some(trusted_height),
-                account_proof: vec![],
                 current_validators: if h.is_epoch() {
                     h.epoch.clone().unwrap().validators().clone()
                 } else {
@@ -720,6 +679,69 @@ mod test {
             }
         } else {
             panic!("expected error");
+        }
+    }
+    #[cfg(feature = "dev")]
+    mod dev_test_min {
+        use crate::client_state::ClientState;
+        use crate::consensus_state::ConsensusState;
+        use crate::errors::Error;
+        use crate::fixture::localnet;
+        use crate::header::constant::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+        use crate::header::eth_headers::ETHHeaders;
+        use crate::header::Header;
+        use crate::misc::new_timestamp;
+        use parlia_ibc_proto::ibc::core::client::v1::Height;
+
+        #[test]
+        fn test_supported_timestamp() {
+            let header = Header::new(
+                ETHHeaders {
+                    target: localnet().previous_epoch_header(),
+                    all: vec![],
+                },
+                Height::default(),
+                localnet().previous_epoch_header().epoch.unwrap(),
+                localnet().epoch_header().epoch.unwrap(),
+            );
+            let cs = ClientState::default();
+            let cons_state = ConsensusState::default();
+            let err = cs
+                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
+                .unwrap_err();
+            match err {
+                Error::UnsupportedMinimumTimestamp(e1) => {
+                    assert_eq!(e1, header.timestamp().unwrap());
+                }
+                err => unreachable!("{:?}", err),
+            }
+        }
+
+        #[test]
+        fn test_supported_height() {
+            let mut header = Header::new(
+                ETHHeaders {
+                    target: localnet().previous_epoch_header(),
+                    all: vec![],
+                },
+                Height::default(),
+                localnet().previous_epoch_header().epoch.unwrap(),
+                localnet().epoch_header().epoch.unwrap(),
+            );
+            header.eth_header_mut().target.timestamp = MINIMUM_TIMESTAMP_SUPPORTED;
+            header.eth_header_mut().target.number = MINIMUM_HEIGHT_SUPPORTED - 1;
+
+            let cs = ClientState::default();
+            let cons_state = ConsensusState::default();
+            let err = cs
+                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
+                .unwrap_err();
+            match err {
+                Error::UnsupportedMinimumHeight(e1) => {
+                    assert_eq!(e1, header.height());
+                }
+                err => unreachable!("{:?}", err),
+            }
         }
     }
 }

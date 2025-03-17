@@ -13,7 +13,7 @@ fn main() {
     }
     #[cfg(not(feature = "dev"))]
     {
-        values.push(format!("pub const BLOCKS_PER_EPOCH: u64 = 200;"));
+        values.push("pub const BLOCKS_PER_EPOCH: u64 = 200;".to_string());
     }
 
     let minimum_time_stamp_supported =
@@ -29,5 +29,5 @@ fn main() {
         minimum_height_supported
     ));
 
-    writeln!(file, "{}", values.join("\n").to_string()).unwrap();
+    writeln!(file, "{}", values.join("\n")).unwrap();
 }

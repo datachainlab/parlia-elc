@@ -5,8 +5,6 @@ use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::client_state::ClientState;
-use crate::consensus_state::ConsensusState;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 pub mod localnet;
@@ -47,7 +45,6 @@ pub struct UpdateClientNonEpochInput {
     pub trusted_height: u64,
     pub trusted_current_validators_hash: Hash,
     pub trusted_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub struct UpdateClientEpochInput {
@@ -57,7 +54,6 @@ pub struct UpdateClientEpochInput {
     pub trusted_previous_validators_hash: Hash,
     pub new_current_validators_hash: Hash,
     pub new_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub fn localnet() -> Box<dyn Network> {

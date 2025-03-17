@@ -482,12 +482,12 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::{decode_header, localnet, Network};
+    use crate::fixture::{localnet, Network};
     use crate::header::epoch::Epoch;
 
     use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use alloc::boxed::Box;
-    use hex_literal::hex;
+
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
