@@ -276,9 +276,7 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::eth_header::{
-        get_validator_bytes_and_turn_length, ETHHeader,
-    };
+    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;

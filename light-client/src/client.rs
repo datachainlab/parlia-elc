@@ -166,11 +166,13 @@ impl InnerLightClient {
 
         let height = client_state.latest_height;
         let timestamp = consensus_state.timestamp;
+        let milli_timestamp = (timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64;
 
         #[allow(clippy::absurd_extreme_comparisons)]
-        if timestamp.as_unix_timestamp_secs() < MINIMUM_TIMESTAMP_SUPPORTED {
+        if milli_timestamp < MINIMUM_TIMESTAMP_SUPPORTED {
             return Err(Error::UnsupportedMinimumTimestamp(timestamp));
         }
+
         #[allow(clippy::absurd_extreme_comparisons)]
         if height.revision_height() < MINIMUM_HEIGHT_SUPPORTED {
             return Err(Error::UnsupportedMinimumHeight(height));
