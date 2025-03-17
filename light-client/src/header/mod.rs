@@ -14,8 +14,6 @@ use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
 
-use self::constant::BLOCKS_PER_EPOCH;
-
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
 // inner header is module private

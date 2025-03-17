@@ -276,8 +276,9 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::constant::BLOCKS_PER_EPOCH;
-    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
+    use crate::header::eth_header::{
+        get_validator_bytes_and_turn_length, ETHHeader,
+    };
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
@@ -661,8 +662,8 @@ mod test {
                  c_val: &EitherEpoch,
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_epoch_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + c_val.checkpoint();
+            let next_epoch_checkpoint =
+                headers.target.next_epoch_block_number() + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -715,8 +716,8 @@ mod test {
                  n_val_header: ETHHeader,
                  include_limit: bool| {
             let n_val = n_val_header.epoch.clone().unwrap();
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_next_epoch_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + n_val.checkpoint();
+            let next_next_epoch_checkpoint =
+                headers.target.next_next_epoch_block_number() + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);

@@ -10,11 +10,10 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 use crate::fork_spec::{find_target_fork_spec, ForkSpec};
+use crate::header::constant::BLOCKS_PER_EPOCH;
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
-
-use super::BLOCKS_PER_EPOCH;
 
 const DIFFICULTY_INTURN: u64 = 2;
 const DIFFICULTY_NOTURN: u64 = 1;
