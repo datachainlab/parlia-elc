@@ -58,15 +58,13 @@ pub struct Header {
     pub trusted_height: ::core::option::Option<
         super::super::super::core::client::v1::Height,
     >,
-    #[prost(bytes = "vec", tag = "3")]
-    pub account_proof: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", repeated, tag = "4")]
+    #[prost(bytes = "vec", repeated, tag = "3")]
     pub current_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", repeated, tag = "5")]
+    #[prost(bytes = "vec", repeated, tag = "4")]
     pub previous_validators: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(uint32, tag = "6")]
+    #[prost(uint32, tag = "5")]
     pub current_turn_length: u32,
-    #[prost(uint32, tag = "7")]
+    #[prost(uint32, tag = "6")]
     pub previous_turn_length: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -90,4 +88,12 @@ pub struct Misbehaviour {
     pub header_1: ::core::option::Option<Header>,
     #[prost(message, optional, tag = "3")]
     pub header_2: ::core::option::Option<Header>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ProveState {
+    #[prost(bytes = "vec", tag = "1")]
+    pub account_proof: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub commitment_proof: ::prost::alloc::vec::Vec<u8>,
 }
