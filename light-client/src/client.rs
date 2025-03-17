@@ -535,13 +535,6 @@ mod test {
         }
     }
 
-    fn before_pascal() -> ForkSpec {
-        ForkSpec {
-            height_or_timestamp: HeightOrTimestamp::Height(0),
-            additional_header_item_count: 0, // requestsHash
-        }
-    }
-
     impl Default for ClientState {
         fn default() -> Self {
             ClientState {
@@ -672,7 +665,7 @@ mod test {
                 client_state: None,
                 consensus_state: mock_consensus_state,
             };
-            let mut any_client_state: Any = client_state.try_into().unwrap();
+            let any_client_state: Any = client_state.try_into().unwrap();
             let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
             client_state = func(client_state);
             let any_client_state: Any = client_state.try_into().unwrap();

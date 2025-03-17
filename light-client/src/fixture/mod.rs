@@ -5,8 +5,6 @@ use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::client_state::ClientState;
-use crate::consensus_state::ConsensusState;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 pub mod localnet;

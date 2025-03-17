@@ -1,7 +1,5 @@
 use hex_literal::hex;
 
-use crate::client_state::ClientState;
-use crate::consensus_state::ConsensusState;
 use crate::header::eth_header::ETHHeader;
 use crate::header::eth_headers::ETHHeaders;
 use std::prelude::rust_2015::Vec;
