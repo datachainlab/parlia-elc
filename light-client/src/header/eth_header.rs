@@ -410,8 +410,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // Ensure that the mix digest is zero as we don't have fork protection currently
-        if mix_digest != EMPTY_HASH {
-            return Err(Error::UnexpectedMixHash(number));
+        if mix_digest.len() != 32 {
+            return Err(Error::UnexpectedMixHash(number, mix_digest));
         }
         // Ensure that the block doesn't contain any uncles which are meaningless in PoA
         if uncle_hash != EMPTY_UNCLE_HASH {
@@ -556,8 +556,9 @@ pub(crate) mod test {
         let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
-            Error::UnexpectedMixHash(number) => {
+            Error::UnexpectedMixHash(number, mix_hash) => {
                 assert_eq!(number, header.number);
+                assert_eq!(mix_hash, header.mix_digest);
             }
             err => unreachable!("{:?}", err),
         };

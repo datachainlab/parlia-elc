@@ -728,7 +728,7 @@ mod test {
                 localnet().previous_epoch_header().epoch.unwrap(),
                 localnet().epoch_header().epoch.unwrap(),
             );
-            header.eth_header_mut().target.timestamp = MINIMUM_TIMESTAMP_SUPPORTED;
+            header.eth_header_mut().target.milli_timestamp() = MINIMUM_TIMESTAMP_SUPPORTED;
             header.eth_header_mut().target.number = MINIMUM_HEIGHT_SUPPORTED - 1;
 
             let cs = ClientState::default();

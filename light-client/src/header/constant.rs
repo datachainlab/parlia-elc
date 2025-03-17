@@ -1,3 +1,3 @@
-pub const BLOCKS_PER_EPOCH: u64 = 200;
+pub const BLOCKS_PER_EPOCH: u64 = 500;
 pub const MINIMUM_TIMESTAMP_SUPPORTED: u64 = 0;
 pub const MINIMUM_HEIGHT_SUPPORTED: u64 = 0;

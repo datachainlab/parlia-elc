@@ -71,7 +71,7 @@ pub enum Error {
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
-    UnexpectedMixHash(BlockNumber),
+    UnexpectedMixHash(BlockNumber, Vec<u8>),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
     UnexpectedNonce(BlockNumber),
@@ -297,8 +297,8 @@ impl core::fmt::Display for Error {
             Error::MissingCurrentValidators(e1) => {
                 write!(f, "MissingCurrentValidators : {:?}", e1)
             }
-            Error::UnexpectedMixHash(e1) => {
-                write!(f, "UnexpectedMixHash : {:?}", e1)
+            Error::UnexpectedMixHash(e1, e2) => {
+                write!(f, "UnexpectedMixHash : {:?} {:?}", e1, e2)
             }
             Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4) => {
                 write!(

@@ -266,6 +266,7 @@ pub(crate) mod test {
     use crate::misc::{new_height, Hash, Validators};
     use alloc::boxed::Box;
 
+    use crate::header::constant::BLOCKS_PER_EPOCH;
     use light_client::types::{Height as LCPHeight, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};
@@ -452,8 +453,8 @@ pub(crate) mod test {
         };
 
         // epoch
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 201);
+        let height = new_height(0, BLOCKS_PER_EPOCH * 2);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH + 1);
         let current_epoch = &hp.epoch_header().epoch.unwrap();
         let previous_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let (c_val, _) = verify_epoch(
@@ -477,8 +478,8 @@ pub(crate) mod test {
             current_validators_hash: Epoch::new(to_validator_set([1u8; 32]), 1).hash(),
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
-        let height = new_height(0, 599);
-        let trusted_height = new_height(0, 400);
+        let height = new_height(0, BLOCKS_PER_EPOCH * 3 - 1);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH * 2);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let (c_val, _p_val) = verify_epoch(
@@ -508,8 +509,8 @@ pub(crate) mod test {
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
 
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 199);
+        let height = new_height(0, BLOCKS_PER_EPOCH * 2);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH - 1);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
@@ -529,7 +530,7 @@ pub(crate) mod test {
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 200);
+        let trusted_height = new_height(0, height.revision_height() - BLOCKS_PER_EPOCH);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header(),
@@ -549,8 +550,8 @@ pub(crate) mod test {
             _ => unreachable!("err {:?}", err),
         }
 
-        let height = new_height(0, 401);
-        let trusted_height = new_height(0, 200);
+        let height = new_height(0, BLOCKS_PER_EPOCH * 2 + 1);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header_plus_1(),
@@ -568,7 +569,7 @@ pub(crate) mod test {
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 400);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH * 2);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let err = verify_epoch(
@@ -590,7 +591,7 @@ pub(crate) mod test {
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 400);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH * 2);
         let current_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
@@ -618,8 +619,8 @@ pub(crate) mod test {
             current_validators_hash: Epoch::new(to_validator_set([4u8; 32]), 1).hash(),
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 399);
+        let height = new_height(0, BLOCKS_PER_EPOCH * 2);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH * 2 - 1);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([4u8; 32]), 1);
         let err = verify_epoch(
