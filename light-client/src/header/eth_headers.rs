@@ -9,7 +9,6 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
-use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -34,10 +33,18 @@ impl ETHHeaders {
         previous_epoch: &TrustedEpoch,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
-        let epoch = self.target.number / BLOCKS_PER_EPOCH;
-        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
-        let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let n_val = self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
+        let current_epoch_block_number = self.target.current_epoch_block_number();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let next_epoch_block_number = self.target.next_epoch_block_number();
+        let next_checkpoint = next_epoch_block_number + current_epoch.checkpoint();
+
+        let n_val = self.verify_header_size(
+            self.target.next_next_epoch_block_number(),
+            checkpoint,
+            next_checkpoint,
+            current_epoch,
+        )?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -140,7 +147,7 @@ impl ETHHeaders {
     /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size(
         &self,
-        epoch: u64,
+        next_next_epoch_block_number: BlockNumber,
         checkpoint: u64,
         next_checkpoint: u64,
         current_epoch: &EitherEpoch,
@@ -176,7 +183,7 @@ impl ETHHeaders {
                     return Ok(None);
                 }
 
-                let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
+                let next_next_checkpoint = next_next_epoch_block_number + next_epoch.checkpoint();
 
                 // Ensure headers are before the next_next_checkpoint
                 if hs.iter().any(|h| h.number >= next_next_checkpoint) {

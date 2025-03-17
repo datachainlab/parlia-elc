@@ -288,7 +288,7 @@ impl ETHHeader {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
-        let attestation_bytes = if self.number % BLOCKS_PER_EPOCH != 0 {
+        let attestation_bytes = if !self.is_epoch() {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
@@ -307,7 +307,26 @@ impl ETHHeader {
     }
 
     pub fn is_epoch(&self) -> bool {
-        self.number % BLOCKS_PER_EPOCH == 0
+        is_epoch(self.number)
+    }
+
+    pub fn current_epoch_block_number(&self) -> BlockNumber {
+        current_epoch_block_number(self.number)
+    }
+
+    pub fn previous_epoch_block_number(&self) -> BlockNumber {
+        let current_epoch = self.current_epoch_block_number();
+        previous_epoch_block_number_from(current_epoch)
+    }
+
+    pub fn next_epoch_block_number(&self) -> BlockNumber {
+        let current_epoch = self.current_epoch_block_number();
+        next_epoch_block_number_from(current_epoch)
+    }
+
+    pub fn next_next_epoch_block_number(&self) -> BlockNumber {
+        let next_epoch = self.next_epoch_block_number();
+        next_epoch_block_number_from(next_epoch)
     }
 
     pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
@@ -330,6 +349,22 @@ impl ETHHeader {
         }
         self.timestamp * 1000 + milliseconds
     }
+}
+
+fn is_epoch(number: BlockNumber) -> bool {
+    number % BLOCKS_PER_EPOCH == 0
+}
+
+pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
+    number - (number % BLOCKS_PER_EPOCH)
+}
+
+fn previous_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
+    base_epoch_block_number - BLOCKS_PER_EPOCH
+}
+
+fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
+    base_epoch_block_number + BLOCKS_PER_EPOCH
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -428,7 +463,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch = if number % BLOCKS_PER_EPOCH == 0 {
+        let epoch = if is_epoch(number) {
             let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
             Some(Epoch::new(validators.into(), turn_length))
         } else {

@@ -7,7 +7,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 use crate::consensus_state::ConsensusState;
 use crate::fork_spec::ForkSpec;
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-use crate::header::eth_header::{validate_turn_length, ETHHeader};
+use crate::header::eth_header::{current_epoch_block_number, validate_turn_length, ETHHeader};
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
@@ -106,11 +106,11 @@ fn verify_epoch<'a>(
     current_epoch: &'a Epoch,
 ) -> Result<(EitherEpoch<'a>, TrustedEpoch<'a>), Error> {
     let is_epoch = target.is_epoch();
-    let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
-    let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
+    let trusted_epoch = current_epoch_block_number(trusted_height.revision_height());
 
     if is_epoch {
-        if header_epoch != trusted_epoch + 1 {
+        let header_previous_epoch = target.previous_epoch_block_number();
+        if header_previous_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
                 trusted_height.revision_height(),
                 height.revision_height(),
@@ -144,6 +144,7 @@ fn verify_epoch<'a>(
             TrustedEpoch::new(previous_epoch),
         ))
     } else {
+        let header_epoch = target.current_epoch_block_number();
         if header_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
                 trusted_height.revision_height(),
