@@ -10,7 +10,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::fork_spec::ForkSpec;
+use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
@@ -56,12 +56,24 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        header: Header,
+        mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
-        // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &header)?;
 
+        // Ensure header is valid
+        self.check_header(now, trusted_consensus_state, &mut header)?;
         let mut new_client_state = self.clone();
+
+        // Update fork specs if timestamp
+        for fs in &mut new_client_state.fork_specs.iter_mut() {
+            if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp  {
+                // second must be forks spec timestamp
+                let h=  &header.eth_header().all[1];
+                if ts == h.milli_timestamp() {
+                    fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
+                }
+            }
+        }
+
         let header_height = header.height();
         if new_client_state.latest_height < header_height {
             new_client_state.latest_height = header_height;
@@ -82,14 +94,14 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: &Misbehaviour,
+        misbehaviour: &mut Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+    fn check_header(&self, now: Time, cs: &ConsensusState, header: &mut Header) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         let ts = header.timestamp()?;
         validate_within_trusting_period(
@@ -304,6 +316,7 @@ mod test {
         ForkSpec {
             height_or_timestamp: HeightOrTimestamp::Height(0),
             additional_header_item_count: 1, // requestsHash
+            epoch_length: 200
         }
     }
 

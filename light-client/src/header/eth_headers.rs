@@ -8,7 +8,7 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
-use super::eth_header::ETHHeader;
+use super::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -33,16 +33,11 @@ impl ETHHeaders {
         previous_epoch: &TrustedEpoch,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
-        let current_epoch_block_number = self.target.current_epoch_block_number();
+        let current_epoch_block_number = self.target.current_epoch_block_number()?;
         let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
 
-        let next_epoch_block_number = self.target.next_epoch_block_number();
-        let next_checkpoint = next_epoch_block_number + current_epoch.checkpoint();
-
-        let n_val = self.verify_header_size(
-            self.target.next_next_epoch_block_number(),
+        let (n_val , next_checkpoint) = self.verify_header_size(
             checkpoint,
-            next_checkpoint,
             current_epoch,
         )?;
 
@@ -53,7 +48,8 @@ impl ETHHeaders {
         let p_val = previous_epoch.validators();
         for h in self.all.iter() {
             if h.number >= next_checkpoint {
-                h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
+                let n_val = unwrap_n_val(h.number, &n_val)?;
+                h.verify_seal(&n_val, chain_id)?;
             } else if h.number >= checkpoint {
                 h.verify_seal(current_epoch.epoch(), chain_id)?;
             } else {
@@ -147,52 +143,58 @@ impl ETHHeaders {
     /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size(
         &self,
-        next_next_epoch_block_number: BlockNumber,
         checkpoint: u64,
-        next_checkpoint: u64,
         current_epoch: &EitherEpoch,
-    ) -> Result<Option<&Epoch>, Error> {
-        let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
+    ) -> Result<(Option<Epoch>, BlockNumber), Error> {
+        let after_checkpoint: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
+
+        let find_next_epoch = |hs: &Vec<&ETHHeader>, checkpoint: u64| {
+            for h in hs.iter() {
+                if let Ok(next_epoch)= get_validator_bytes_and_turn_length(&h.extra_data) {
+                    let next_epoch = Epoch::new(next_epoch.0.into(), next_epoch.1);
+                    let next_checkpoint = h.number + checkpoint;
+                    return (Some(next_epoch), next_checkpoint)
+                }
+            }
+            return (None,0)
+        };
+
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
             Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
-                if hs.iter().any(|h| h.number >= next_checkpoint) {
+                let (next_epoch, next_checkpoint) = find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
+                if next_epoch.is_some() && after_checkpoint.iter().any(|h| h.number >= next_checkpoint) {
                     return Err(Error::UnexpectedNextCheckpointHeader(
                         self.target.number,
                         next_checkpoint,
                     ));
                 }
-                Ok(None)
+                Ok((next_epoch, next_checkpoint))
             }
             // ex) t=201 then 201 <= h < 611 (at least 1 honest n_val(400) can be in c_val(200))
             Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
-                let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
-                    Some(h) => h
-                        .epoch
-                        .as_ref()
-                        .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok(None),
-                };
-
-                // Finish if no headers over next checkpoint were found
-                let hs: Vec<&&ETHHeader> =
-                    hs.iter().filter(|h| h.number >= next_checkpoint).collect();
-                if hs.is_empty() {
-                    return Ok(None);
+                let (next_epoch , next_checkpoint) = find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
+                if next_epoch.is_none() {
+                    return Ok((next_epoch, next_checkpoint));
                 }
 
-                let next_next_checkpoint = next_next_epoch_block_number + next_epoch.checkpoint();
+                // Finish if no headers over next checkpoint were found
+                let after_next_checkpoint: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= next_checkpoint).collect();
+                if after_next_checkpoint.is_empty() {
+                    return Ok((next_epoch, next_checkpoint));
+                }
 
                 // Ensure headers are before the next_next_checkpoint
-                if hs.iter().any(|h| h.number >= next_next_checkpoint) {
+                let (next_next_epoch, next_next_checkpoint) = find_next_epoch(&after_next_checkpoint, next_epoch.clone().unwrap().checkpoint());
+                if next_next_epoch.is_some() && after_next_checkpoint.iter().any(|h| h.number >= next_next_checkpoint) {
                     return Err(Error::UnexpectedNextNextCheckpointHeader(
                         self.target.number,
                         next_next_checkpoint,
                     ));
                 }
-                Ok(Some(next_epoch))
+                Ok((next_epoch, next_checkpoint))
             }
         }
     }
@@ -242,8 +244,8 @@ fn verify_finalized(
     Ok(())
 }
 
-fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
-    n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
+fn unwrap_n_val(n: BlockNumber, n_val: &Option<Epoch>) -> Result<Epoch, Error> {
+    n_val.clone().ok_or_else(|| Error::MissingNextValidatorSet(n))
 }
 
 fn verify_voters(

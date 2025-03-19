@@ -13,6 +13,7 @@ message ForkSpec {
     uint64 timestamp = 2;
   }
   uint64 additional_header_item_count = 3;
+  uint64 epoch_length = 4;
 }
 
 message ClientState {

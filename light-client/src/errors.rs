@@ -6,7 +6,7 @@ use k256::ecdsa::signature;
 use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
 use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
-
+use crate::fork_spec::ForkSpec;
 use crate::misc::{Address, BlockNumber, Hash};
 
 type BoxedTrieError = alloc::boxed::Box<TrieError<primitive_types::H256, rlp::DecoderError>>;
@@ -107,6 +107,7 @@ pub enum Error {
     UnexpectedHeaderRLP(BlockNumber),
     MissingForkSpec(BlockNumber, u64),
     UnexpectedHeaderItemCount(BlockNumber, usize, u64),
+    NotVerifiableHeader(BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -129,6 +130,8 @@ pub enum Error {
     MissingTimestampOrHeightInForkSpec,
     UnexpectedForkSpecTimestampOrder(u64, u64),
     UnexpectedForkSpecHeightOrder(u64, u64),
+    MissingForkHeightIntPreviousEpochCalculation(u64, ForkSpec),
+    MissingForkHeightIntBoundaryCalculation(ForkSpec, ForkSpec),
 
     // Misbehaviour
     MissingHeader1,

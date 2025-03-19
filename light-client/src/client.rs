@@ -534,6 +534,15 @@ mod test {
         ForkSpec {
             height_or_timestamp: HeightOrTimestamp::Height(0),
             additional_header_item_count: 1, // requestsHash
+            epoch_length: 200
+        }
+    }
+
+    fn after_lorentz() -> ForkSpec {
+        ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1, // requestsHash
+            epoch_length: 500
         }
     }
 
@@ -1288,6 +1297,7 @@ mod test {
                 client_state.fork_specs = vec![ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(MINIMUM_HEIGHT_SUPPORTED - 1),
                     additional_header_item_count: 0,
+                    epoch_length: 200
                 }];
                 (client_state, cons_state)
             }));
@@ -1299,6 +1309,7 @@ mod test {
                 client_state.fork_specs = vec![ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED - 1),
                     additional_header_item_count: 0,
+                    epoch_length: 200
                 }];
                 (client_state, cons_state)
             }));
@@ -1311,6 +1322,7 @@ mod test {
                 client_state.fork_specs = vec![ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED),
                     additional_header_item_count: 0,
+                    epoch_length: 200
                 }];
                 (client_state, cons_state)
             }))

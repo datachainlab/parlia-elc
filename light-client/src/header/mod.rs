@@ -5,9 +5,9 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::consensus_state::ConsensusState;
-use crate::fork_spec::ForkSpec;
+use crate::fork_spec::{find_target_fork_spec, ForkSpec};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-use crate::header::eth_header::{current_epoch_block_number, validate_turn_length, ETHHeader};
+use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
@@ -31,6 +31,8 @@ pub struct Header {
     trusted_height: Height,
     previous_epoch: Epoch,
     current_epoch: Epoch,
+
+    fork_specs: alloc::vec::Vec<ForkSpec>
 }
 
 impl Header {
@@ -65,10 +67,11 @@ impl Header {
         &self.headers.target.hash
     }
 
-    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-        for header in &self.headers.all {
+    pub fn verify_fork_rule(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        for header in &mut self.headers.all {
             header.verify_fork_rule(fork_specs)?;
         }
+        self.fork_specs = fork_specs.to_vec();
         Ok(())
     }
 
@@ -82,8 +85,10 @@ impl Header {
             &self.headers.target,
             self.height(),
             self.trusted_height,
+            (consensus_state.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64,
             &self.previous_epoch,
             &self.current_epoch,
+            &self.fork_specs,
         )?;
         self.headers.verify(chain_id, &c_val, &p_val)
     }
@@ -100,14 +105,17 @@ fn verify_epoch<'a>(
     target: &ETHHeader,
     height: Height,
     trusted_height: Height,
+    trusted_timestamp: u64,
     previous_epoch: &'a Epoch,
     current_epoch: &'a Epoch,
+    fork_specs: &[ForkSpec],
 ) -> Result<(EitherEpoch<'a>, TrustedEpoch<'a>), Error> {
     let is_epoch = target.is_epoch();
-    let trusted_epoch = current_epoch_block_number(trusted_height.revision_height());
+
+    let trusted_epoch = find_target_fork_spec(fork_specs, trusted_height.revision_height(), trusted_timestamp)?.current_epoch_block_number(trusted_height.revision_height());
 
     if is_epoch {
-        let header_previous_epoch = target.previous_epoch_block_number();
+        let header_previous_epoch = target.previous_epoch_block_number()?;
         if header_previous_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
                 trusted_height.revision_height(),
@@ -142,7 +150,7 @@ fn verify_epoch<'a>(
             TrustedEpoch::new(previous_epoch),
         ))
     } else {
-        let header_epoch = target.current_epoch_block_number();
+        let header_epoch = target.current_epoch_block_number()?;
         if header_epoch != trusted_epoch {
             return Err(Error::UnexpectedTrustedHeight(
                 trusted_height.revision_height(),
@@ -265,7 +273,6 @@ pub(crate) mod test {
     use crate::misc::{new_height, Hash, Validators};
     use alloc::boxed::Box;
 
-    use crate::header::constant::BLOCKS_PER_EPOCH;
     use light_client::types::{Height as LCPHeight, Time};
     use parlia_ibc_proto::ibc::core::client::v1::Height;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{EthHeader, Header as RawHeader};

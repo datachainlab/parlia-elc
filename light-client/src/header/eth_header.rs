@@ -9,8 +9,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::fork_spec::{find_target_fork_spec, ForkSpec};
-use crate::header::constant::BLOCKS_PER_EPOCH;
+use crate::fork_spec::{find_target_fork_spec, BoundaryEpochs, ForkSpec, HeightOrTimestamp};
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -61,6 +60,8 @@ pub struct ETHHeader {
     // calculated by RawETHHeader
     pub hash: Hash,
     pub epoch: Option<Epoch>,
+
+    boundary_epochs: Option<BoundaryEpochs>,
 }
 
 impl ETHHeader {
@@ -305,38 +306,34 @@ impl ETHHeader {
         Rlp::new(attestation_bytes).try_into()
     }
 
-    pub fn is_epoch(&self) -> bool {
-        is_epoch(self.number)
+    pub fn is_epoch(&self) -> Result<bool, Error> {
+        Ok(self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?.is_epoch(self.number))
     }
 
-    pub fn current_epoch_block_number(&self) -> BlockNumber {
-        current_epoch_block_number(self.number)
+    pub fn current_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        Ok(self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?.current_epoch_block_number(self.number))
     }
 
-    pub fn previous_epoch_block_number(&self) -> BlockNumber {
-        let current_epoch = self.current_epoch_block_number();
-        previous_epoch_block_number_from(current_epoch)
+    pub fn previous_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        let boundary = self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?;
+        let current_epoch_block_number = boundary.current_epoch_block_number(self.number);
+        Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
     }
 
-    pub fn next_epoch_block_number(&self) -> BlockNumber {
-        let current_epoch = self.current_epoch_block_number();
-        next_epoch_block_number_from(current_epoch)
-    }
+    pub fn verify_fork_rule(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
 
-    pub fn next_next_epoch_block_number(&self) -> BlockNumber {
-        let next_epoch = self.next_epoch_block_number();
-        next_epoch_block_number_from(next_epoch)
-    }
+        // Ensure boundary epochs are available
+        let boundary_epochs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
 
-    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
-        if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
+        // Ensure header item count is collect
+        if boundary_epochs.current_fork_spec().additional_header_item_count != self.additional_items.len() as u64 {
             return Err(Error::UnexpectedHeaderItemCount(
                 self.number,
                 self.additional_items.len(),
-                fork_spec.additional_header_item_count,
+                boundary_epochs.current_fork_spec().additional_header_item_count,
             ));
         }
+        self.boundary_epochs = Some(boundary_epochs);
         Ok(())
     }
 
@@ -348,22 +345,7 @@ impl ETHHeader {
         }
         self.timestamp * 1000 + milliseconds
     }
-}
 
-fn is_epoch(number: BlockNumber) -> bool {
-    number % BLOCKS_PER_EPOCH == 0
-}
-
-pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
-    number - (number % BLOCKS_PER_EPOCH)
-}
-
-fn previous_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
-    base_epoch_block_number - BLOCKS_PER_EPOCH
-}
-
-fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
-    base_epoch_block_number + BLOCKS_PER_EPOCH
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -462,11 +444,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch = if is_epoch(number) {
-            let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
-            Some(Epoch::new(validators.into(), turn_length))
-        } else {
-            None
+        let epoch  = match get_validator_bytes_and_turn_length(&extra_data) {
+            Err(e) => None,
+            Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length))
         };
 
         // Extra items for seal hash
@@ -500,6 +480,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             additional_items,
             hash,
             epoch,
+            boundary_epochs: None,
         })
     }
 }
