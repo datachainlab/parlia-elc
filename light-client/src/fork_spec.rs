@@ -50,7 +50,7 @@ impl ForkSpec {
     pub fn boundary_epochs(&self, prev_fork_spec: &ForkSpec) -> Result<BoundaryEpochs, Error> {
         if let HeightOrTimestamp::Height(height) = self.height_or_timestamp {
             let prev_last = height - (height % prev_fork_spec.epoch_length);
-            let current_first = (prev_last..).find(|&h| h % self.epoch_length == 0).unwrap();
+            let current_first = (height..).find(|&h| h % self.epoch_length == 0).unwrap();
             let mut intermediates= vec![];
             let mut mid = prev_last + prev_fork_spec.epoch_length;
             while mid < current_first {
@@ -172,23 +172,41 @@ pub fn find_target_fork_spec(
     fork_specs: &[ForkSpec],
     current_height: BlockNumber,
     current_timestamp: u64,
-) -> Result<BoundaryEpochs, Error> {
+) -> Result<&ForkSpec, Error> {
     // find from last to first
-    let reversed = fork_specs.iter().rev();
-    for (i, spec ) in reversed.enumerate() {
-        let found = match spec.height_or_timestamp {
+    fork_specs
+        .iter()
+        .rev()
+        .find(|spec| match spec.height_or_timestamp {
             HeightOrTimestamp::Height(height) => height <= current_height,
             HeightOrTimestamp::Time(timestamp) => timestamp <= current_timestamp,
+        })
+        .ok_or(Error::MissingForkSpec(current_height, current_timestamp))
+}
+
+pub fn find_target_fork_spec_by_height(
+    fork_specs: &[ForkSpec],
+    current_height: BlockNumber,
+) -> Result<BoundaryEpochs, Error> {
+    let mut fork_specs = fork_specs.to_vec();
+    fork_specs.reverse();
+    // find from last to first
+    for (i, spec ) in fork_specs.iter().enumerate() {
+        match spec.height_or_timestamp {
+            HeightOrTimestamp::Height(height) => {
+                if height <= current_height {
+                    if i == fork_specs.len() - 1 {
+                        let boundary = spec.boundary_epochs(&spec.clone())?;
+                        return Ok(boundary)
+                    }
+                    let boundary = spec.boundary_epochs(&fork_specs[i + 1])?;
+                    return Ok(boundary)
+                }
+            },
+            _ => {}
         };
-        if found {
-            // last
-            if i == fork_specs.len() - 1 {
-                return spec.boundary_epochs(&spec.clone())
-            }
-            return spec.boundary_epochs(&fork_specs[i + 1])
-        }
     }
-    Err(Error::MissingForkSpec(current_height, current_timestamp))
+    Err(Error::MissingForkSpecByHeight(current_height))
 }
 
 pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {

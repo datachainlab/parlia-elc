@@ -64,6 +64,7 @@ pub enum Error {
     MissingTrustedHeight,
     MissingTrustingPeriod,
     NegativeMaxClockDrift,
+    UnexpectedTrustedEpoch(BlockNumber, BlockNumber, BlockNumber, BlockNumber),
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     UnexpectedHeaderRevision(u64, u64),
@@ -88,8 +89,8 @@ pub enum Error {
     MissingTurnLengthInEpochBlock(BlockNumber),
     MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
-    UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
+    UnexpectedPreviousValidatorsHash(Height, BlockNumber, Hash, Hash, BlockNumber),
+    UnexpectedCurrentValidatorsHash(Height, BlockNumber, Hash, Hash, BlockNumber),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
     InsufficientHonestValidator(Hash, usize, usize),
     MissingValidatorToVerifySeal(BlockNumber),
@@ -99,15 +100,15 @@ pub enum Error {
     MissingTrustedCurrentValidators(BlockNumber),
     UnexpectedDifficultyInTurn(BlockNumber, u64, usize),
     UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
-    UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedUntrustedValidatorsHashInEpoch(Height, BlockNumber, Hash, Hash, BlockNumber),
+    UnexpectedCurrentValidatorsHashInEpoch(Height, BlockNumber, Hash, Hash),
     UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
     MissingRequestsHash(BlockNumber),
     UnexpectedRequestsHash(BlockNumber, Vec<u8>),
     UnexpectedHeaderRLP(BlockNumber),
     MissingForkSpec(BlockNumber, u64),
+    MissingForkSpecByHeight(BlockNumber),
     UnexpectedHeaderItemCount(BlockNumber, usize, u64),
-    NotVerifiableHeader(BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -132,6 +133,7 @@ pub enum Error {
     UnexpectedForkSpecHeightOrder(u64, u64),
     MissingForkHeightIntPreviousEpochCalculation(u64, ForkSpec),
     MissingForkHeightIntBoundaryCalculation(ForkSpec, ForkSpec),
+    NotVerifiableHeader(BlockNumber),
 
     // Misbehaviour
     MissingHeader1,
@@ -177,8 +179,11 @@ impl core::fmt::Display for Error {
                 write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
             }
             Error::MissingTrustedHeight => write!(f, "MissingTrustedHeight"),
+            Error::UnexpectedTrustedEpoch(e1, e2,e3, e4) => {
+                write!(f, "UnexpectedTrustedEpoch: {} {} header_epoch={} trusted_epoch={}", e1, e2, e3, e4)
+            }
             Error::UnexpectedTrustedHeight(e1, e2) => {
-                write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
+                write!(f, "UnexpectedTrustedHeight: {} {} ", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
             Error::UnexpectedHeaderRevision(e1, e2) => {
@@ -303,18 +308,18 @@ impl core::fmt::Display for Error {
             Error::UnexpectedMixHash(e1, e2) => {
                 write!(f, "UnexpectedMixHash : {:?} {:?}", e1, e2)
             }
-            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4) => {
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4, e5
                 )
             }
-            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4) => {
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4,e5
                 )
             }
             Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
@@ -375,11 +380,11 @@ impl core::fmt::Display for Error {
             Error::UnexpectedExtraDataLength(e1) => {
                 write!(f, "UnexpectedExtraDataLength: {}", e1)
             }
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4, e5
                 )
             }
             Error::UnexpectedCurrentValidatorsHashInEpoch(e1, e2, e3, e4) => {
@@ -436,6 +441,18 @@ impl core::fmt::Display for Error {
             }
             Error::VerifyAccountError(e1) => {
                 write!(f, "VerifyAccountError : {}", e1)
+            }
+            Error::MissingForkSpecByHeight(e1) => {
+                write!(f, "MissingForkSpecByHeight : {}", e1)
+            }
+            Error::MissingForkHeightIntPreviousEpochCalculation(e1, e2) => {
+                write!(f, "MissingForkHeightIntPreviousEpochCalculation : {} {:?}", e1, e2)
+            }
+            Error::MissingForkHeightIntBoundaryCalculation(e1, e2) => {
+                write!(f, "MissingForkHeightIntBoundaryCalculation : {:?} {:?}", e1, e2)
+            }
+            Error::NotVerifiableHeader(e1) => {
+                write!(f, "NotVerifiableHeader : {}", e1)
             }
         }
     }

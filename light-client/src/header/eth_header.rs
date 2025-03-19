@@ -9,7 +9,7 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::fork_spec::{find_target_fork_spec, BoundaryEpochs, ForkSpec, HeightOrTimestamp};
+use crate::fork_spec::{find_target_fork_spec, find_target_fork_spec_by_height, BoundaryEpochs, ForkSpec, HeightOrTimestamp};
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -288,7 +288,7 @@ impl ETHHeader {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
-        let attestation_bytes = if !self.is_epoch() {
+        let attestation_bytes = if !self.is_epoch()? {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
@@ -320,20 +320,23 @@ impl ETHHeader {
         Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
     }
 
-    pub fn verify_fork_rule(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
 
-        // Ensure boundary epochs are available
-        let boundary_epochs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        let fork_spec= find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
 
         // Ensure header item count is collect
-        if boundary_epochs.current_fork_spec().additional_header_item_count != self.additional_items.len() as u64 {
+        if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
             return Err(Error::UnexpectedHeaderItemCount(
                 self.number,
                 self.additional_items.len(),
-                boundary_epochs.current_fork_spec().additional_header_item_count,
+                fork_spec.additional_header_item_count,
             ));
         }
-        self.boundary_epochs = Some(boundary_epochs);
+        Ok(())
+    }
+
+    pub fn set_boundary_epochs(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        self.boundary_epochs = Some(find_target_fork_spec_by_height(fork_specs, self.number)?);
         Ok(())
     }
 
@@ -854,6 +857,7 @@ pub(crate) mod test {
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500
             }])
             .unwrap();
 
@@ -862,14 +866,17 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
+                    epoch_length: 500
                 },
             ])
             .unwrap();
@@ -884,6 +891,7 @@ pub(crate) mod test {
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
+                epoch_length: 500
             }])
             .unwrap_err();
         match err {
@@ -896,14 +904,17 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
+                    epoch_length: 500
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500
                 },
             ])
             .unwrap_err();

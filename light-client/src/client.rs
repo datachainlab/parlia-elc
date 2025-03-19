@@ -372,13 +372,14 @@ impl InnerLightClient {
             return Err(Error::ClientFrozen(client_id));
         }
 
+        let mut misbehaviour = misbehaviour;
         let trusted_consensus_state1 = ConsensusState::try_from(any_consensus_state1)?;
         let trusted_consensus_state2 = ConsensusState::try_from(any_consensus_state2)?;
         let new_client_state = client_state.check_misbehaviour_and_update_state(
             ctx.host_timestamp(),
             &trusted_consensus_state1,
             &trusted_consensus_state2,
-            &misbehaviour,
+            &mut misbehaviour,
         )?;
 
         let prev_state = self.make_prev_states(
@@ -826,7 +827,7 @@ mod test {
         for headers in header_groups {
             let any: Any = headers.first().unwrap().clone().try_into().unwrap();
             let first = Header::try_from(any.clone()).unwrap();
-            if !first.eth_header().target.is_epoch() {
+            if !first.eth_header().target.is_epoch().unwrap() {
                 panic!("first header of each group must be epoch");
             }
             // create client

@@ -47,7 +47,7 @@ impl ETHHeaders {
         // Ensure valid seals
         let p_val = previous_epoch.validators();
         for h in self.all.iter() {
-            if h.number >= next_checkpoint {
+            if next_checkpoint.is_some()  && h.number >= next_checkpoint.unwrap() {
                 let n_val = unwrap_n_val(h.number, &n_val)?;
                 h.verify_seal(&n_val, chain_id)?;
             } else if h.number >= checkpoint {
@@ -65,7 +65,7 @@ impl ETHHeaders {
         let mut last_voters: Validators = Vec::new();
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
-            last_voters = if h.number > next_checkpoint {
+            last_voters = if next_checkpoint.is_some() && h.number > next_checkpoint.unwrap() {
                 vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?
             } else if h.number > checkpoint {
                 vote.verify(h.number, current_epoch.epoch().validators())?
@@ -145,7 +145,7 @@ impl ETHHeaders {
         &self,
         checkpoint: u64,
         current_epoch: &EitherEpoch,
-    ) -> Result<(Option<Epoch>, BlockNumber), Error> {
+    ) -> Result<(Option<Epoch>, Option<BlockNumber>), Error> {
         let after_checkpoint: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
 
         let find_next_epoch = |hs: &Vec<&ETHHeader>, checkpoint: u64| {
@@ -153,10 +153,10 @@ impl ETHHeaders {
                 if let Ok(next_epoch)= get_validator_bytes_and_turn_length(&h.extra_data) {
                     let next_epoch = Epoch::new(next_epoch.0.into(), next_epoch.1);
                     let next_checkpoint = h.number + checkpoint;
-                    return (Some(next_epoch), next_checkpoint)
+                    return (Some(next_epoch), Some(next_checkpoint))
                 }
             }
-            return (None,0)
+            return (None,None)
         };
 
         match current_epoch {
@@ -164,11 +164,13 @@ impl ETHHeaders {
             Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
                 let (next_epoch, next_checkpoint) = find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
-                if next_epoch.is_some() && after_checkpoint.iter().any(|h| h.number >= next_checkpoint) {
-                    return Err(Error::UnexpectedNextCheckpointHeader(
-                        self.target.number,
-                        next_checkpoint,
-                    ));
+                if let Some(next_checkpoint) = next_checkpoint {
+                    if after_checkpoint.iter().any(|h| h.number >= next_checkpoint) {
+                        return Err(Error::UnexpectedNextCheckpointHeader(
+                            self.target.number,
+                            next_checkpoint,
+                        ));
+                    }
                 }
                 Ok((next_epoch, next_checkpoint))
             }
@@ -176,25 +178,28 @@ impl ETHHeaders {
             Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
                 let (next_epoch , next_checkpoint) = find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
-                if next_epoch.is_none() {
-                    return Ok((next_epoch, next_checkpoint));
-                }
+                let next_checkpoint = match next_checkpoint {
+                    None => return Ok((next_epoch, next_checkpoint)),
+                    Some(v) => v
+                };
 
                 // Finish if no headers over next checkpoint were found
                 let after_next_checkpoint: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= next_checkpoint).collect();
                 if after_next_checkpoint.is_empty() {
-                    return Ok((next_epoch, next_checkpoint));
+                    return Ok((next_epoch, Some(next_checkpoint)));
                 }
 
                 // Ensure headers are before the next_next_checkpoint
                 let (next_next_epoch, next_next_checkpoint) = find_next_epoch(&after_next_checkpoint, next_epoch.clone().unwrap().checkpoint());
-                if next_next_epoch.is_some() && after_next_checkpoint.iter().any(|h| h.number >= next_next_checkpoint) {
-                    return Err(Error::UnexpectedNextNextCheckpointHeader(
-                        self.target.number,
-                        next_next_checkpoint,
-                    ));
+                if let Some(next_next_checkpoint) = next_next_checkpoint {
+                    if after_next_checkpoint.iter().any(|h| h.number >= next_next_checkpoint) {
+                        return Err(Error::UnexpectedNextNextCheckpointHeader(
+                            self.target.number,
+                            next_next_checkpoint,
+                        ));
+                    }
                 }
-                Ok((next_epoch, next_checkpoint))
+                Ok((next_epoch, Some(next_checkpoint)))
             }
         }
     }
@@ -251,18 +256,18 @@ fn unwrap_n_val(n: BlockNumber, n_val: &Option<Epoch>) -> Result<Epoch, Error> {
 fn verify_voters(
     voters: &Validators,
     h: &ETHHeader,
-    next_checkpoint: BlockNumber,
+    next_checkpoint: Option<BlockNumber>,
     checkpoint: BlockNumber,
     current_epoch: &EitherEpoch,
     previous_epoch: &TrustedEpoch,
 ) -> Result<(), Error> {
-    if h.number > next_checkpoint {
+    if next_checkpoint.is_some()  && h.number > next_checkpoint.unwrap() {
         match current_epoch {
             Trusted(e) => e.verify_untrusted_voters(voters)?,
             _ => {
                 return Err(Error::UnexpectedUntrustedValidators(
                     h.number,
-                    next_checkpoint,
+                    next_checkpoint.unwrap(),
                 ))
             }
         }
@@ -481,7 +486,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -493,7 +498,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -505,7 +510,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -527,7 +532,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -536,7 +541,7 @@ mod test {
         verify_voters(
             &vec![vec![0]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -548,7 +553,7 @@ mod test {
         verify_voters(
             &vec![vec![0]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -663,7 +668,7 @@ mod test {
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
             let next_epoch_checkpoint =
-                headers.target.next_epoch_block_number() + c_val.checkpoint();
+                headers.target.current_epoch_block_number().unwrap() + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -717,7 +722,7 @@ mod test {
                  include_limit: bool| {
             let n_val = n_val_header.epoch.clone().unwrap();
             let next_next_epoch_checkpoint =
-                headers.target.next_next_epoch_block_number() + n_val.checkpoint();
+                headers.target.current_epoch_block_number().unwrap() + fork_spec_after_lorentz().epoch_length + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -726,7 +731,7 @@ mod test {
                 }
                 let mut next = last.clone();
                 next.number = last.number + 1;
-                if next.is_epoch() {
+                if next.is_epoch().unwrap() {
                     // set n_val
                     next.extra_data = n_val_header.extra_data.clone();
                     let (validators, turn_length) =

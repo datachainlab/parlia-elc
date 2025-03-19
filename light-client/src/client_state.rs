@@ -67,10 +67,12 @@ impl ClientState {
         for fs in &mut new_client_state.fork_specs.iter_mut() {
             if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp  {
                 // second must be forks spec timestamp
-                let h=  &header.eth_header().all[1];
-                if ts == h.milli_timestamp() {
-                    fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
-                }
+               if header.eth_header().all.len() >= 2 {
+                   let h = &header.eth_header().all[1];
+                   if ts == h.milli_timestamp() {
+                       fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
+                   }
+               }
             }
         }
 
@@ -378,7 +380,7 @@ mod test {
             let raw = RawHeader {
                 headers: vec![EthHeader { header: h_rlp }],
                 trusted_height: Some(trusted_height),
-                current_validators: if h.is_epoch() {
+                current_validators: if h.is_epoch().unwrap() {
                     h.epoch.clone().unwrap().validators().clone()
                 } else {
                     vec![h.coinbase.clone()]
@@ -411,8 +413,8 @@ mod test {
         let h = hp.epoch_header();
         let now = new_timestamp(h.milli_timestamp() - 1).unwrap();
         cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::HeaderFromFuture(_, _, _) => {}
             err => unreachable!("{:?}", err),
@@ -422,8 +424,8 @@ mod test {
         let h = hp.epoch_header();
         let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
         cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
-        let header = header_fn(1, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(1, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedHeaderRevision(n1, n2) => {
                 assert_eq!(cs.chain_id.version(), n1);
@@ -434,12 +436,12 @@ mod test {
 
         // fail: verify_validator_set
         let h = hp.epoch_header();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _, _) => {
                 assert_eq!(h1.revision_height(), h.number - 1);
-                assert_eq!(h2.revision_height(), h.number);
+                assert_eq!(h2, h.number);
             }
             err => unreachable!("{:?}", err),
         }
@@ -447,8 +449,8 @@ mod test {
         // fail: header.verify
         let h = hp.epoch_header();
         cons_state.current_validators_hash = Epoch::new(vec![h.coinbase.clone()].into(), 1).hash();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedCoinbase(number) => {
                 assert_eq!(number, h.number);
