@@ -118,7 +118,7 @@ impl BoundaryEpochs {
             if self.intermediates.is_empty() {
                 return self.prev_last;
             }
-            return self.intermediates.last().unwrap().clone();
+            return *self.intermediates.last().unwrap();
         }
 
         // After boundary
@@ -184,18 +184,15 @@ pub fn find_target_fork_spec_by_height(
     fork_specs.reverse();
     // find from last to first
     for (i, spec) in fork_specs.iter().enumerate() {
-        match spec.height_or_timestamp {
-            HeightOrTimestamp::Height(height) => {
-                if height <= current_height {
-                    if i == fork_specs.len() - 1 {
-                        let boundary = spec.boundary_epochs(&spec.clone())?;
-                        return Ok(boundary);
-                    }
-                    let boundary = spec.boundary_epochs(&fork_specs[i + 1])?;
+        if let HeightOrTimestamp::Height(height) = spec.height_or_timestamp {
+            if height <= current_height {
+                if i == fork_specs.len() - 1 {
+                    let boundary = spec.boundary_epochs(&spec.clone())?;
                     return Ok(boundary);
                 }
+                let boundary = spec.boundary_epochs(&fork_specs[i + 1])?;
+                return Ok(boundary);
             }
-            _ => {}
         };
     }
     Err(Error::MissingForkSpecByHeight(current_height))

@@ -11,7 +11,6 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 use crate::errors::Error;
 use crate::fork_spec::{
     find_target_fork_spec, find_target_fork_spec_by_height, BoundaryEpochs, ForkSpec,
-    HeightOrTimestamp,
 };
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
@@ -456,7 +455,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let hash: Hash = keccak_256(value.header.as_slice());
 
         let epoch = match get_validator_bytes_and_turn_length(&extra_data) {
-            Err(e) => None,
+            Err(_) => None,
             Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length)),
         };
 

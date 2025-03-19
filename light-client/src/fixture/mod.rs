@@ -64,7 +64,7 @@ pub fn localnet() -> Box<dyn Network> {
 pub fn decode_header(rlp_header: Vec<u8>) -> ETHHeader {
     let mut header: ETHHeader = EthHeader { header: rlp_header }.try_into().unwrap();
     header
-        .set_boundary_epochs(&vec![fork_spec_after_pascal(), fork_spec_after_lorentz()])
+        .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
         .unwrap();
     header
 }

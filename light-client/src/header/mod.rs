@@ -5,7 +5,7 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::consensus_state::ConsensusState;
-use crate::fork_spec::{find_target_fork_spec, find_target_fork_spec_by_height, ForkSpec};
+use crate::fork_spec::{find_target_fork_spec_by_height, ForkSpec};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
@@ -433,7 +433,7 @@ pub(crate) mod test {
         result
             .headers
             .target
-            .set_boundary_epochs(&vec![fork_spec_after_pascal(), fork_spec_after_lorentz()])
+            .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
             .unwrap();
         assert_eq!(result.headers.target, *h);
         assert_eq!(
@@ -476,7 +476,7 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap();
         match c_val {
@@ -501,7 +501,7 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap();
         match c_val {
@@ -531,7 +531,7 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
@@ -549,11 +549,11 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(t, h, hash, cons_hash, _) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(hash, previous_epoch.hash());
                 assert_eq!(cons_hash, cs.current_validators_hash);
@@ -568,11 +568,11 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedTrustedEpoch(t, h, _, _) => {
+            Error::UnexpectedTrustedEpoch(t, _, _, _) => {
                 assert_eq!(t, trusted_height.revision_height());
             }
             _ => unreachable!("err {:?}", err),
@@ -592,11 +592,11 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedPreviousValidatorsHash(t, h, hash, cons_hash, _) => {
+            Error::UnexpectedPreviousValidatorsHash(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(hash, previous_epoch.hash());
                 assert_eq!(cons_hash, cs.previous_validators_hash);
@@ -613,11 +613,11 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedCurrentValidatorsHash(t, h, hash, cons_hash, _) => {
+            Error::UnexpectedCurrentValidatorsHash(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(hash, current_epoch.hash());
                 assert_eq!(cons_hash, cs.current_validators_hash);
@@ -641,11 +641,11 @@ pub(crate) mod test {
             trusted_height,
             previous_epoch,
             current_epoch,
-            &vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedCurrentValidatorsHashInEpoch(t, h, header_hash, request_hash) => {
+            Error::UnexpectedCurrentValidatorsHashInEpoch(t, _, header_hash, request_hash) => {
                 assert_eq!(t, trusted_height);
                 assert_eq!(header_hash, hp.epoch_header().epoch.unwrap().hash());
                 assert_eq!(request_hash, current_epoch.hash());

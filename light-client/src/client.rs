@@ -526,7 +526,6 @@ mod test {
     use crate::fixture::{fork_spec_after_lorentz, fork_spec_after_pascal, localnet, Network};
     use crate::header::Header;
 
-    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;

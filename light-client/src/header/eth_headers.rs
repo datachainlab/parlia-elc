@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
@@ -154,7 +153,7 @@ impl ETHHeaders {
                     return (Some(next_epoch), Some(next_checkpoint));
                 }
             }
-            return (None, None);
+            (None, None)
         };
 
         match current_epoch {
@@ -194,7 +193,7 @@ impl ETHHeaders {
                 }
 
                 // Ensure headers are before the next_next_checkpoint
-                let (next_next_epoch, next_next_checkpoint) = find_next_epoch(
+                let (_, next_next_checkpoint) = find_next_epoch(
                     &after_next_checkpoint,
                     next_epoch.clone().unwrap().checkpoint(),
                 );
@@ -295,7 +294,7 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
+    use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
