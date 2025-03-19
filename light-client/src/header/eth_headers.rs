@@ -146,11 +146,11 @@ impl ETHHeaders {
         let after_checkpoint: Vec<&ETHHeader> =
             self.all.iter().filter(|h| h.number >= checkpoint).collect();
 
-        let find_next_epoch = |hs: &Vec<&ETHHeader>, checkpoint: u64| {
+        let find_next_epoch = |hs: &Vec<&ETHHeader>, height_to_checkpoint: u64| {
             for h in hs.iter() {
                 if let Ok(next_epoch) = get_validator_bytes_and_turn_length(&h.extra_data) {
                     let next_epoch = Epoch::new(next_epoch.0.into(), next_epoch.1);
-                    let next_checkpoint = h.number + checkpoint;
+                    let next_checkpoint = h.number + height_to_checkpoint;
                     return (Some(next_epoch), Some(next_checkpoint));
                 }
             }
@@ -679,8 +679,9 @@ mod test {
                  c_val: &EitherEpoch,
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
-            let next_epoch_checkpoint =
-                headers.target.current_epoch_block_number().unwrap() + c_val.checkpoint();
+            let next_epoch_checkpoint = headers.target.current_epoch_block_number().unwrap()
+                + fork_spec_after_lorentz().epoch_length
+                + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -689,6 +690,11 @@ mod test {
                 }
                 let mut next = last.clone();
                 next.number = last.number + 1;
+
+                // dummy validator set
+                if next.number % fork_spec_after_lorentz().epoch_length == 0 {
+                    next.extra_data = hp.epoch_header().extra_data;
+                }
                 headers.all.push(next);
             }
             let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();
@@ -735,6 +741,7 @@ mod test {
             let n_val = n_val_header.epoch.clone().unwrap();
             let next_next_epoch_checkpoint = headers.target.current_epoch_block_number().unwrap()
                 + fork_spec_after_lorentz().epoch_length
+                + fork_spec_after_lorentz().epoch_length
                 + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
@@ -744,13 +751,14 @@ mod test {
                 }
                 let mut next = last.clone();
                 next.number = last.number + 1;
-                if next.is_epoch().unwrap() {
-                    // set n_val
+                if next.number % fork_spec_after_lorentz().epoch_length == 0 {
+                    // set validator set
                     next.extra_data = n_val_header.extra_data.clone();
-                    let (validators, turn_length) =
-                        get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
-                    next.epoch = Some(Epoch::new(validators.into(), turn_length));
+                } else {
+                    // not include validator set
+                    next.extra_data = hp.epoch_header_plus_1().extra_data;
                 }
+
                 headers.all.push(next);
             }
             let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();

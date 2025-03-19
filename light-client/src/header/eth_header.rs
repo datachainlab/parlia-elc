@@ -291,7 +291,7 @@ impl ETHHeader {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
-        let attestation_bytes = if !self.is_epoch()? {
+        let attestation_bytes = if !self.is_epoch() {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
@@ -309,12 +309,8 @@ impl ETHHeader {
         Rlp::new(attestation_bytes).try_into()
     }
 
-    pub fn is_epoch(&self) -> Result<bool, Error> {
-        Ok(self
-            .boundary_epochs
-            .as_ref()
-            .ok_or(Error::NotVerifiableHeader(self.number))?
-            .is_epoch(self.number))
+    pub fn is_epoch(&self) -> bool {
+        self.epoch.is_some()
     }
 
     pub fn current_epoch_block_number(&self) -> Result<BlockNumber, Error> {

@@ -86,19 +86,6 @@ impl BoundaryEpochs {
         &self.current_fork_spec
     }
 
-    pub fn is_epoch(&self, number: BlockNumber) -> bool {
-        if number == self.prev_last {
-            return true;
-        }
-        if number == self.current_first {
-            return true;
-        }
-        if self.intermediates.contains(&number) {
-            return true;
-        }
-        number % self.current_fork_spec.epoch_length == 0
-    }
-
     pub fn current_epoch_block_number(&self, number: BlockNumber) -> BlockNumber {
         if number >= self.current_first {
             return number - (number % self.current_fork_spec.epoch_length);

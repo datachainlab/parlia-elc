@@ -384,7 +384,7 @@ mod test {
             let raw = RawHeader {
                 headers: vec![EthHeader { header: h_rlp }],
                 trusted_height: Some(trusted_height),
-                current_validators: if h.is_epoch().unwrap() {
+                current_validators: if h.is_epoch() {
                     h.epoch.clone().unwrap().validators().clone()
                 } else {
                     vec![h.coinbase.clone()]

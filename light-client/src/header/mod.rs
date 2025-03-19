@@ -112,7 +112,7 @@ fn verify_epoch<'a>(
     current_epoch: &'a Epoch,
     fork_specs: &[ForkSpec],
 ) -> Result<(EitherEpoch<'a>, TrustedEpoch<'a>), Error> {
-    let is_epoch = target.is_epoch()?;
+    let is_epoch = target.is_epoch();
 
     let trusted_epoch =
         find_target_fork_spec_by_height(fork_specs, trusted_height.revision_height())?

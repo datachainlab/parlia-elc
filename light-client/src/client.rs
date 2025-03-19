@@ -523,29 +523,13 @@ mod test {
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
 
-    use crate::fixture::{localnet, Network};
+    use crate::fixture::{fork_spec_after_lorentz, fork_spec_after_pascal, localnet, Network};
     use crate::header::Header;
 
     use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;
-
-    fn after_pascal() -> ForkSpec {
-        ForkSpec {
-            height_or_timestamp: HeightOrTimestamp::Height(0),
-            additional_header_item_count: 1, // requestsHash
-            epoch_length: 200,
-        }
-    }
-
-    fn after_lorentz() -> ForkSpec {
-        ForkSpec {
-            height_or_timestamp: HeightOrTimestamp::Height(0),
-            additional_header_item_count: 1, // requestsHash
-            epoch_length: 500,
-        }
-    }
 
     impl Default for ClientState {
         fn default() -> Self {
@@ -559,7 +543,7 @@ mod test {
                 max_clock_drift: core::time::Duration::new(1, 0),
                 latest_height: Default::default(),
                 frozen: false,
-                fork_specs: vec![after_pascal()],
+                fork_specs: vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
             }
         }
     }
@@ -827,7 +811,7 @@ mod test {
         for headers in header_groups {
             let any: Any = headers.first().unwrap().clone().try_into().unwrap();
             let first = Header::try_from(any.clone()).unwrap();
-            if !first.eth_header().target.is_epoch().unwrap() {
+            if !first.eth_header().target.is_epoch() {
                 panic!("first header of each group must be epoch");
             }
             // create client
@@ -966,7 +950,7 @@ mod test {
         assert_err(
             err,
             &format!(
-                "UnexpectedTrustedHeight: {}",
+                "UnexpectedTrustedEpoch: {}",
                 trusted_height.revision_height()
             ),
         );
@@ -1116,7 +1100,7 @@ mod test {
         );
         let ctx = MockClientReader {
             client_state: Some(ClientState {
-                fork_specs: vec![after_pascal()],
+                fork_specs: vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state,
@@ -1187,7 +1171,7 @@ mod test {
         let ctx = MockClientReader {
             client_state: Some(ClientState {
                 chain_id: ChainId::new(9999),
-                fork_specs: vec![after_pascal()],
+                fork_specs: vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
                 ..Default::default()
             }),
             consensus_state: mock_consensus_state.clone(),
