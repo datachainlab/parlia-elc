@@ -51,7 +51,7 @@ impl ForkSpec {
         if let HeightOrTimestamp::Height(height) = self.height_or_timestamp {
             let prev_last = height - (height % prev_fork_spec.epoch_length);
             let current_first = (height..).find(|&h| h % self.epoch_length == 0).unwrap();
-            let mut intermediates= vec![];
+            let mut intermediates = vec![];
             let mut mid = prev_last + prev_fork_spec.epoch_length;
             while mid < current_first {
                 intermediates.push(mid);
@@ -60,12 +60,15 @@ impl ForkSpec {
             return Ok(BoundaryEpochs {
                 previous_fork_spec: prev_fork_spec.clone(),
                 current_fork_spec: self.clone(),
-                current_first ,
+                current_first,
                 prev_last,
                 intermediates,
             });
         }
-        Err(Error::MissingForkHeightIntBoundaryCalculation(self.clone(), prev_fork_spec.clone()))
+        Err(Error::MissingForkHeightIntBoundaryCalculation(
+            self.clone(),
+            prev_fork_spec.clone(),
+        ))
     }
 }
 
@@ -79,17 +82,16 @@ pub struct BoundaryEpochs {
 }
 
 impl BoundaryEpochs {
-
     pub fn current_fork_spec(&self) -> &ForkSpec {
         &self.current_fork_spec
     }
 
-    pub fn is_epoch(&self, number: BlockNumber) -> bool{
+    pub fn is_epoch(&self, number: BlockNumber) -> bool {
         if number == self.prev_last {
-            return true
+            return true;
         }
         if number == self.current_first {
-            return true
+            return true;
         }
         if self.intermediates.contains(&number) {
             return true;
@@ -99,32 +101,35 @@ impl BoundaryEpochs {
 
     pub fn current_epoch_block_number(&self, number: BlockNumber) -> BlockNumber {
         if number >= self.current_first {
-            return number - (number % self.current_fork_spec.epoch_length)
+            return number - (number % self.current_fork_spec.epoch_length);
         }
         number - (number % self.previous_fork_spec.epoch_length)
     }
 
-    pub fn previous_epoch_block_number(&self, current_epoch_block_number: BlockNumber) -> BlockNumber {
+    pub fn previous_epoch_block_number(
+        &self,
+        current_epoch_block_number: BlockNumber,
+    ) -> BlockNumber {
         // first or under
         if current_epoch_block_number <= self.prev_last {
-            return current_epoch_block_number - self.previous_fork_spec.epoch_length
+            return current_epoch_block_number - self.previous_fork_spec.epoch_length;
         }
 
         // Hit mids eppchs
         for (i, mid) in self.intermediates.iter().enumerate() {
             if current_epoch_block_number == *mid {
                 if i == 0 {
-                    return self.prev_last
-                }else {
-                    return self.intermediates[i - 1]
+                    return self.prev_last;
+                } else {
+                    return self.intermediates[i - 1];
                 }
             }
         }
 
         // is just boundary
-        if current_epoch_block_number == self.current_first  {
+        if current_epoch_block_number == self.current_first {
             if self.intermediates.is_empty() {
-                return self.prev_last
+                return self.prev_last;
             }
             return self.intermediates.last().unwrap().clone();
         }
@@ -191,18 +196,18 @@ pub fn find_target_fork_spec_by_height(
     let mut fork_specs = fork_specs.to_vec();
     fork_specs.reverse();
     // find from last to first
-    for (i, spec ) in fork_specs.iter().enumerate() {
+    for (i, spec) in fork_specs.iter().enumerate() {
         match spec.height_or_timestamp {
             HeightOrTimestamp::Height(height) => {
                 if height <= current_height {
                     if i == fork_specs.len() - 1 {
                         let boundary = spec.boundary_epochs(&spec.clone())?;
-                        return Ok(boundary)
+                        return Ok(boundary);
                     }
                     let boundary = spec.boundary_epochs(&fork_specs[i + 1])?;
-                    return Ok(boundary)
+                    return Ok(boundary);
                 }
-            },
+            }
             _ => {}
         };
     }

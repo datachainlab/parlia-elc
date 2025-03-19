@@ -58,21 +58,20 @@ impl ClientState {
         trusted_consensus_state: &ConsensusState,
         mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
-
         // Ensure header is valid
         self.check_header(now, trusted_consensus_state, &mut header)?;
         let mut new_client_state = self.clone();
 
         // Update fork specs if timestamp
         for fs in &mut new_client_state.fork_specs.iter_mut() {
-            if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp  {
+            if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp {
                 // second must be forks spec timestamp
-               if header.eth_header().all.len() >= 2 {
-                   let h = &header.eth_header().all[1];
-                   if ts == h.milli_timestamp() {
-                       fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
-                   }
-               }
+                if header.eth_header().all.len() >= 2 {
+                    let h = &header.eth_header().all[1];
+                    if ts == h.milli_timestamp() {
+                        fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
+                    }
+                }
             }
         }
 
@@ -103,7 +102,12 @@ impl ClientState {
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &mut Header) -> Result<(), Error> {
+    fn check_header(
+        &self,
+        now: Time,
+        cs: &ConsensusState,
+        header: &mut Header,
+    ) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         let ts = header.timestamp()?;
         validate_within_trusting_period(
@@ -318,7 +322,7 @@ mod test {
         ForkSpec {
             height_or_timestamp: HeightOrTimestamp::Height(0),
             additional_header_item_count: 1, // requestsHash
-            epoch_length: 200
+            epoch_length: 200,
         }
     }
 

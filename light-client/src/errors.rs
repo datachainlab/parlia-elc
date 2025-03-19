@@ -2,12 +2,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Formatter;
 
+use crate::fork_spec::ForkSpec;
+use crate::misc::{Address, BlockNumber, Hash};
 use k256::ecdsa::signature;
 use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
 use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
-use crate::fork_spec::ForkSpec;
-use crate::misc::{Address, BlockNumber, Hash};
 
 type BoxedTrieError = alloc::boxed::Box<TrieError<primitive_types::H256, rlp::DecoderError>>;
 
@@ -179,8 +179,12 @@ impl core::fmt::Display for Error {
                 write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
             }
             Error::MissingTrustedHeight => write!(f, "MissingTrustedHeight"),
-            Error::UnexpectedTrustedEpoch(e1, e2,e3, e4) => {
-                write!(f, "UnexpectedTrustedEpoch: {} {} header_epoch={} trusted_epoch={}", e1, e2, e3, e4)
+            Error::UnexpectedTrustedEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedTrustedEpoch: {} {} header_epoch={} trusted_epoch={}",
+                    e1, e2, e3, e4
+                )
             }
             Error::UnexpectedTrustedHeight(e1, e2) => {
                 write!(f, "UnexpectedTrustedHeight: {} {} ", e1, e2)
@@ -319,7 +323,7 @@ impl core::fmt::Display for Error {
                 write!(
                     f,
                     "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?} trusted_epoch={}",
-                    e1, e2, e3, e4,e5
+                    e1, e2, e3, e4, e5
                 )
             }
             Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
@@ -446,10 +450,18 @@ impl core::fmt::Display for Error {
                 write!(f, "MissingForkSpecByHeight : {}", e1)
             }
             Error::MissingForkHeightIntPreviousEpochCalculation(e1, e2) => {
-                write!(f, "MissingForkHeightIntPreviousEpochCalculation : {} {:?}", e1, e2)
+                write!(
+                    f,
+                    "MissingForkHeightIntPreviousEpochCalculation : {} {:?}",
+                    e1, e2
+                )
             }
             Error::MissingForkHeightIntBoundaryCalculation(e1, e2) => {
-                write!(f, "MissingForkHeightIntBoundaryCalculation : {:?} {:?}", e1, e2)
+                write!(
+                    f,
+                    "MissingForkHeightIntBoundaryCalculation : {:?} {:?}",
+                    e1, e2
+                )
             }
             Error::NotVerifiableHeader(e1) => {
                 write!(f, "NotVerifiableHeader : {}", e1)

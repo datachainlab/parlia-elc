@@ -9,7 +9,10 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::fork_spec::{find_target_fork_spec, find_target_fork_spec_by_height, BoundaryEpochs, ForkSpec, HeightOrTimestamp};
+use crate::fork_spec::{
+    find_target_fork_spec, find_target_fork_spec_by_height, BoundaryEpochs, ForkSpec,
+    HeightOrTimestamp,
+};
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -307,22 +310,32 @@ impl ETHHeader {
     }
 
     pub fn is_epoch(&self) -> Result<bool, Error> {
-        Ok(self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?.is_epoch(self.number))
+        Ok(self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::NotVerifiableHeader(self.number))?
+            .is_epoch(self.number))
     }
 
     pub fn current_epoch_block_number(&self) -> Result<BlockNumber, Error> {
-        Ok(self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?.current_epoch_block_number(self.number))
+        Ok(self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::NotVerifiableHeader(self.number))?
+            .current_epoch_block_number(self.number))
     }
 
     pub fn previous_epoch_block_number(&self) -> Result<BlockNumber, Error> {
-        let boundary = self.boundary_epochs.as_ref().ok_or(Error::NotVerifiableHeader(self.number))?;
+        let boundary = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::NotVerifiableHeader(self.number))?;
         let current_epoch_block_number = boundary.current_epoch_block_number(self.number);
         Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
     }
 
     pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-
-        let fork_spec= find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
 
         // Ensure header item count is collect
         if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
@@ -348,7 +361,6 @@ impl ETHHeader {
         }
         self.timestamp * 1000 + milliseconds
     }
-
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -447,9 +459,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch  = match get_validator_bytes_and_turn_length(&extra_data) {
+        let epoch = match get_validator_bytes_and_turn_length(&extra_data) {
             Err(e) => None,
-            Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length))
+            Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length)),
         };
 
         // Extra items for seal hash
@@ -857,7 +869,7 @@ pub(crate) mod test {
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64,
-                epoch_length: 500
+                epoch_length: 500,
             }])
             .unwrap();
 
@@ -866,17 +878,17 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
             ])
             .unwrap();
@@ -891,7 +903,7 @@ pub(crate) mod test {
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
-                epoch_length: 500
+                epoch_length: 500,
             }])
             .unwrap_err();
         match err {
@@ -904,17 +916,17 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
-                    epoch_length: 500
+                    epoch_length: 500,
                 },
             ])
             .unwrap_err();

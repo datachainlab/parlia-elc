@@ -46,7 +46,7 @@ impl Network for Localnet {
             self.epoch_header_plus_1(),
             self.epoch_header_plus_2(),
         ]
-            .into()
+        .into()
     }
 
     fn headers_across_checkpoint(&self) -> ETHHeaders {
@@ -56,7 +56,7 @@ impl Network for Localnet {
             self.epoch_header_plus_3(),
             checkpoint_plus_1,
         ]
-            .into()
+        .into()
     }
 
     fn headers_after_checkpoint(&self) -> ETHHeaders {
@@ -67,7 +67,7 @@ impl Network for Localnet {
             checkpoint_plus_1,
             checkpoint_plus_2,
         ]
-            .into()
+        .into()
     }
 
     fn success_update_client_non_epoch_input(&self) -> UpdateClientNonEpochInput {
