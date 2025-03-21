@@ -243,8 +243,8 @@ mod test {
     use crate::fixture::{
         fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
     };
-    use crate::fork_spec::ForkSpec;
     use crate::fork_spec::{find_target_fork_spec, verify_sorted_asc, HeightOrTimestamp};
+    use crate::fork_spec::{find_target_fork_spec_by_height, ForkSpec};
 
     #[test]
     fn test_success_find_target_spec_height_only() {
@@ -516,7 +516,25 @@ mod test {
     }
 
     #[test]
-    fn test_boundary_epochs_lorentz_pascal() {
+    fn test_error_boundary_epochs_lorentz_pascal() {
+        let current = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Time(0),
+            additional_header_item_count: 1,
+            epoch_length: 500,
+        };
+        match current
+            .boundary_epochs(&fork_spec_after_pascal())
+            .unwrap_err()
+        {
+            Error::MissingForkHeightIntBoundaryCalculation(e1, _) => {
+                assert_eq!(current, e1);
+            }
+            _ => unreachable!("unexpected error"),
+        }
+    }
+
+    #[test]
+    fn test_success_boundary_epochs_lorentz_pascal() {
         let be = fork_spec_after_lorentz()
             .boundary_epochs(&fork_spec_after_pascal())
             .unwrap();
@@ -546,7 +564,7 @@ mod test {
     }
 
     #[test]
-    fn test_boundary_epochs_maxwell_lorentz() {
+    fn test_success_boundary_epochs_maxwell_lorentz() {
         let be = fork_spec_after_maxwell()
             .boundary_epochs(&fork_spec_after_lorentz())
             .unwrap();
@@ -580,5 +598,79 @@ mod test {
         assert_eq!(be.previous_epoch_block_number(1000), 500);
         assert_eq!(be.previous_epoch_block_number(2000), 1000);
         assert_eq!(be.previous_epoch_block_number(3000), 2000);
+    }
+
+    #[test]
+    fn test_error_find_target_spec_by_height() {
+        let specs = &[
+            ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(10),
+                additional_header_item_count: 1,
+                epoch_length: 200,
+            },
+            ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(20),
+                additional_header_item_count: 2,
+                epoch_length: 200,
+            },
+        ];
+        let v = find_target_fork_spec_by_height(specs, 9).unwrap_err();
+        match v {
+            Error::MissingForkSpecByHeight(e1) => {
+                assert_eq!(e1, 9);
+            }
+            _ => unreachable!("unexpected error {}", v),
+        }
+    }
+
+    #[test]
+    fn test_success_find_target_spec_by_height() {
+        let specs = &[
+            ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(10),
+                additional_header_item_count: 1,
+                epoch_length: 200,
+            },
+            ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(20),
+                additional_header_item_count: 2,
+                epoch_length: 500,
+            },
+        ];
+        let v = find_target_fork_spec_by_height(specs, 10).unwrap();
+        assert_eq!(
+            v.current_fork_spec.height_or_timestamp,
+            HeightOrTimestamp::Height(10)
+        );
+        assert_eq!(v.prev_last, 0);
+        assert_eq!(v.intermediates, vec![]);
+        assert_eq!(v.current_first, 200);
+
+        let v = find_target_fork_spec_by_height(specs, 11).unwrap();
+        assert_eq!(
+            v.current_fork_spec.height_or_timestamp,
+            HeightOrTimestamp::Height(10)
+        );
+        assert_eq!(v.prev_last, 0);
+        assert_eq!(v.intermediates, vec![]);
+        assert_eq!(v.current_first, 200);
+
+        let v = find_target_fork_spec_by_height(specs, 19).unwrap();
+        assert_eq!(
+            v.current_fork_spec.height_or_timestamp,
+            HeightOrTimestamp::Height(10)
+        );
+        assert_eq!(v.prev_last, 0);
+        assert_eq!(v.intermediates, vec![]);
+        assert_eq!(v.current_first, 200);
+
+        let v = find_target_fork_spec_by_height(specs, 20).unwrap();
+        assert_eq!(
+            v.current_fork_spec.height_or_timestamp,
+            HeightOrTimestamp::Height(20)
+        );
+        assert_eq!(v.prev_last, 0);
+        assert_eq!(v.intermediates, vec![200, 400]);
+        assert_eq!(v.current_first, 500);
     }
 }
