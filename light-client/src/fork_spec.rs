@@ -75,10 +75,7 @@ impl ForkSpec {
                 intermediates,
             });
         }
-        Err(Error::MissingForkHeightIntBoundaryCalculation(
-            self.clone(),
-            prev_fork_spec.clone(),
-        ))
+        Err(Error::MissingForkHeightIntBoundaryCalculation(self.clone()))
     }
 }
 
@@ -99,6 +96,11 @@ impl BoundaryEpochs {
     pub fn current_epoch_block_number(&self, number: BlockNumber) -> BlockNumber {
         if number >= self.current_first {
             return number - (number % self.current_fork_spec.epoch_length);
+        }
+        for mid in self.intermediates.iter().rev() {
+            if number >= *mid {
+                return *mid;
+            }
         }
         number - (number % self.previous_fork_spec.epoch_length)
     }
@@ -186,26 +188,20 @@ pub fn find_target_fork_spec(
         .ok_or(Error::MissingForkSpec(current_height, current_timestamp))
 }
 
-pub fn find_target_fork_spec_by_height(
+pub fn get_boundary_epochs(
+    current_spec: &ForkSpec,
     fork_specs: &[ForkSpec],
-    current_height: BlockNumber,
 ) -> Result<BoundaryEpochs, Error> {
-    let mut fork_specs = fork_specs.to_vec();
-    fork_specs.reverse();
     // find from last to first
     for (i, spec) in fork_specs.iter().enumerate() {
-        if let HeightOrTimestamp::Height(height) = spec.height_or_timestamp {
-            if height <= current_height {
-                if i == fork_specs.len() - 1 {
-                    let boundary = spec.boundary_epochs(&spec.clone())?;
-                    return Ok(boundary);
-                }
-                let boundary = spec.boundary_epochs(&fork_specs[i + 1])?;
-                return Ok(boundary);
+        if spec == current_spec {
+            if i == 0 {
+                return spec.boundary_epochs(&spec);
             }
-        };
+            return spec.boundary_epochs(&fork_specs[i - 1]);
+        }
     }
-    Err(Error::MissingForkSpecByHeight(current_height))
+    Err(Error::MissingPreviousForkSpec(current_spec.clone()))
 }
 
 pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {
@@ -243,8 +239,9 @@ mod test {
     use crate::fixture::{
         fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
     };
-    use crate::fork_spec::{find_target_fork_spec, verify_sorted_asc, HeightOrTimestamp};
-    use crate::fork_spec::{find_target_fork_spec_by_height, ForkSpec};
+    use crate::fork_spec::{
+        find_target_fork_spec, get_boundary_epochs, verify_sorted_asc, ForkSpec, HeightOrTimestamp,
+    };
 
     #[test]
     fn test_success_find_target_spec_height_only() {
@@ -526,7 +523,7 @@ mod test {
             .boundary_epochs(&fork_spec_after_pascal())
             .unwrap_err()
         {
-            Error::MissingForkHeightIntBoundaryCalculation(e1, _) => {
+            Error::MissingForkHeightIntBoundaryCalculation(e1) => {
                 assert_eq!(current, e1);
             }
             _ => unreachable!("unexpected error"),
@@ -635,7 +632,7 @@ mod test {
     }
 
     #[test]
-    fn test_error_find_target_spec_by_height() {
+    fn test_error_get_boundary_epochs() {
         let specs = &[
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -648,17 +645,17 @@ mod test {
                 epoch_length: 200,
             },
         ];
-        let v = find_target_fork_spec_by_height(specs, 9).unwrap_err();
+        let v = get_boundary_epochs(&fork_spec_after_pascal(), specs).unwrap_err();
         match v {
-            Error::MissingForkSpecByHeight(e1) => {
-                assert_eq!(e1, 9);
+            Error::MissingPreviousForkSpec(f) => {
+                assert_eq!(f, fork_spec_after_pascal());
             }
             _ => unreachable!("unexpected error {}", v),
         }
     }
 
     #[test]
-    fn test_success_find_target_spec_by_height() {
+    fn test_success_get_boundary_epochs() {
         let specs = &[
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -671,40 +668,12 @@ mod test {
                 epoch_length: 500,
             },
         ];
-        let v = find_target_fork_spec_by_height(specs, 10).unwrap();
-        assert_eq!(
-            v.current_fork_spec.height_or_timestamp,
-            HeightOrTimestamp::Height(10)
-        );
-        assert_eq!(v.prev_last, 0);
-        assert_eq!(v.intermediates, vec![]);
-        assert_eq!(v.current_first, 200);
+        let v = get_boundary_epochs(&specs[1], specs).unwrap();
+        assert_eq!(v.current_fork_spec, specs[1]);
+        assert_eq!(v.previous_fork_spec, specs[0]);
 
-        let v = find_target_fork_spec_by_height(specs, 11).unwrap();
-        assert_eq!(
-            v.current_fork_spec.height_or_timestamp,
-            HeightOrTimestamp::Height(10)
-        );
-        assert_eq!(v.prev_last, 0);
-        assert_eq!(v.intermediates, vec![]);
-        assert_eq!(v.current_first, 200);
-
-        let v = find_target_fork_spec_by_height(specs, 19).unwrap();
-        assert_eq!(
-            v.current_fork_spec.height_or_timestamp,
-            HeightOrTimestamp::Height(10)
-        );
-        assert_eq!(v.prev_last, 0);
-        assert_eq!(v.intermediates, vec![]);
-        assert_eq!(v.current_first, 200);
-
-        let v = find_target_fork_spec_by_height(specs, 20).unwrap();
-        assert_eq!(
-            v.current_fork_spec.height_or_timestamp,
-            HeightOrTimestamp::Height(20)
-        );
-        assert_eq!(v.prev_last, 0);
-        assert_eq!(v.intermediates, vec![200, 400]);
-        assert_eq!(v.current_first, 500);
+        let v = get_boundary_epochs(&specs[0], specs).unwrap();
+        assert_eq!(v.current_fork_spec, specs[0]);
+        assert_eq!(v.previous_fork_spec, specs[0]);
     }
 }

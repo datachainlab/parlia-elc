@@ -10,7 +10,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
 use crate::fork_spec::{
-    find_target_fork_spec, find_target_fork_spec_by_height, BoundaryEpochs, ForkSpec,
+    find_target_fork_spec, get_boundary_epochs, BoundaryEpochs, ForkSpec, HeightOrTimestamp,
 };
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
@@ -344,8 +344,16 @@ impl ETHHeader {
     }
 
     pub fn set_boundary_epochs(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-        self.boundary_epochs = Some(find_target_fork_spec_by_height(fork_specs, self.number)?);
-        Ok(())
+        let fs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        match fs.height_or_timestamp {
+            HeightOrTimestamp::Height(_) => {
+                self.boundary_epochs = Some(get_boundary_epochs(fs, fork_specs)?);
+                Ok(())
+            }
+            HeightOrTimestamp::Time(_) => {
+                Err(Error::MissingForkHeightIntBoundaryCalculation(fs.clone()))
+            }
+        }
     }
 
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header

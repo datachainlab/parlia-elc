@@ -526,6 +526,8 @@ mod test {
     use crate::fixture::{fork_spec_after_lorentz, fork_spec_after_pascal, localnet, Network};
     use crate::header::Header;
 
+    use crate::errors::Error;
+    use crate::fork_spec::HeightOrTimestamp;
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
     use alloc::boxed::Box;
@@ -798,6 +800,94 @@ mod test {
             }
             err => unreachable!("err {:?}", err),
         };
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_update_state_non_epoch_boundary_epochs_is_timestamp(
+        #[case] hp: Box<dyn Network>,
+    ) {
+        let input = hp.success_update_client_non_epoch_input();
+        let new_current_validators_hash = input.trusted_current_validators_hash;
+        let new_previous_validators_hash = input.trusted_previous_validators_hash;
+        let any: Any = input.header.try_into().unwrap();
+        let header = Header::try_from(any.clone()).unwrap();
+
+        let client = ParliaLightClient;
+        let client_id = ClientId::new(&client.client_type(), 1).unwrap();
+        let mut mock_consensus_state = BTreeMap::new();
+        let trusted_cs = ConsensusState {
+            current_validators_hash: input.trusted_current_validators_hash,
+            previous_validators_hash: input.trusted_previous_validators_hash,
+            ..Default::default()
+        };
+        mock_consensus_state.insert(Height::new(0, input.trusted_height), trusted_cs.clone());
+
+        // Set fork spec is boundary timestamp
+        let mut boundary_fs = fork_spec_after_lorentz();
+        boundary_fs.height_or_timestamp =
+            HeightOrTimestamp::Time(header.eth_header().target.milli_timestamp());
+        let cs = ClientState {
+            chain_id: hp.network(),
+            ibc_store_address: hp.ibc_store_address(),
+            latest_height: Height::new(0, input.trusted_height),
+            fork_specs: vec![fork_spec_after_pascal(), boundary_fs],
+            ..Default::default()
+        };
+        let ctx = MockClientReader {
+            client_state: Some(cs.clone()),
+            consensus_state: mock_consensus_state,
+        };
+        let err = client.update_client(&ctx, client_id, any).unwrap_err();
+        assert_err(err, "MissingForkHeightIntBoundaryCalculation");
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_update_state_non_epoch_update_fork_height(#[case] hp: Box<dyn Network>) {
+        let input = hp.success_update_client_non_epoch_input();
+        let new_current_validators_hash = input.trusted_current_validators_hash;
+        let new_previous_validators_hash = input.trusted_previous_validators_hash;
+        let any: Any = input.header.try_into().unwrap();
+        let header = Header::try_from(any.clone()).unwrap();
+
+        let client = ParliaLightClient;
+        let client_id = ClientId::new(&client.client_type(), 1).unwrap();
+        let mut mock_consensus_state = BTreeMap::new();
+        let trusted_cs = ConsensusState {
+            current_validators_hash: input.trusted_current_validators_hash,
+            previous_validators_hash: input.trusted_previous_validators_hash,
+            ..Default::default()
+        };
+        mock_consensus_state.insert(Height::new(0, input.trusted_height), trusted_cs.clone());
+
+        // Set fork spec boundary timestamp is all[1]
+        let mut boundary_fs = fork_spec_after_lorentz();
+        boundary_fs.height_or_timestamp =
+            HeightOrTimestamp::Time(header.eth_header().all[1].milli_timestamp());
+        let cs = ClientState {
+            chain_id: hp.network(),
+            ibc_store_address: hp.ibc_store_address(),
+            latest_height: Height::new(0, input.trusted_height),
+            fork_specs: vec![fork_spec_after_pascal(), boundary_fs],
+            ..Default::default()
+        };
+        let ctx = MockClientReader {
+            client_state: Some(cs.clone()),
+            consensus_state: mock_consensus_state,
+        };
+        let result = client.update_client(&ctx, client_id, any).unwrap();
+        let data = match result {
+            UpdateClientResult::UpdateState(data) => data,
+            _ => unreachable!("invalid client result"),
+        };
+        let new_client_state = ClientState::try_from(data.new_any_client_state).unwrap();
+
+        // update fork height
+        assert_eq!(
+            new_client_state.fork_specs[1].height_or_timestamp,
+            HeightOrTimestamp::Height(header.eth_header().all[1].number)
+        );
     }
 
     #[rstest]

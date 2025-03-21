@@ -5,7 +5,7 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::consensus_state::ConsensusState;
-use crate::fork_spec::{find_target_fork_spec_by_height, ForkSpec};
+use crate::fork_spec::{find_target_fork_spec, get_boundary_epochs, ForkSpec};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
@@ -114,9 +114,11 @@ fn verify_epoch<'a>(
 ) -> Result<(EitherEpoch<'a>, TrustedEpoch<'a>), Error> {
     let is_epoch = target.is_epoch();
 
-    let trusted_epoch =
-        find_target_fork_spec_by_height(fork_specs, trusted_height.revision_height())?
-            .current_epoch_block_number(trusted_height.revision_height());
+    let trusted_time = (consensus_state.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64;
+    let trusted_fs =
+        find_target_fork_spec(fork_specs, trusted_height.revision_height(), trusted_time)?;
+    let trusted_epoch = get_boundary_epochs(trusted_fs, fork_specs)?
+        .current_epoch_block_number(trusted_height.revision_height());
 
     if is_epoch {
         let header_previous_epoch = target.previous_epoch_block_number()?;

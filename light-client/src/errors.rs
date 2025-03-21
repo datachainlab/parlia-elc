@@ -132,8 +132,9 @@ pub enum Error {
     UnexpectedForkSpecTimestampOrder(u64, u64),
     UnexpectedForkSpecHeightOrder(u64, u64),
     MissingForkHeightIntPreviousEpochCalculation(u64, ForkSpec),
-    MissingForkHeightIntBoundaryCalculation(ForkSpec, ForkSpec),
+    MissingForkHeightIntBoundaryCalculation(ForkSpec),
     NotVerifiableHeader(BlockNumber),
+    MissingPreviousForkSpec(ForkSpec),
 
     // Misbehaviour
     MissingHeader1,
@@ -456,15 +457,14 @@ impl core::fmt::Display for Error {
                     e1, e2
                 )
             }
-            Error::MissingForkHeightIntBoundaryCalculation(e1, e2) => {
-                write!(
-                    f,
-                    "MissingForkHeightIntBoundaryCalculation : {:?} {:?}",
-                    e1, e2
-                )
+            Error::MissingForkHeightIntBoundaryCalculation(e1) => {
+                write!(f, "MissingForkHeightIntBoundaryCalculation : {:?}", e1)
             }
             Error::NotVerifiableHeader(e1) => {
                 write!(f, "NotVerifiableHeader : {}", e1)
+            }
+            Error::MissingPreviousForkSpec(e1) => {
+                write!(f, "MissingPreviousForkSpec : {:?}", e1)
             }
         }
     }
