@@ -125,7 +125,7 @@ impl BoundaryEpochs {
             }
         }
 
-        // is just boundary
+        // is just current HF first
         if current_epoch_block_number == self.current_first {
             if self.intermediates.is_empty() {
                 return self.prev_last;
@@ -133,7 +133,7 @@ impl BoundaryEpochs {
             return *self.intermediates.last().unwrap();
         }
 
-        // After boundary
+        // After HF
         current_epoch_block_number - self.current_fork_spec.epoch_length
     }
 }
