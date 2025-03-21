@@ -52,6 +52,16 @@ impl ForkSpec {
             let prev_last = height - (height % prev_fork_spec.epoch_length);
             let current_first = (height..).find(|&h| h % self.epoch_length == 0).unwrap();
             let mut intermediates = vec![];
+
+            // starts 0, 200, 400...epoch_length
+            if prev_last == 0 {
+                const DEFAULT_EPOCH_LENGTH: u64 = 200;
+                let mut mid = prev_last + DEFAULT_EPOCH_LENGTH;
+                while mid < prev_fork_spec.epoch_length {
+                    intermediates.push(mid);
+                    mid += DEFAULT_EPOCH_LENGTH;
+                }
+            }
             let mut mid = prev_last + prev_fork_spec.epoch_length;
             while mid < current_first {
                 intermediates.push(mid);
@@ -230,6 +240,9 @@ pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {
 #[cfg(test)]
 mod test {
     use crate::errors::Error;
+    use crate::fixture::{
+        fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
+    };
     use crate::fork_spec::ForkSpec;
     use crate::fork_spec::{find_target_fork_spec, verify_sorted_asc, HeightOrTimestamp};
 
@@ -500,5 +513,60 @@ mod test {
             }
             _ => unreachable!("unexpected error"),
         }
+    }
+
+    #[test]
+    fn test_boundary_epochs_lorentz_pascal() {
+        let be = fork_spec_after_lorentz()
+            .boundary_epochs(&fork_spec_after_pascal())
+            .unwrap();
+        assert_eq!(be.prev_last, 0);
+        assert_eq!(be.intermediates[0], 200);
+        assert_eq!(be.intermediates[1], 400);
+        assert_eq!(be.current_first, 500);
+        assert_eq!(be.current_epoch_block_number(501), 500);
+        assert_eq!(be.current_epoch_block_number(999), 500);
+        assert_eq!(be.current_epoch_block_number(1000), 1000);
+        assert_eq!(be.current_epoch_block_number(1001), 1000);
+        assert_eq!(be.current_epoch_block_number(1499), 1000);
+        assert_eq!(be.current_epoch_block_number(1500), 1500);
+        assert_eq!(be.current_epoch_block_number(1501), 1500);
+
+        assert_eq!(be.previous_epoch_block_number(200), 0);
+        assert_eq!(be.previous_epoch_block_number(400), 200);
+        assert_eq!(be.previous_epoch_block_number(500), 400);
+        assert_eq!(be.previous_epoch_block_number(1000), 500);
+        assert_eq!(be.previous_epoch_block_number(1500), 1000);
+    }
+
+    #[test]
+    fn test_boundary_epochs_maxwell_lorentz() {
+        let be = fork_spec_after_maxwell()
+            .boundary_epochs(&fork_spec_after_lorentz())
+            .unwrap();
+        assert_eq!(be.prev_last, 0);
+        assert_eq!(be.intermediates[0], 200);
+        assert_eq!(be.intermediates[1], 400);
+        assert_eq!(be.intermediates[2], 500);
+        assert_eq!(be.current_first, 1000);
+        assert_eq!(be.current_epoch_block_number(501), 500);
+        assert_eq!(be.current_epoch_block_number(999), 500);
+        assert_eq!(be.current_epoch_block_number(1000), 1000);
+        assert_eq!(be.current_epoch_block_number(1001), 1000);
+        assert_eq!(be.current_epoch_block_number(1499), 1000);
+        assert_eq!(be.current_epoch_block_number(1500), 1000);
+        assert_eq!(be.current_epoch_block_number(1501), 1000);
+        assert_eq!(be.current_epoch_block_number(1999), 1000);
+        assert_eq!(be.current_epoch_block_number(2000), 2000);
+        assert_eq!(be.current_epoch_block_number(2001), 2000);
+        assert_eq!(be.current_epoch_block_number(2999), 2000);
+        assert_eq!(be.current_epoch_block_number(3000), 3000);
+
+        assert_eq!(be.previous_epoch_block_number(200), 0);
+        assert_eq!(be.previous_epoch_block_number(400), 200);
+        assert_eq!(be.previous_epoch_block_number(500), 400);
+        assert_eq!(be.previous_epoch_block_number(1000), 500);
+        assert_eq!(be.previous_epoch_block_number(2000), 1000);
+        assert_eq!(be.previous_epoch_block_number(3000), 2000);
     }
 }

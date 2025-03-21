@@ -84,3 +84,11 @@ pub fn fork_spec_after_lorentz() -> ForkSpec {
         epoch_length: 500,
     }
 }
+
+pub fn fork_spec_after_maxwell() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(2),
+        additional_header_item_count: 1,
+        epoch_length: 1000,
+    }
+}
