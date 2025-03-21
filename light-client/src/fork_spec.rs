@@ -196,7 +196,7 @@ pub fn get_boundary_epochs(
     for (i, spec) in fork_specs.iter().enumerate() {
         if spec == current_spec {
             if i == 0 {
-                return spec.boundary_epochs(&spec);
+                return spec.boundary_epochs(spec);
             }
             return spec.boundary_epochs(&fork_specs[i - 1]);
         }

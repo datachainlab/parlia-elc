@@ -526,7 +526,6 @@ mod test {
     use crate::fixture::{fork_spec_after_lorentz, fork_spec_after_pascal, localnet, Network};
     use crate::header::Header;
 
-    use crate::errors::Error;
     use crate::fork_spec::HeightOrTimestamp;
     use crate::misbehaviour::Misbehaviour;
     use crate::misc::{new_height, Address, ChainId, Hash};
@@ -808,8 +807,6 @@ mod test {
         #[case] hp: Box<dyn Network>,
     ) {
         let input = hp.success_update_client_non_epoch_input();
-        let new_current_validators_hash = input.trusted_current_validators_hash;
-        let new_previous_validators_hash = input.trusted_previous_validators_hash;
         let any: Any = input.header.try_into().unwrap();
         let header = Header::try_from(any.clone()).unwrap();
 
@@ -846,8 +843,6 @@ mod test {
     #[case::localnet(localnet())]
     fn test_success_update_state_non_epoch_update_fork_height(#[case] hp: Box<dyn Network>) {
         let input = hp.success_update_client_non_epoch_input();
-        let new_current_validators_hash = input.trusted_current_validators_hash;
-        let new_previous_validators_hash = input.trusted_previous_validators_hash;
         let any: Any = input.header.try_into().unwrap();
         let header = Header::try_from(any.clone()).unwrap();
 

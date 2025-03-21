@@ -537,7 +537,7 @@ pub(crate) mod test {
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedTrustedEpoch(t, h, _, _) => {
+            Error::UnexpectedTrustedEpoch(t, _, _, _) => {
                 assert_eq!(t, trusted_height.revision_height());
             }
             _ => unreachable!("err {:?}", err),
