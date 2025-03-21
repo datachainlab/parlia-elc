@@ -524,6 +524,12 @@ mod test {
         assert_eq!(be.intermediates[0], 200);
         assert_eq!(be.intermediates[1], 400);
         assert_eq!(be.current_first, 500);
+        assert_eq!(be.current_epoch_block_number(199), 0);
+        assert_eq!(be.current_epoch_block_number(200), 200);
+        assert_eq!(be.current_epoch_block_number(399), 200);
+        assert_eq!(be.current_epoch_block_number(400), 400);
+        assert_eq!(be.current_epoch_block_number(499), 400);
+        assert_eq!(be.current_epoch_block_number(500), 500);
         assert_eq!(be.current_epoch_block_number(501), 500);
         assert_eq!(be.current_epoch_block_number(999), 500);
         assert_eq!(be.current_epoch_block_number(1000), 1000);
@@ -549,6 +555,12 @@ mod test {
         assert_eq!(be.intermediates[1], 400);
         assert_eq!(be.intermediates[2], 500);
         assert_eq!(be.current_first, 1000);
+        assert_eq!(be.current_epoch_block_number(199), 0);
+        assert_eq!(be.current_epoch_block_number(200), 200);
+        assert_eq!(be.current_epoch_block_number(399), 200);
+        assert_eq!(be.current_epoch_block_number(400), 400);
+        assert_eq!(be.current_epoch_block_number(499), 400);
+        assert_eq!(be.current_epoch_block_number(500), 500);
         assert_eq!(be.current_epoch_block_number(501), 500);
         assert_eq!(be.current_epoch_block_number(999), 500);
         assert_eq!(be.current_epoch_block_number(1000), 1000);
