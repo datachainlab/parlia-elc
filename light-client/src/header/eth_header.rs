@@ -388,7 +388,7 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
 }
 
 pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
-    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
+    if !(turn_length == 1 || (3..=64).contains(&turn_length)) {
         return Err(Error::UnexpectedTurnLength(turn_length));
     }
     Ok(())
