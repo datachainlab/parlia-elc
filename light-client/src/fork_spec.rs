@@ -534,6 +534,40 @@ mod test {
     }
 
     #[test]
+    fn test_success_boundary_epochs() {
+        let mut f1 = fork_spec_after_lorentz().clone();
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
+        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        assert_eq!(be.prev_last, 1400);
+        assert_eq!(be.intermediates, vec![1600, 1800]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1600);
+        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        assert_eq!(be.prev_last, 1600);
+        assert_eq!(be.intermediates, vec![1800]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1601);
+        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        assert_eq!(be.prev_last, 1600);
+        assert_eq!(be.intermediates, vec![1800]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1800);
+        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        assert_eq!(be.prev_last, 1800);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
+        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        assert_eq!(be.prev_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+    }
+
+    #[test]
     fn test_success_boundary_epochs_lorentz_pascal() {
         let be = fork_spec_after_lorentz()
             .boundary_epochs(&fork_spec_after_pascal())
