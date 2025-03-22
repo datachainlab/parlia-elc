@@ -19,14 +19,6 @@ NOTE: This project is currently under heavy development. Features may change or 
 Environment variables can be used to change settings.
 Each configuration must be determined at build time, not at run time.
 
-### Blocks per epoch
-You can change the blocks per epoch for localnet.
-This is available in dev feature only.
-
-```sh
-BSC_BLOCKS_PER_EPOCH=20 cargo build --features=dev
-```
-
 ### Build Parameters
 
 Parameters can be specified to check for acceptable headers at build time.
