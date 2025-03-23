@@ -110,7 +110,7 @@ impl BoundaryEpochs {
         current_epoch_block_number: BlockNumber,
     ) -> BlockNumber {
         if current_epoch_block_number == 0 {
-            return 0
+            return 0;
         }
         // first or under
         if current_epoch_block_number <= self.prev_last {
