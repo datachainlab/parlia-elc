@@ -109,6 +109,9 @@ impl BoundaryEpochs {
         &self,
         current_epoch_block_number: BlockNumber,
     ) -> BlockNumber {
+        if current_epoch_block_number == 0 {
+            return 0
+        }
         // first or under
         if current_epoch_block_number <= self.prev_last {
             return current_epoch_block_number - self.previous_fork_spec.epoch_length;
@@ -587,6 +590,7 @@ mod test {
         assert_eq!(be.current_epoch_block_number(1500), 1500);
         assert_eq!(be.current_epoch_block_number(1501), 1500);
 
+        assert_eq!(be.previous_epoch_block_number(0), 0);
         assert_eq!(be.previous_epoch_block_number(200), 0);
         assert_eq!(be.previous_epoch_block_number(400), 200);
         assert_eq!(be.previous_epoch_block_number(500), 400);
@@ -623,6 +627,7 @@ mod test {
         assert_eq!(be.current_epoch_block_number(2999), 2000);
         assert_eq!(be.current_epoch_block_number(3000), 3000);
 
+        assert_eq!(be.previous_epoch_block_number(0), 0);
         assert_eq!(be.previous_epoch_block_number(200), 0);
         assert_eq!(be.previous_epoch_block_number(400), 200);
         assert_eq!(be.previous_epoch_block_number(500), 400);
