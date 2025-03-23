@@ -44,6 +44,7 @@ impl ClientState {
     pub fn canonicalize(mut self) -> Self {
         self.latest_height = new_height(self.chain_id.version(), 0);
         self.frozen = false;
+        self.fork_specs = vec![];
         self
     }
 
