@@ -69,7 +69,7 @@ impl ClientState {
                 // second must be forks spec timestamp
                 if header.eth_header().all.len() >= 2 {
                     let h = &header.eth_header().all[1];
-                    if ts == h.milli_timestamp() {
+                    if ts <= h.milli_timestamp() {
                         fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
                     }
                 }
