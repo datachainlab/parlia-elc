@@ -1367,6 +1367,7 @@ mod test {
                     height_or_timestamp: HeightOrTimestamp::Height(MINIMUM_HEIGHT_SUPPORTED - 1),
                     additional_header_item_count: 0,
                     epoch_length: 200,
+                    max_turn_length: 9,
                 }];
                 (client_state, cons_state)
             }));
@@ -1379,6 +1380,7 @@ mod test {
                     height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED - 1),
                     additional_header_item_count: 0,
                     epoch_length: 200,
+                    max_turn_length: 9,
                 }];
                 (client_state, cons_state)
             }));
@@ -1392,6 +1394,7 @@ mod test {
                     height_or_timestamp: HeightOrTimestamp::Time(MINIMUM_TIMESTAMP_SUPPORTED),
                     additional_header_item_count: 0,
                     epoch_length: 200,
+                    max_turn_length: 9,
                 }];
                 (client_state, cons_state)
             }))

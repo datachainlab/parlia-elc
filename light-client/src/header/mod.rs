@@ -7,7 +7,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 use crate::consensus_state::ConsensusState;
 use crate::fork_spec::{find_target_fork_spec, get_boundary_epochs, ForkSpec, HeightOrTimestamp};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-use crate::header::eth_header::{validate_turn_length, ETHHeader};
+use crate::header::eth_header::ETHHeader;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
@@ -242,7 +242,6 @@ impl TryFrom<RawHeader> for Header {
         if value.previous_validators.is_empty() {
             return Err(Error::MissingPreviousValidators(headers.target.number));
         }
-        validate_turn_length(value.previous_turn_length as u8)?;
 
         // Epoch header contains validator set
         let current_epoch = headers.target.clone().epoch.unwrap_or(Epoch::new(
@@ -252,7 +251,6 @@ impl TryFrom<RawHeader> for Header {
         if current_epoch.validators().is_empty() {
             return Err(Error::MissingCurrentValidators(headers.target.number));
         }
-        validate_turn_length(value.current_turn_length as u8)?;
 
         Ok(Self {
             headers,
@@ -674,27 +672,6 @@ pub(crate) mod test {
                 assert_eq!(request_hash, current_epoch.hash());
             }
             _ => unreachable!("err {:?}", err),
-        }
-    }
-
-    #[test]
-    fn test_error_try_from_invalid_turn_length() {
-        let raw_header = RawHeader {
-            headers: vec![EthHeader {
-                header: localnet().epoch_header_rlp(),
-            }],
-            trusted_height: Some(Height::default()),
-            current_validators: vec![vec![0]],
-            previous_validators: vec![vec![1]],
-            current_turn_length: 0,
-            previous_turn_length: 0,
-        };
-        let err = Header::try_from(raw_header).unwrap_err();
-        match err {
-            Error::UnexpectedTurnLength(turn_length) => {
-                assert_eq!(turn_length, 0)
-            }
-            _ => unreachable!("unexpected "),
         }
     }
 }

@@ -14,6 +14,7 @@ message ForkSpec {
   }
   uint64 additional_header_item_count = 3;
   uint64 epoch_length = 4;
+  uint64 max_turn_length = 5;
 }
 
 message ClientState {

@@ -340,6 +340,11 @@ impl ETHHeader {
                 fork_spec.additional_header_item_count,
             ));
         }
+
+        if let Some(epoch) = &self.epoch {
+            validate_turn_length(epoch.turn_length(), fork_spec.max_turn_length as u8)?;
+        }
+
         Ok(())
     }
 
@@ -377,7 +382,6 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    validate_turn_length(turn_length)?;
     Ok((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
@@ -387,8 +391,8 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     ))
 }
 
-pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
-    if !(turn_length == 1 || (3..=64).contains(&turn_length)) {
+pub fn validate_turn_length(turn_length: u8, max: u8) -> Result<(), Error> {
+    if !(turn_length == 1 || (3..=max).contains(&turn_length)) {
         return Err(Error::UnexpectedTurnLength(turn_length));
     }
     Ok(())
@@ -873,6 +877,7 @@ pub(crate) mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64,
                 epoch_length: 500,
+                max_turn_length: 64,
             }])
             .unwrap();
 
@@ -882,16 +887,19 @@ pub(crate) mod test {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
             ])
             .unwrap();
@@ -899,7 +907,7 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_verify_fork_rule(#[case] hp: Box<dyn Network>) {
+    fn test_error_verify_fork_rule_item_count(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header();
         header.additional_items = vec![vec![1]];
         let err = header
@@ -907,6 +915,7 @@ pub(crate) mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
                 epoch_length: 500,
+                max_turn_length: 64,
             }])
             .unwrap_err();
         match err {
@@ -920,22 +929,73 @@ pub(crate) mod test {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
+                    max_turn_length: 64,
                 },
             ])
             .unwrap_err();
 
         match err {
             Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_turn_length(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        header.additional_items = vec![vec![1]];
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length - 1,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length - 1,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
             _ => unreachable!("invalid error {:?}", err),
         }
     }

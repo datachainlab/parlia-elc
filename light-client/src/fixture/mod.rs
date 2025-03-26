@@ -74,6 +74,7 @@ pub fn fork_spec_after_pascal() -> ForkSpec {
         height_or_timestamp: HeightOrTimestamp::Height(0),
         additional_header_item_count: 1,
         epoch_length: 200,
+        max_turn_length: 64,
     }
 }
 
@@ -82,6 +83,7 @@ pub fn fork_spec_after_lorentz() -> ForkSpec {
         height_or_timestamp: HeightOrTimestamp::Height(1),
         additional_header_item_count: 1,
         epoch_length: 500,
+        max_turn_length: 64,
     }
 }
 
@@ -90,5 +92,6 @@ pub fn fork_spec_after_maxwell() -> ForkSpec {
         height_or_timestamp: HeightOrTimestamp::Height(2),
         additional_header_item_count: 1,
         epoch_length: 1000,
+        max_turn_length: 64,
     }
 }

@@ -16,6 +16,8 @@ pub struct ForkSpec {
     pub additional_header_item_count: u64,
     /// Block count in epoch
     pub epoch_length: u64,
+    /// Max turn length
+    pub max_turn_length: u64,
 }
 
 impl ForkSpec {
@@ -156,6 +158,7 @@ impl TryFrom<RawForkSpec> for ForkSpec {
             },
             additional_header_item_count: value.additional_header_item_count,
             epoch_length: value.epoch_length,
+            max_turn_length: value.max_turn_length,
         })
     }
 }
@@ -171,6 +174,7 @@ impl From<ForkSpec> for RawForkSpec {
             },
             additional_header_item_count: value.additional_header_item_count,
             epoch_length: value.epoch_length,
+            max_turn_length: value.max_turn_length,
         }
     }
 }
@@ -253,11 +257,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = find_target_fork_spec(specs, 10, 0).unwrap();
@@ -277,11 +283,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 10).unwrap();
@@ -301,11 +309,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 20,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         // After value is primary
@@ -326,11 +336,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 0).unwrap_err();
@@ -350,11 +362,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 9).unwrap_err();
@@ -374,11 +388,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 9).unwrap_err();
@@ -398,11 +414,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(11),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -415,11 +433,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(11),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -432,11 +452,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -453,11 +475,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(11),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -477,11 +501,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -498,11 +524,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Time(11),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -521,6 +549,7 @@ mod test {
             height_or_timestamp: HeightOrTimestamp::Time(0),
             additional_header_item_count: 1,
             epoch_length: 500,
+            max_turn_length: 64,
         };
         match current
             .boundary_epochs(&fork_spec_after_pascal())
@@ -643,11 +672,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
                 additional_header_item_count: 2,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
         ];
         let v = get_boundary_epochs(&fork_spec_after_pascal(), specs).unwrap_err();
@@ -666,11 +697,13 @@ mod test {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
                 additional_header_item_count: 1,
                 epoch_length: 200,
+                max_turn_length: 9,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
                 additional_header_item_count: 2,
                 epoch_length: 500,
+                max_turn_length: 9,
             },
         ];
         let v = get_boundary_epochs(&specs[1], specs).unwrap();

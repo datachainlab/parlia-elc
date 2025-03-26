@@ -324,6 +324,7 @@ mod test {
             height_or_timestamp: HeightOrTimestamp::Height(0),
             additional_header_item_count: 1, // requestsHash
             epoch_length: 200,
+            max_turn_length: 9,
         }
     }
 
