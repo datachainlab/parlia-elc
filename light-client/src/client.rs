@@ -836,7 +836,7 @@ mod test {
             consensus_state: mock_consensus_state,
         };
         let err = client.update_client(&ctx, client_id, any).unwrap_err();
-        assert_err(err, "MissingForkHeightIntBoundaryCalculation");
+        assert_err(err, "MissingForkHeightInBoundaryCalculation");
     }
 
     #[rstest]

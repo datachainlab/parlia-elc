@@ -316,7 +316,7 @@ impl ETHHeader {
         Ok(self
             .boundary_epochs
             .as_ref()
-            .ok_or(Error::NotVerifiableHeader(self.number))?
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?
             .current_epoch_block_number(self.number))
     }
 
@@ -324,7 +324,7 @@ impl ETHHeader {
         let boundary = self
             .boundary_epochs
             .as_ref()
-            .ok_or(Error::NotVerifiableHeader(self.number))?;
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
         let current_epoch_block_number = boundary.current_epoch_block_number(self.number);
         Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
     }
@@ -351,7 +351,7 @@ impl ETHHeader {
                 Ok(())
             }
             HeightOrTimestamp::Time(_) => {
-                Err(Error::MissingForkHeightIntBoundaryCalculation(fs.clone()))
+                Err(Error::MissingForkHeightInBoundaryCalculation(fs.clone()))
             }
         }
     }

@@ -35,7 +35,8 @@ impl ETHHeaders {
         let current_epoch_block_number = self.target.current_epoch_block_number()?;
         let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
 
-        let (n_val, next_checkpoint) = self.verify_header_size(checkpoint, current_epoch)?;
+        let (n_val, next_checkpoint) =
+            self.verify_header_size(checkpoint, current_epoch, current_epoch_block_number)?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -139,29 +140,73 @@ impl ETHHeaders {
     /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size(
         &self,
-        checkpoint: u64,
+        current_checkpoint: u64,
         current_epoch: &EitherEpoch,
+        current_epoch_block_number: BlockNumber,
     ) -> Result<(Option<Epoch>, Option<BlockNumber>), Error> {
-        let after_checkpoint: Vec<&ETHHeader> =
-            self.all.iter().filter(|h| h.number >= checkpoint).collect();
+        let after_checkpoint: Vec<&ETHHeader> = self
+            .all
+            .iter()
+            .filter(|h| h.number >= current_checkpoint)
+            .collect();
 
-        let find_next_epoch = |hs: &Vec<&ETHHeader>, height_to_checkpoint: u64| {
-            for h in hs.iter() {
-                if let Ok(next_epoch) = get_validator_bytes_and_turn_length(&h.extra_data) {
-                    let next_epoch = Epoch::new(next_epoch.0.into(), next_epoch.1);
-                    let next_checkpoint = h.number + height_to_checkpoint;
-                    return (Some(next_epoch), Some(next_checkpoint));
+        let find_next_epoch =
+            |hs: &Vec<&ETHHeader>,
+             height_to_checkpoint: u64,
+             expected_prev_epoch_number: BlockNumber| {
+                for h in hs.iter() {
+                    let self_current_epoch_number =
+                        h.current_epoch_block_number().map_err(|e| {
+                            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(
+                                h.number,
+                                alloc::boxed::Box::new(e),
+                            )
+                        })?;
+                    if self_current_epoch_number == h.number {
+                        return if let Some(next_epoch) = &h.epoch {
+                            let self_previous_epoch_number =
+                                h.previous_epoch_block_number().map_err(|e| {
+                                    Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(
+                                        h.number,
+                                        alloc::boxed::Box::new(e),
+                                    )
+                                })?;
+                            if self_previous_epoch_number != expected_prev_epoch_number {
+                                return Err(Error::UnexpectedPreviousEpochInCalculatingNextEpoch(
+                                    h.number,
+                                    self_previous_epoch_number,
+                                    expected_prev_epoch_number,
+                                    current_epoch_block_number,
+                                ));
+                            }
+                            let next_checkpoint = h.number + height_to_checkpoint;
+                            Ok((
+                                Some(next_epoch.clone()),
+                                Some(next_checkpoint),
+                                Some(self_current_epoch_number),
+                            ))
+                        } else {
+                            Err(Error::MissingEpochInfo(h.number))
+                        };
+                    } else if h.is_epoch() {
+                        return Err(Error::UnexpectedEpochInfo(
+                            h.number,
+                            self_current_epoch_number,
+                        ));
+                    }
                 }
-            }
-            (None, None)
-        };
+                Ok((None, None, None))
+            };
 
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
             Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
-                let (next_epoch, next_checkpoint) =
-                    find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
+                let (next_epoch, next_checkpoint, _) = find_next_epoch(
+                    &after_checkpoint,
+                    current_epoch.checkpoint(),
+                    current_epoch_block_number,
+                )?;
                 if let Some(next_checkpoint) = next_checkpoint {
                     if after_checkpoint.iter().any(|h| h.number >= next_checkpoint) {
                         return Err(Error::UnexpectedNextCheckpointHeader(
@@ -175,17 +220,19 @@ impl ETHHeaders {
             // ex) t=201 then 201 <= h < 611 (at least 1 honest n_val(400) can be in c_val(200))
             Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
-                let (next_epoch, next_checkpoint) =
-                    find_next_epoch(&after_checkpoint, current_epoch.checkpoint());
+                let (next_epoch, next_checkpoint, next_epoch_block_number) = find_next_epoch(
+                    &after_checkpoint,
+                    current_epoch.checkpoint(),
+                    current_epoch_block_number,
+                )?;
                 let next_checkpoint = match next_checkpoint {
                     None => return Ok((next_epoch, next_checkpoint)),
                     Some(v) => v,
                 };
 
                 // Finish if no headers over next checkpoint were found
-                let after_next_checkpoint: Vec<&ETHHeader> = self
-                    .all
-                    .iter()
+                let after_next_checkpoint: Vec<&ETHHeader> = after_checkpoint
+                    .into_iter()
                     .filter(|h| h.number >= next_checkpoint)
                     .collect();
                 if after_next_checkpoint.is_empty() {
@@ -193,10 +240,11 @@ impl ETHHeaders {
                 }
 
                 // Ensure headers are before the next_next_checkpoint
-                let (_, next_next_checkpoint) = find_next_epoch(
+                let (_, next_next_checkpoint, _) = find_next_epoch(
                     &after_next_checkpoint,
                     next_epoch.clone().unwrap().checkpoint(),
-                );
+                    next_epoch_block_number.unwrap(),
+                )?;
                 if let Some(next_next_checkpoint) = next_next_checkpoint {
                     if after_next_checkpoint
                         .iter()

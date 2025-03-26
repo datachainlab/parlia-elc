@@ -109,6 +109,8 @@ pub enum Error {
     MissingForkSpec(BlockNumber, u64),
     MissingForkSpecByHeight(BlockNumber),
     UnexpectedHeaderItemCount(BlockNumber, usize, u64),
+    MissingEpochInfo(BlockNumber),
+    UnexpectedEpochInfo(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -132,9 +134,18 @@ pub enum Error {
     UnexpectedForkSpecTimestampOrder(u64, u64),
     UnexpectedForkSpecHeightOrder(u64, u64),
     MissingForkHeightIntPreviousEpochCalculation(u64, ForkSpec),
-    MissingForkHeightIntBoundaryCalculation(ForkSpec),
-    NotVerifiableHeader(BlockNumber),
+    MissingForkHeightInBoundaryCalculation(ForkSpec),
+    MissingBoundaryEpochs(BlockNumber),
     MissingPreviousForkSpec(ForkSpec),
+    UnexpectedCurrentEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
+    UnexpectedMissingForkSpecInCurrentEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
+    UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
+    UnexpectedPreviousEpochInCalculatingNextEpoch(
+        BlockNumber,
+        BlockNumber,
+        BlockNumber,
+        BlockNumber,
+    ),
 
     // Misbehaviour
     MissingHeader1,
@@ -457,14 +468,48 @@ impl core::fmt::Display for Error {
                     e1, e2
                 )
             }
-            Error::MissingForkHeightIntBoundaryCalculation(e1) => {
-                write!(f, "MissingForkHeightIntBoundaryCalculation : {:?}", e1)
+            Error::MissingForkHeightInBoundaryCalculation(e1) => {
+                write!(f, "MissingForkHeightInBoundaryCalculation : {:?}", e1)
             }
-            Error::NotVerifiableHeader(e1) => {
-                write!(f, "NotVerifiableHeader : {}", e1)
+            Error::MissingBoundaryEpochs(e1) => {
+                write!(f, "MissingBoundaryEpochs : {}", e1)
             }
             Error::MissingPreviousForkSpec(e1) => {
                 write!(f, "MissingPreviousForkSpec : {:?}", e1)
+            }
+            Error::UnexpectedCurrentEpochInCalculatingNextEpoch(e1, e2, e3) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentEpochInCalculatingNextEpoch : {} {} {}",
+                    e1, e2, e3
+                )
+            }
+            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(e1, e2) => {
+                write!(
+                    f,
+                    "UnexpectedMissingForkSpecInCurrentEpochCalculation : {} {:?} ",
+                    e1, e2
+                )
+            }
+            Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(e1, e2) => {
+                write!(
+                    f,
+                    "UnexpectedMissingForkSpecInPreviousEpochCalculation : {} {:?} ",
+                    e1, e2
+                )
+            }
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedPreviousEpochInCalculatingNextEpoch : {} {} {} {} ",
+                    e1, e2, e3, e4
+                )
+            }
+            Error::MissingEpochInfo(e1) => {
+                write!(f, "MissingEpochInfo : {} ", e1)
+            }
+            Error::UnexpectedEpochInfo(e1, e2) => {
+                write!(f, "UnexpectedEpochInfo : {} {}", e1, e2)
             }
         }
     }

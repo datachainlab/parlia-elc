@@ -5,7 +5,7 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::consensus_state::ConsensusState;
-use crate::fork_spec::{find_target_fork_spec, get_boundary_epochs, ForkSpec};
+use crate::fork_spec::{find_target_fork_spec, get_boundary_epochs, ForkSpec, HeightOrTimestamp};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
 use crate::header::eth_header::{validate_turn_length, ETHHeader};
 
@@ -71,13 +71,37 @@ impl Header {
         &self.headers.target.hash
     }
 
-    pub fn verify_fork_rule(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+    pub fn assign_fork_spec(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let mut fork_specs = fork_specs.to_vec();
         for header in &mut self.headers.all {
-            header.verify_fork_rule(fork_specs)?;
+            header.verify_fork_rule(&fork_specs)?;
         }
-        self.headers.target.set_boundary_epochs(fork_specs)?;
+        // Ensure HF height is required for target without seeking next headers
+        self.headers.target.set_boundary_epochs(&fork_specs)?;
 
-        self.fork_specs = fork_specs.to_vec();
+        // Try to set HF height
+        if !fork_specs.is_empty() {
+            let last_index = fork_specs.len() - 1;
+            let last = &mut fork_specs[last_index];
+            match last.height_or_timestamp {
+                HeightOrTimestamp::Time(time) => {
+                    for header in &mut self.headers.all {
+                        if header.milli_timestamp() >= time {
+                            last.height_or_timestamp = HeightOrTimestamp::Height(header.number);
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Set boundary epoch to verify header size.
+        for header in &mut self.headers.all {
+            header.set_boundary_epochs(&fork_specs)?
+        }
+
+        self.fork_specs = fork_specs;
         Ok(())
     }
 

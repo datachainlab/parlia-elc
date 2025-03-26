@@ -75,7 +75,7 @@ impl ForkSpec {
                 intermediates,
             });
         }
-        Err(Error::MissingForkHeightIntBoundaryCalculation(self.clone()))
+        Err(Error::MissingForkHeightInBoundaryCalculation(self.clone()))
     }
 }
 
@@ -526,7 +526,7 @@ mod test {
             .boundary_epochs(&fork_spec_after_pascal())
             .unwrap_err()
         {
-            Error::MissingForkHeightIntBoundaryCalculation(e1) => {
+            Error::MissingForkHeightInBoundaryCalculation(e1) => {
                 assert_eq!(current, e1);
             }
             _ => unreachable!("unexpected error"),
