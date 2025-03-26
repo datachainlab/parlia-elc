@@ -83,16 +83,13 @@ impl Header {
         if !fork_specs.is_empty() {
             let last_index = fork_specs.len() - 1;
             let last = &mut fork_specs[last_index];
-            match last.height_or_timestamp {
-                HeightOrTimestamp::Time(time) => {
-                    for header in &mut self.headers.all {
-                        if header.milli_timestamp() >= time {
-                            last.height_or_timestamp = HeightOrTimestamp::Height(header.number);
-                            break;
-                        }
+            if let HeightOrTimestamp::Time(time) = last.height_or_timestamp {
+                for header in &mut self.headers.all {
+                    if header.milli_timestamp() >= time {
+                        last.height_or_timestamp = HeightOrTimestamp::Height(header.number);
+                        break;
                     }
                 }
-                _ => {}
             }
         }
 

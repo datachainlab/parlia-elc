@@ -7,7 +7,7 @@ use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
-use super::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
+use super::eth_header::ETHHeader;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -342,7 +342,7 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::eth_header::ETHHeader;
+    use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
@@ -741,6 +741,10 @@ mod test {
                 // dummy validator set
                 if next.number % fork_spec_after_lorentz().epoch_length == 0 {
                     next.extra_data = hp.epoch_header().extra_data;
+                    let (v, t) = get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
+                    next.epoch = Some(Epoch::new(v.into(), t));
+                } else {
+                    next.epoch = None
                 }
                 headers.all.push(next);
             }
@@ -801,9 +805,10 @@ mod test {
                 if next.number % fork_spec_after_lorentz().epoch_length == 0 {
                     // set validator set
                     next.extra_data = n_val_header.extra_data.clone();
+                    let (v, t) = get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
+                    next.epoch = Some(Epoch::new(v.into(), t));
                 } else {
-                    // not include validator set
-                    next.extra_data = hp.epoch_header_plus_1().extra_data;
+                    next.epoch = None
                 }
 
                 headers.all.push(next);
