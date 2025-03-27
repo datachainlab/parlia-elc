@@ -140,12 +140,7 @@ pub enum Error {
     UnexpectedCurrentEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
     UnexpectedMissingForkSpecInCurrentEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
-    UnexpectedPreviousEpochInCalculatingNextEpoch(
-        BlockNumber,
-        BlockNumber,
-        BlockNumber,
-        BlockNumber,
-    ),
+    UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
 
     // Misbehaviour
     MissingHeader1,
@@ -498,11 +493,11 @@ impl core::fmt::Display for Error {
                     e1, e2
                 )
             }
-            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3, e4) => {
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3) => {
                 write!(
                     f,
-                    "UnexpectedPreviousEpochInCalculatingNextEpoch : {} {} {} {} ",
-                    e1, e2, e3, e4
+                    "UnexpectedPreviousEpochInCalculatingNextEpoch : {} {} {} ",
+                    e1, e2, e3,
                 )
             }
             Error::MissingEpochInfo(e1) => {
@@ -568,7 +563,7 @@ impl core::fmt::Display for ClientError {
             ),
             ClientError::UpdateClient{cause, client_id, message} => write!(
                 f,
-                "CreateClient: cause={}\nclient_id={:?}\nmessage={:?}",
+                "UpdateClient: cause={}\nclient_id={:?}\nmessage={:?}",
                 cause, client_id, message
             ),
             ClientError::VerifyMembership {

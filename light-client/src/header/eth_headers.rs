@@ -150,54 +150,6 @@ impl ETHHeaders {
             .filter(|h| h.number >= current_checkpoint)
             .collect();
 
-        let find_next_epoch =
-            |hs: &Vec<&ETHHeader>,
-             height_to_checkpoint: u64,
-             expected_prev_epoch_number: BlockNumber| {
-                for h in hs.iter() {
-                    let self_current_epoch_number =
-                        h.current_epoch_block_number().map_err(|e| {
-                            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(
-                                h.number,
-                                alloc::boxed::Box::new(e),
-                            )
-                        })?;
-                    if self_current_epoch_number == h.number {
-                        return if let Some(next_epoch) = &h.epoch {
-                            let self_previous_epoch_number =
-                                h.previous_epoch_block_number().map_err(|e| {
-                                    Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(
-                                        h.number,
-                                        alloc::boxed::Box::new(e),
-                                    )
-                                })?;
-                            if self_previous_epoch_number != expected_prev_epoch_number {
-                                return Err(Error::UnexpectedPreviousEpochInCalculatingNextEpoch(
-                                    h.number,
-                                    self_previous_epoch_number,
-                                    expected_prev_epoch_number,
-                                    current_epoch_block_number,
-                                ));
-                            }
-                            let next_checkpoint = h.number + height_to_checkpoint;
-                            Ok((
-                                Some(next_epoch.clone()),
-                                Some(next_checkpoint),
-                                Some(self_current_epoch_number),
-                            ))
-                        } else {
-                            Err(Error::MissingEpochInfo(h.number))
-                        };
-                    } else if h.is_epoch() {
-                        return Err(Error::UnexpectedEpochInfo(
-                            h.number,
-                            self_current_epoch_number,
-                        ));
-                    }
-                }
-                Ok((None, None, None))
-            };
-
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
             Untrusted(_) => {
@@ -260,6 +212,52 @@ impl ETHHeaders {
             }
         }
     }
+}
+
+fn find_next_epoch(
+    hs: &Vec<&ETHHeader>,
+    height_to_checkpoint: u64,
+    expected_prev_epoch_number: BlockNumber,
+) -> Result<(Option<Epoch>, Option<BlockNumber>, Option<BlockNumber>), Error> {
+    for h in hs.iter() {
+        let self_current_epoch_number = h.current_epoch_block_number().map_err(|e| {
+            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(
+                h.number,
+                alloc::boxed::Box::new(e),
+            )
+        })?;
+        if self_current_epoch_number == h.number {
+            return if let Some(next_epoch) = &h.epoch {
+                let self_previous_epoch_number = h.previous_epoch_block_number().map_err(|e| {
+                    Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(
+                        h.number,
+                        alloc::boxed::Box::new(e),
+                    )
+                })?;
+                if self_previous_epoch_number != expected_prev_epoch_number {
+                    return Err(Error::UnexpectedPreviousEpochInCalculatingNextEpoch(
+                        h.number,
+                        self_previous_epoch_number,
+                        expected_prev_epoch_number,
+                    ));
+                }
+                let next_checkpoint = h.number + height_to_checkpoint;
+                Ok((
+                    Some(next_epoch.clone()),
+                    Some(next_checkpoint),
+                    Some(self_current_epoch_number),
+                ))
+            } else {
+                Err(Error::MissingEpochInfo(h.number))
+            };
+        } else if h.is_epoch() {
+            return Err(Error::UnexpectedEpochInfo(
+                h.number,
+                self_current_epoch_number,
+            ));
+        }
+    }
+    Ok((None, None, None))
 }
 
 impl TryFrom<Vec<EthHeader>> for ETHHeaders {
@@ -932,11 +930,10 @@ mod test {
             .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
             .unwrap_err();
         match err {
-            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3, e4) => {
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3) => {
                 assert_eq!(e1, 1500);
                 assert_eq!(e2, 1500 - invalid_prev_fork_spec.epoch_length);
                 assert_eq!(e3, 1500 - invalid_current_fork_spec.epoch_length);
-                assert_eq!(e4, current_epoch_block_number);
             }
             _ => unreachable!("err {:?}", err),
         }
