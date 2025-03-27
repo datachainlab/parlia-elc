@@ -244,6 +244,10 @@ impl NextEpochInfo {
     }
 }
 
+/// Finds the next epoch information based on the given headers.
+///
+/// This function iterates through the provided headers to find the next epoch information.
+/// It checks if the current epoch block number matches the header number and retrieves the next epoch details.
 fn find_next_epoch(
     hs: &[&ETHHeader],
     height_to_checkpoint: u64,

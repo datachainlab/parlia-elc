@@ -71,6 +71,10 @@ impl Header {
         &self.headers.target.hash
     }
 
+    /// Finds the next epoch information based on the given headers.
+    ///
+    /// This function iterates through the provided headers to find the next epoch information.
+    /// It checks if the current epoch block number matches the header number and retrieves the next epoch details.
     pub fn assign_fork_spec(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
         let mut fork_specs = fork_specs.to_vec();
         for header in &mut self.headers.all {

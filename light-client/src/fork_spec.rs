@@ -95,6 +95,12 @@ impl BoundaryEpochs {
         &self.current_fork_spec
     }
 
+    /// Calculates the current epoch block number based on the given block number.
+    ///
+    /// This function determines the current epoch block number by considering the given block number
+    /// and the intermediate epochs. It handles various cases such as the first epoch, intermediate epochs,
+    /// and epochs after the hard fork.
+    ///
     pub fn current_epoch_block_number(&self, number: BlockNumber) -> BlockNumber {
         if number >= self.current_first {
             return number - (number % self.current_fork_spec.epoch_length);
@@ -107,6 +113,11 @@ impl BoundaryEpochs {
         number - (number % self.previous_fork_spec.epoch_length)
     }
 
+    /// Calculates the previous epoch block number based on the current epoch block number.
+    ///
+    /// This function determines the previous epoch block number by considering the current epoch block number
+    /// and the intermediate epochs. It handles various cases such as the first epoch, intermediate epochs,
+    /// and epochs after the hard fork.
     pub fn previous_epoch_block_number(
         &self,
         current_epoch_block_number: BlockNumber,
@@ -195,6 +206,11 @@ pub fn find_target_fork_spec(
         .ok_or(Error::MissingForkSpec(current_height, current_timestamp))
 }
 
+/// Retrieves the boundary epochs for the given `ForkSpec`.
+///
+/// This function finds the boundary epochs for the specified `current_spec` by comparing it
+/// with the previous fork specifications in the provided list. It returns the boundary epochs
+/// if the `current_spec` is found in the list.
 pub fn get_boundary_epochs(
     current_spec: &ForkSpec,
     fork_specs: &[ForkSpec],
@@ -211,6 +227,10 @@ pub fn get_boundary_epochs(
     Err(Error::MissingPreviousForkSpec(current_spec.clone()))
 }
 
+/// Verifies that the given list of `ForkSpec` is sorted in ascending order.
+///
+/// This function checks that the `ForkSpec` list is sorted by either height or timestamp
+/// in ascending order. If the list is not sorted correctly, it returns an error.
 pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {
     let mut last_height: Option<u64> = None;
     let mut last_timestamp: Option<u64> = None;
