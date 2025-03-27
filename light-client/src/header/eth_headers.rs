@@ -351,6 +351,7 @@ mod test {
     use crate::misc::Validators;
     use hex_literal::hex;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use rstest::rstest;
     use std::prelude::rust_2015::{Box, Vec};
     use std::vec;
@@ -849,6 +850,132 @@ mod test {
         let headers = hp.headers_across_checkpoint();
         f(headers.clone(), &c_val, &p_val, n_val_header.clone(), true);
         f(headers, &c_val, &p_val, n_val_header, false);
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_missing_epoch_info(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // No epoch info in next epoch
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            header.epoch = None;
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::MissingEpochInfo(e1) => {
+                assert_eq!(e1, current_epoch_block_number + 500);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_unexpected_prev_epoch(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // Set invalid fork spec
+        let invalid_prev_fork_spec = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(1499),
+            epoch_length: 10,
+            additional_header_item_count: 1,
+            max_turn_length: 64,
+        };
+
+        let invalid_current_fork_spec = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(1500),
+            epoch_length: 500,
+            additional_header_item_count: 1,
+            max_turn_length: 64,
+        };
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            if header.number == 1500 {
+                header.epoch = hp.epoch_header().epoch;
+                header
+                    .set_boundary_epochs(&vec![
+                        invalid_prev_fork_spec.clone(),
+                        invalid_current_fork_spec.clone(),
+                    ])
+                    .unwrap();
+            } else {
+                header.epoch = None;
+            }
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3, e4) => {
+                assert_eq!(e1, 1500);
+                assert_eq!(e2, 1500 - invalid_prev_fork_spec.epoch_length);
+                assert_eq!(e3, 1500 - invalid_current_fork_spec.epoch_length);
+                assert_eq!(e4, current_epoch_block_number);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_invalid_number(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // Epoch info in non epoch
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            header.epoch = hp.epoch_header().epoch;
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedEpochInfo(e1, e2) => {
+                assert_eq!(
+                    e1,
+                    hp.headers_after_checkpoint().all.last().unwrap().number + 1
+                );
+                assert_eq!(e2, current_epoch_block_number);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
     }
 
     impl From<Vec<ETHHeader>> for ETHHeaders {
