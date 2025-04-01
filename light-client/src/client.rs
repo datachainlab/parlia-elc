@@ -1253,8 +1253,8 @@ mod test {
                     client_state: None,
                     consensus_state: mock_consensus_state,
                 };
-                let mut any_client_state: Any = client_state.try_into().unwrap();
-                let mut any_consensus_state: Any = consensus_state.try_into().unwrap();
+                let any_client_state: Any = client_state.try_into().unwrap();
+                let any_consensus_state: Any = consensus_state.try_into().unwrap();
                 let mut client_state = ClientState::try_from(any_client_state.clone()).unwrap();
                 let mut consensus_state =
                     ConsensusState::try_from(any_consensus_state.clone()).unwrap();
@@ -1264,7 +1264,7 @@ mod test {
                 client.create_client(&ctx, any_client_state.clone(), any_consensus_state.clone())
             };
 
-            let result = runner(Box::new(|mut client_state, mut cons_state| {
+            let result = runner(Box::new(|client_state, mut cons_state| {
                 cons_state.timestamp = new_timestamp(MINIMUM_TIMESTAMP_SUPPORTED - 1).unwrap();
                 (client_state, cons_state)
             }));
