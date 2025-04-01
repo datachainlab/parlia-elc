@@ -308,10 +308,6 @@ pub(crate) mod test {
     use rstest::rstest;
 
     impl Header {
-        pub(crate) fn eth_header(&self) -> &ETHHeaders {
-            &self.headers
-        }
-
         pub(crate) fn new(
             headers: ETHHeaders,
             trusted_height: Height,

@@ -58,10 +58,15 @@ impl ForkSpec {
             // starts 0, 200, 400...epoch_length
             if prev_last == 0 {
                 const DEFAULT_EPOCH_LENGTH: u64 = 200;
-                let mut mid = prev_last + DEFAULT_EPOCH_LENGTH;
+                let additive: u64 = if prev_fork_spec.epoch_length > DEFAULT_EPOCH_LENGTH {
+                    DEFAULT_EPOCH_LENGTH
+                } else {
+                    prev_fork_spec.epoch_length
+                };
+                let mut mid = prev_last + additive;
                 while mid < prev_fork_spec.epoch_length {
                     intermediates.push(mid);
-                    mid += DEFAULT_EPOCH_LENGTH;
+                    mid += additive;
                 }
             }
             let mut mid = prev_last + prev_fork_spec.epoch_length;
