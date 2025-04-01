@@ -276,11 +276,6 @@ pub(crate) mod test {
             &self.headers
         }
 
-        #[cfg(feature = "dev")]
-        pub(crate) fn eth_header_mut(&mut self) -> &mut ETHHeaders {
-            &mut self.headers
-        }
-
         pub(crate) fn new(
             headers: ETHHeaders,
             trusted_height: Height,
