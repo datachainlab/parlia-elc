@@ -308,9 +308,8 @@ pub(crate) mod test {
     use rstest::rstest;
 
     impl Header {
-        #[cfg(feature = "dev")]
-        pub(crate) fn eth_header_mut(&mut self) -> &mut ETHHeaders {
-            &mut self.headers
+        pub(crate) fn eth_header(&self) -> &ETHHeaders {
+            &self.headers
         }
 
         pub(crate) fn new(
