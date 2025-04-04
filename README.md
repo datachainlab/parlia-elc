@@ -31,7 +31,7 @@ BSC_BLOCKS_PER_EPOCH=20 cargo build --features=dev
 
 Parameters can be specified to check for acceptable headers at build time.
 
-| Name | Description                                                                                                     | 
-| --- |-----------------------------------------------------------------------------------------------------------------| 
-| `MINIMUM_TIMESTAMP_SUPPORTED` | Timestamp of the lowest header this light client will accept. All the ForkSpec must be greater than this value. | 
-| `MINIMUM_HEIGHT_SUPPORTED` | Height of the lowest header this light client will accept. All the ForkSpec must be greater than this value.    | 
+| Name | Description                                                                                                                 | 
+| --- |-----------------------------------------------------------------------------------------------------------------------------| 
+| `MINIMUM_TIMESTAMP_SUPPORTED` | Timestamp of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value. | 
+| `MINIMUM_HEIGHT_SUPPORTED` | Height of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value.    | 
