@@ -5,16 +5,14 @@ use parlia_ibc_proto::google::protobuf::Any as IBCAny;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
 
 use crate::consensus_state::ConsensusState;
-use crate::fork_spec::ForkSpec;
+use crate::fork_spec::{find_target_fork_spec, get_boundary_epochs, ForkSpec, HeightOrTimestamp};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-use crate::header::eth_header::{validate_turn_length, ETHHeader};
+use crate::header::eth_header::ETHHeader;
 
 use crate::header::eth_headers::ETHHeaders;
 use crate::misc::{new_height, new_timestamp, ChainId, Hash};
 
 use super::errors::Error;
-
-use self::constant::BLOCKS_PER_EPOCH;
 
 pub const PARLIA_HEADER_TYPE_URL: &str = "/ibc.lightclients.parlia.v1.Header";
 
@@ -33,9 +31,15 @@ pub struct Header {
     trusted_height: Height,
     previous_epoch: Epoch,
     current_epoch: Epoch,
+
+    fork_specs: alloc::vec::Vec<ForkSpec>,
 }
 
 impl Header {
+    pub(crate) fn eth_header(&self) -> &ETHHeaders {
+        &self.headers
+    }
+
     pub fn height(&self) -> Height {
         new_height(
             self.trusted_height.revision_number(),
@@ -44,7 +48,7 @@ impl Header {
     }
 
     pub fn timestamp(&self) -> Result<Time, Error> {
-        new_timestamp(self.headers.target.timestamp)
+        new_timestamp(self.headers.target.milli_timestamp())
     }
 
     pub fn trusted_height(&self) -> Height {
@@ -67,10 +71,38 @@ impl Header {
         &self.headers.target.hash
     }
 
-    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
-        for header in &self.headers.all {
-            header.verify_fork_rule(fork_specs)?;
+    /// Finds the next epoch information based on the given headers.
+    ///
+    /// This function iterates through the provided headers to find the next epoch information.
+    /// It checks if the current epoch block number matches the header number and retrieves the next epoch details.
+    pub fn assign_fork_spec(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let mut fork_specs = fork_specs.to_vec();
+        for header in &mut self.headers.all {
+            header.verify_fork_rule(&fork_specs)?;
         }
+        // Ensure HF height is required for target without seeking next headers
+        self.headers.target.set_boundary_epochs(&fork_specs)?;
+
+        // Try to set HF height
+        if !fork_specs.is_empty() {
+            let last_index = fork_specs.len() - 1;
+            let last = &mut fork_specs[last_index];
+            if let HeightOrTimestamp::Time(time) = last.height_or_timestamp {
+                for header in &mut self.headers.all {
+                    if header.milli_timestamp() >= time {
+                        last.height_or_timestamp = HeightOrTimestamp::Height(header.number);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Set boundary epoch to verify header size.
+        for header in &mut self.headers.all {
+            header.set_boundary_epochs(&fork_specs)?
+        }
+
+        self.fork_specs = fork_specs;
         Ok(())
     }
 
@@ -82,10 +114,10 @@ impl Header {
         let (c_val, p_val) = verify_epoch(
             consensus_state,
             &self.headers.target,
-            self.height(),
             self.trusted_height,
             &self.previous_epoch,
             &self.current_epoch,
+            &self.fork_specs,
         )?;
         self.headers.verify(chain_id, &c_val, &p_val)
     }
@@ -100,29 +132,37 @@ impl Header {
 fn verify_epoch<'a>(
     consensus_state: &ConsensusState,
     target: &ETHHeader,
-    height: Height,
     trusted_height: Height,
     previous_epoch: &'a Epoch,
     current_epoch: &'a Epoch,
+    fork_specs: &[ForkSpec],
 ) -> Result<(EitherEpoch<'a>, TrustedEpoch<'a>), Error> {
     let is_epoch = target.is_epoch();
-    let header_epoch = height.revision_height() / BLOCKS_PER_EPOCH;
-    let trusted_epoch = trusted_height.revision_height() / BLOCKS_PER_EPOCH;
+
+    let trusted_time = (consensus_state.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64;
+    let trusted_fs =
+        find_target_fork_spec(fork_specs, trusted_height.revision_height(), trusted_time)?;
+    let trusted_epoch = get_boundary_epochs(trusted_fs, fork_specs)?
+        .current_epoch_block_number(trusted_height.revision_height());
 
     if is_epoch {
-        if header_epoch != trusted_epoch + 1 {
-            return Err(Error::UnexpectedTrustedHeight(
+        let header_previous_epoch = target.previous_epoch_block_number()?;
+        if header_previous_epoch != trusted_epoch {
+            return Err(Error::UnexpectedTrustedEpoch(
                 trusted_height.revision_height(),
-                height.revision_height(),
+                target.number,
+                header_previous_epoch,
+                trusted_epoch,
             ));
         }
         let previous_trusted = previous_epoch.hash() == consensus_state.current_validators_hash;
         if !previous_trusted {
             return Err(Error::UnexpectedUntrustedValidatorsHashInEpoch(
                 trusted_height,
-                height,
+                target.number,
                 previous_epoch.hash(),
                 consensus_state.current_validators_hash,
+                trusted_epoch,
             ));
         }
 
@@ -133,7 +173,7 @@ fn verify_epoch<'a>(
         if epoch_info.hash() != current_epoch.hash() {
             return Err(Error::UnexpectedCurrentValidatorsHashInEpoch(
                 trusted_height,
-                height,
+                target.number,
                 epoch_info.hash(),
                 current_epoch.hash(),
             ));
@@ -144,28 +184,33 @@ fn verify_epoch<'a>(
             TrustedEpoch::new(previous_epoch),
         ))
     } else {
+        let header_epoch = target.current_epoch_block_number()?;
         if header_epoch != trusted_epoch {
-            return Err(Error::UnexpectedTrustedHeight(
+            return Err(Error::UnexpectedTrustedEpoch(
                 trusted_height.revision_height(),
-                height.revision_height(),
+                target.number,
+                header_epoch,
+                trusted_epoch,
             ));
         }
         let previous_trusted = previous_epoch.hash() == consensus_state.previous_validators_hash;
         if !previous_trusted {
             return Err(Error::UnexpectedPreviousValidatorsHash(
                 trusted_height,
-                height,
+                target.number,
                 previous_epoch.hash(),
                 consensus_state.previous_validators_hash,
+                trusted_epoch,
             ));
         }
         let current_trusted = current_epoch.hash() == consensus_state.current_validators_hash;
         if !current_trusted {
             return Err(Error::UnexpectedCurrentValidatorsHash(
                 trusted_height,
-                height,
+                target.number,
                 current_epoch.hash(),
                 consensus_state.current_validators_hash,
+                trusted_epoch,
             ));
         }
         Ok((
@@ -201,25 +246,15 @@ impl TryFrom<RawHeader> for Header {
         if value.previous_validators.is_empty() {
             return Err(Error::MissingPreviousValidators(headers.target.number));
         }
-        validate_turn_length(value.previous_turn_length as u8)?;
 
         // Epoch header contains validator set
-        let current_epoch = if headers.target.is_epoch() {
-            headers
-                .target
-                .epoch
-                .clone()
-                .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(headers.target.number))?
-        } else {
-            Epoch::new(
-                value.current_validators.into(),
-                value.current_turn_length as u8,
-            )
-        };
+        let current_epoch = headers.target.clone().epoch.unwrap_or(Epoch::new(
+            value.current_validators.into(),
+            value.current_turn_length as u8,
+        ));
         if current_epoch.validators().is_empty() {
             return Err(Error::MissingCurrentValidators(headers.target.number));
         }
-        validate_turn_length(value.current_turn_length as u8)?;
 
         Ok(Self {
             headers,
@@ -229,6 +264,7 @@ impl TryFrom<RawHeader> for Header {
                 value.previous_turn_length as u8,
             ),
             current_epoch,
+            fork_specs: vec![],
         })
     }
 }
@@ -272,10 +308,6 @@ pub(crate) mod test {
     use rstest::rstest;
 
     impl Header {
-        pub(crate) fn eth_header(&self) -> &ETHHeaders {
-            &self.headers
-        }
-
         pub(crate) fn new(
             headers: ETHHeaders,
             trusted_height: Height,
@@ -290,9 +322,11 @@ pub(crate) mod test {
                 ),
                 previous_epoch,
                 current_epoch,
+                fork_specs: vec![fork_spec_after_pascal(), fork_spec_after_lorentz()],
             }
         }
     }
+    const BLOCKS_PER_EPOCH: u64 = 500;
 
     #[rstest]
     #[case::localnet(localnet())]
@@ -415,7 +449,12 @@ pub(crate) mod test {
             current_turn_length: 1,
             previous_turn_length: 1,
         };
-        let result = Header::try_from(raw.clone()).unwrap();
+        let mut result = Header::try_from(raw.clone()).unwrap();
+        result
+            .headers
+            .target
+            .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
+            .unwrap();
         assert_eq!(result.headers.target, *h);
         assert_eq!(
             result.trusted_height.revision_height(),
@@ -447,17 +486,17 @@ pub(crate) mod test {
         };
 
         // epoch
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 201);
+        let header = hp.epoch_header();
+        let trusted_height = new_height(0, header.number - 1);
         let current_epoch = &hp.epoch_header().epoch.unwrap();
         let previous_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let (c_val, _) = verify_epoch(
             &cs,
             &hp.epoch_header(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap();
         match c_val {
@@ -472,17 +511,17 @@ pub(crate) mod test {
             current_validators_hash: Epoch::new(to_validator_set([1u8; 32]), 1).hash(),
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
-        let height = new_height(0, 599);
-        let trusted_height = new_height(0, 400);
+        let header = hp.epoch_header_plus_1();
+        let trusted_height = new_height(0, hp.epoch_header().number);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let (c_val, _p_val) = verify_epoch(
             &cs,
-            &hp.epoch_header_plus_1(),
-            height,
+            &header,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap();
         match c_val {
@@ -503,104 +542,103 @@ pub(crate) mod test {
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
 
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 199);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH - 1);
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedTrustedHeight(t, h) => {
+            Error::UnexpectedTrustedEpoch(t, _, _, _) => {
                 assert_eq!(t, trusted_height.revision_height());
-                assert_eq!(h, height.revision_height());
             }
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 200);
+        let trusted_height =
+            new_height(0, hp.epoch_header().previous_epoch_block_number().unwrap());
         let err = verify_epoch(
             &cs,
             &hp.epoch_header(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(t, h, hash, cons_hash) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
-                assert_eq!(h, height);
                 assert_eq!(hash, previous_epoch.hash());
                 assert_eq!(cons_hash, cs.current_validators_hash);
             }
             _ => unreachable!("err {:?}", err),
         }
 
-        let height = new_height(0, 401);
-        let trusted_height = new_height(0, 200);
+        let trusted_height = new_height(0, BLOCKS_PER_EPOCH);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header_plus_1(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedTrustedHeight(t, h) => {
+            Error::UnexpectedTrustedEpoch(t, _, _, _) => {
                 assert_eq!(t, trusted_height.revision_height());
-                assert_eq!(h, height.revision_height());
             }
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 400);
+        let trusted_height = new_height(
+            0,
+            hp.epoch_header_plus_1()
+                .current_epoch_block_number()
+                .unwrap(),
+        );
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header_plus_1(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedPreviousValidatorsHash(t, h, hash, cons_hash) => {
+            Error::UnexpectedPreviousValidatorsHash(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
-                assert_eq!(h, height);
                 assert_eq!(hash, previous_epoch.hash());
                 assert_eq!(cons_hash, cs.previous_validators_hash);
             }
             _ => unreachable!("err {:?}", err),
         }
 
-        let trusted_height = new_height(0, 400);
+        let trusted_height = new_height(0, hp.epoch_header().current_epoch_block_number().unwrap());
         let current_epoch = &Epoch::new(to_validator_set([3u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([2u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header_plus_1(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedCurrentValidatorsHash(t, h, hash, cons_hash) => {
+            Error::UnexpectedCurrentValidatorsHash(t, _, hash, cons_hash, _) => {
                 assert_eq!(t, trusted_height);
-                assert_eq!(h, height);
                 assert_eq!(hash, current_epoch.hash());
                 assert_eq!(cons_hash, cs.current_validators_hash);
             }
@@ -613,48 +651,26 @@ pub(crate) mod test {
             current_validators_hash: Epoch::new(to_validator_set([4u8; 32]), 1).hash(),
             previous_validators_hash: Epoch::new(to_validator_set([2u8; 32]), 1).hash(),
         };
-        let height = new_height(0, 400);
-        let trusted_height = new_height(0, 399);
+        let trusted_height =
+            new_height(0, hp.epoch_header().previous_epoch_block_number().unwrap());
         let current_epoch = &Epoch::new(to_validator_set([1u8; 32]), 1);
         let previous_epoch = &Epoch::new(to_validator_set([4u8; 32]), 1);
         let err = verify_epoch(
             &cs,
             &hp.epoch_header(),
-            height,
             trusted_height,
             previous_epoch,
             current_epoch,
+            &[fork_spec_after_pascal(), fork_spec_after_lorentz()],
         )
         .unwrap_err();
         match err {
-            Error::UnexpectedCurrentValidatorsHashInEpoch(t, h, header_hash, request_hash) => {
+            Error::UnexpectedCurrentValidatorsHashInEpoch(t, _, header_hash, request_hash) => {
                 assert_eq!(t, trusted_height);
-                assert_eq!(h, height);
                 assert_eq!(header_hash, hp.epoch_header().epoch.unwrap().hash());
                 assert_eq!(request_hash, current_epoch.hash());
             }
             _ => unreachable!("err {:?}", err),
-        }
-    }
-
-    #[test]
-    fn test_error_try_from_invalid_turn_length() {
-        let raw_header = RawHeader {
-            headers: vec![EthHeader {
-                header: localnet().epoch_header_rlp(),
-            }],
-            trusted_height: Some(Height::default()),
-            current_validators: vec![vec![0]],
-            previous_validators: vec![vec![1]],
-            current_turn_length: 0,
-            previous_turn_length: 0,
-        };
-        let err = Header::try_from(raw_header).unwrap_err();
-        match err {
-            Error::UnexpectedTurnLength(turn_length) => {
-                assert_eq!(turn_length, 0)
-            }
-            _ => unreachable!("unexpected "),
         }
     }
 }

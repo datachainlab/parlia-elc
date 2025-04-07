@@ -5,6 +5,10 @@ pub struct ForkSpec {
     /// For example, the number of headers before Pascal HF is set to 1 because of the addition of the requestsHash.
     #[prost(uint64, tag = "3")]
     pub additional_header_item_count: u64,
+    #[prost(uint64, tag = "4")]
+    pub epoch_length: u64,
+    #[prost(uint64, tag = "5")]
+    pub max_turn_length: u64,
     #[prost(oneof = "fork_spec::HeightOrTimestamp", tags = "1, 2")]
     pub height_or_timestamp: ::core::option::Option<fork_spec::HeightOrTimestamp>,
 }

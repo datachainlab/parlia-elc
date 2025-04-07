@@ -5,6 +5,7 @@ use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 pub mod localnet;
@@ -61,7 +62,36 @@ pub fn localnet() -> Box<dyn Network> {
 }
 
 pub fn decode_header(rlp_header: Vec<u8>) -> ETHHeader {
-    EthHeader { header: rlp_header }.try_into().unwrap()
+    let mut header: ETHHeader = EthHeader { header: rlp_header }.try_into().unwrap();
+    header
+        .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
+        .unwrap();
+    header
 }
 
-// TODO Modify testnet / mainnet after each HF released
+pub fn fork_spec_after_pascal() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(0),
+        additional_header_item_count: 1,
+        epoch_length: 200,
+        max_turn_length: 64,
+    }
+}
+
+pub fn fork_spec_after_lorentz() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(1),
+        additional_header_item_count: 1,
+        epoch_length: 500,
+        max_turn_length: 64,
+    }
+}
+
+pub fn fork_spec_after_maxwell() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(2),
+        additional_header_item_count: 1,
+        epoch_length: 1000,
+        max_turn_length: 64,
+    }
+}

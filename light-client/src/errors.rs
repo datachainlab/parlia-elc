@@ -2,12 +2,12 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Formatter;
 
+use crate::fork_spec::ForkSpec;
+use crate::misc::{Address, BlockNumber, Hash};
 use k256::ecdsa::signature;
 use light_client::commitments::{CommitmentPrefix, Error as CommitmentError};
 use light_client::types::{Any, ClientId, Height, Time, TimeError};
 use trie_db::TrieError;
-
-use crate::misc::{Address, BlockNumber, Hash};
 
 type BoxedTrieError = alloc::boxed::Box<TrieError<primitive_types::H256, rlp::DecoderError>>;
 
@@ -64,6 +64,7 @@ pub enum Error {
     MissingTrustedHeight,
     MissingTrustingPeriod,
     NegativeMaxClockDrift,
+    UnexpectedTrustedEpoch(BlockNumber, BlockNumber, BlockNumber, BlockNumber),
     UnexpectedTrustedHeight(BlockNumber, BlockNumber),
     EmptyHeader,
     UnexpectedHeaderRevision(u64, u64),
@@ -71,7 +72,7 @@ pub enum Error {
     UnexpectedSignature(BlockNumber, signature::Error),
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
-    UnexpectedMixHash(BlockNumber),
+    UnexpectedMixHash(BlockNumber, Vec<u8>),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
     UnexpectedNonce(BlockNumber),
@@ -88,8 +89,8 @@ pub enum Error {
     MissingTurnLengthInEpochBlock(BlockNumber),
     MissingEpochInfoInEpochBlock(BlockNumber),
     MissingNextValidatorSet(BlockNumber),
-    UnexpectedPreviousValidatorsHash(Height, Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHash(Height, Height, Hash, Hash),
+    UnexpectedPreviousValidatorsHash(Height, BlockNumber, Hash, Hash, BlockNumber),
+    UnexpectedCurrentValidatorsHash(Height, BlockNumber, Hash, Hash, BlockNumber),
     InvalidVerifyingHeaderLength(BlockNumber, usize),
     InsufficientHonestValidator(Hash, usize, usize),
     MissingValidatorToVerifySeal(BlockNumber),
@@ -99,14 +100,17 @@ pub enum Error {
     MissingTrustedCurrentValidators(BlockNumber),
     UnexpectedDifficultyInTurn(BlockNumber, u64, usize),
     UnexpectedDifficultyNoTurn(BlockNumber, u64, usize),
-    UnexpectedUntrustedValidatorsHashInEpoch(Height, Height, Hash, Hash),
-    UnexpectedCurrentValidatorsHashInEpoch(Height, Height, Hash, Hash),
+    UnexpectedUntrustedValidatorsHashInEpoch(Height, BlockNumber, Hash, Hash, BlockNumber),
+    UnexpectedCurrentValidatorsHashInEpoch(Height, BlockNumber, Hash, Hash),
     UnexpectedUntrustedValidators(BlockNumber, BlockNumber),
     MissingRequestsHash(BlockNumber),
     UnexpectedRequestsHash(BlockNumber, Vec<u8>),
     UnexpectedHeaderRLP(BlockNumber),
     MissingForkSpec(BlockNumber, u64),
+    MissingForkSpecByHeight(BlockNumber),
     UnexpectedHeaderItemCount(BlockNumber, usize, u64),
+    MissingEpochInfo(BlockNumber),
+    UnexpectedEpochInfo(BlockNumber, BlockNumber),
 
     // Vote attestation
     UnexpectedTooManyHeadersToFinalize(BlockNumber, usize),
@@ -129,6 +133,14 @@ pub enum Error {
     MissingTimestampOrHeightInForkSpec,
     UnexpectedForkSpecTimestampOrder(u64, u64),
     UnexpectedForkSpecHeightOrder(u64, u64),
+    MissingForkHeightIntPreviousEpochCalculation(u64, ForkSpec),
+    MissingForkHeightInBoundaryCalculation(ForkSpec),
+    MissingBoundaryEpochs(BlockNumber),
+    MissingPreviousForkSpec(ForkSpec),
+    UnexpectedCurrentEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
+    UnexpectedMissingForkSpecInCurrentEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
+    UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
+    UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
 
     // Misbehaviour
     MissingHeader1,
@@ -174,8 +186,15 @@ impl core::fmt::Display for Error {
                 write!(f, "HeaderFromFuture: {} {:?} {}", e1, e2, e3)
             }
             Error::MissingTrustedHeight => write!(f, "MissingTrustedHeight"),
+            Error::UnexpectedTrustedEpoch(e1, e2, e3, e4) => {
+                write!(
+                    f,
+                    "UnexpectedTrustedEpoch: {} {} header_epoch={} trusted_epoch={}",
+                    e1, e2, e3, e4
+                )
+            }
             Error::UnexpectedTrustedHeight(e1, e2) => {
-                write!(f, "UnexpectedTrustedHeight: {} {}", e1, e2)
+                write!(f, "UnexpectedTrustedHeight: {} {} ", e1, e2)
             }
             Error::EmptyHeader => write!(f, "EmptyHeader"),
             Error::UnexpectedHeaderRevision(e1, e2) => {
@@ -297,21 +316,21 @@ impl core::fmt::Display for Error {
             Error::MissingCurrentValidators(e1) => {
                 write!(f, "MissingCurrentValidators : {:?}", e1)
             }
-            Error::UnexpectedMixHash(e1) => {
-                write!(f, "UnexpectedMixHash : {:?}", e1)
+            Error::UnexpectedMixHash(e1, e2) => {
+                write!(f, "UnexpectedMixHash : {:?} {:?}", e1, e2)
             }
-            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4) => {
+            Error::UnexpectedPreviousValidatorsHash(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedPreviousValidatorsHash : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4, e5
                 )
             }
-            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4) => {
+            Error::UnexpectedCurrentValidatorsHash(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedCurrentValidatorsHash : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4, e5
                 )
             }
             Error::UnexpectedSourceInGrandChild(e1, e2, e3, e4) => {
@@ -372,11 +391,11 @@ impl core::fmt::Display for Error {
             Error::UnexpectedExtraDataLength(e1) => {
                 write!(f, "UnexpectedExtraDataLength: {}", e1)
             }
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(e1, e2, e3, e4, e5) => {
                 write!(
                     f,
-                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?}",
-                    e1, e2, e3, e4
+                    "UnexpectedUntrustedValidatorsHashInEpoch : {:?} {:?} {:?} {:?} trusted_epoch={}",
+                    e1, e2, e3, e4, e5
                 )
             }
             Error::UnexpectedCurrentValidatorsHashInEpoch(e1, e2, e3, e4) => {
@@ -433,6 +452,59 @@ impl core::fmt::Display for Error {
             }
             Error::VerifyAccountError(e1) => {
                 write!(f, "VerifyAccountError : {}", e1)
+            }
+            Error::MissingForkSpecByHeight(e1) => {
+                write!(f, "MissingForkSpecByHeight : {}", e1)
+            }
+            Error::MissingForkHeightIntPreviousEpochCalculation(e1, e2) => {
+                write!(
+                    f,
+                    "MissingForkHeightIntPreviousEpochCalculation : {} {:?}",
+                    e1, e2
+                )
+            }
+            Error::MissingForkHeightInBoundaryCalculation(e1) => {
+                write!(f, "MissingForkHeightInBoundaryCalculation : {:?}", e1)
+            }
+            Error::MissingBoundaryEpochs(e1) => {
+                write!(f, "MissingBoundaryEpochs : {}", e1)
+            }
+            Error::MissingPreviousForkSpec(e1) => {
+                write!(f, "MissingPreviousForkSpec : {:?}", e1)
+            }
+            Error::UnexpectedCurrentEpochInCalculatingNextEpoch(e1, e2, e3) => {
+                write!(
+                    f,
+                    "UnexpectedCurrentEpochInCalculatingNextEpoch : {} {} {}",
+                    e1, e2, e3
+                )
+            }
+            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(e1, e2) => {
+                write!(
+                    f,
+                    "UnexpectedMissingForkSpecInCurrentEpochCalculation : {} {:?} ",
+                    e1, e2
+                )
+            }
+            Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(e1, e2) => {
+                write!(
+                    f,
+                    "UnexpectedMissingForkSpecInPreviousEpochCalculation : {} {:?} ",
+                    e1, e2
+                )
+            }
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3) => {
+                write!(
+                    f,
+                    "UnexpectedPreviousEpochInCalculatingNextEpoch : {} {} {} ",
+                    e1, e2, e3,
+                )
+            }
+            Error::MissingEpochInfo(e1) => {
+                write!(f, "MissingEpochInfo : {} ", e1)
+            }
+            Error::UnexpectedEpochInfo(e1, e2) => {
+                write!(f, "UnexpectedEpochInfo : {} {}", e1, e2)
             }
         }
     }
@@ -491,7 +563,7 @@ impl core::fmt::Display for ClientError {
             ),
             ClientError::UpdateClient{cause, client_id, message} => write!(
                 f,
-                "CreateClient: cause={}\nclient_id={:?}\nmessage={:?}",
+                "UpdateClient: cause={}\nclient_id={:?}\nmessage={:?}",
                 cause, client_id, message
             ),
             ClientError::VerifyMembership {
