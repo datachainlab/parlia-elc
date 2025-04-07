@@ -234,8 +234,8 @@ pub fn get_boundary_epochs(
 
 /// Verifies that the given list of `ForkSpec` is sorted in ascending order.
 ///
-/// This function checks that the `ForkSpec` list is sorted by either height or timestamp
-/// in ascending order. If the list is not sorted correctly, it returns an error.
+/// HEIGHT should be sorted by HEIGHT and TIMESTAMP should be sorted by TIMESTAMP.
+/// As an operational constraint, ForkSpec should be submitted in HF order
 pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {
     let mut last_height: Option<u64> = None;
     let mut last_timestamp: Option<u64> = None;

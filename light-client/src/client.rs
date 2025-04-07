@@ -150,6 +150,8 @@ impl LightClient for ParliaLightClient {
     }
 }
 
+const NANO_TO_MILLIS: u128 = 1_000_000;
+
 struct InnerLightClient;
 
 impl InnerLightClient {
@@ -166,7 +168,7 @@ impl InnerLightClient {
 
         let height = client_state.latest_height;
         let timestamp = consensus_state.timestamp;
-        let milli_timestamp = (timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64;
+        let milli_timestamp = (timestamp.as_unix_timestamp_nanos() / NANO_TO_MILLIS) as u64;
 
         #[allow(clippy::absurd_extreme_comparisons)]
         if milli_timestamp < MINIMUM_TIMESTAMP_SUPPORTED {
@@ -187,21 +189,20 @@ impl InnerLightClient {
 
         verify_sorted_asc(&client_state.fork_specs)?;
 
-        for spec in &client_state.fork_specs {
-            match spec.height_or_timestamp {
-                HeightOrTimestamp::Height(height) =>
-                {
-                    #[allow(clippy::absurd_extreme_comparisons)]
-                    if height < MINIMUM_HEIGHT_SUPPORTED {
-                        return Err(Error::UnsupportedMinimumHeightForkSpec(height));
-                    }
+        let first = client_state.fork_specs.first().unwrap();
+        match first.height_or_timestamp {
+            HeightOrTimestamp::Height(height) =>
+            {
+                #[allow(clippy::absurd_extreme_comparisons)]
+                if height < MINIMUM_HEIGHT_SUPPORTED {
+                    return Err(Error::UnsupportedMinimumHeightForkSpec(height));
                 }
-                HeightOrTimestamp::Time(time) =>
-                {
-                    #[allow(clippy::absurd_extreme_comparisons)]
-                    if time < MINIMUM_TIMESTAMP_SUPPORTED {
-                        return Err(Error::UnsupportedMinimumTimestampForkSpec(time));
-                    }
+            }
+            HeightOrTimestamp::Time(time) =>
+            {
+                #[allow(clippy::absurd_extreme_comparisons)]
+                if time < MINIMUM_TIMESTAMP_SUPPORTED {
+                    return Err(Error::UnsupportedMinimumTimestampForkSpec(time));
                 }
             }
         }
@@ -519,7 +520,7 @@ mod test {
     use rstest::rstest;
     use time::macros::datetime;
 
-    use crate::client::ParliaLightClient;
+    use crate::client::{ParliaLightClient, NANO_TO_MILLIS};
     use crate::client_state::ClientState;
     use crate::consensus_state::ConsensusState;
 
@@ -636,12 +637,12 @@ mod test {
 
                 let cs = ConsensusState::try_from(any_consensus_state).unwrap();
                 assert_eq!(
-                    (data.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64,
+                    (data.timestamp.as_unix_timestamp_nanos() / NANO_TO_MILLIS) as u64,
                     timestamp
                 );
                 assert_eq!(
-                    data.timestamp.as_unix_timestamp_nanos() / 1_000_000,
-                    cs.timestamp.as_unix_timestamp_nanos() / 1_000_000
+                    data.timestamp.as_unix_timestamp_nanos() / NANO_TO_MILLIS,
+                    cs.timestamp.as_unix_timestamp_nanos() / NANO_TO_MILLIS
                 );
                 assert_eq!(data.emitted_states[0].0, result.height);
                 assert_eq!(data.emitted_states[0].1, any_client_state);
