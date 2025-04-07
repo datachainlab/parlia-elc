@@ -189,21 +189,20 @@ impl InnerLightClient {
 
         verify_sorted_asc(&client_state.fork_specs)?;
 
-        for spec in &client_state.fork_specs {
-            match spec.height_or_timestamp {
-                HeightOrTimestamp::Height(height) =>
-                {
-                    #[allow(clippy::absurd_extreme_comparisons)]
-                    if height < MINIMUM_HEIGHT_SUPPORTED {
-                        return Err(Error::UnsupportedMinimumHeightForkSpec(height));
-                    }
+        let first = client_state.fork_specs.first().unwrap();
+        match first.height_or_timestamp {
+            HeightOrTimestamp::Height(height) =>
+            {
+                #[allow(clippy::absurd_extreme_comparisons)]
+                if height < MINIMUM_HEIGHT_SUPPORTED {
+                    return Err(Error::UnsupportedMinimumHeightForkSpec(height));
                 }
-                HeightOrTimestamp::Time(time) =>
-                {
-                    #[allow(clippy::absurd_extreme_comparisons)]
-                    if time < MINIMUM_TIMESTAMP_SUPPORTED {
-                        return Err(Error::UnsupportedMinimumTimestampForkSpec(time));
-                    }
+            }
+            HeightOrTimestamp::Time(time) =>
+            {
+                #[allow(clippy::absurd_extreme_comparisons)]
+                if time < MINIMUM_TIMESTAMP_SUPPORTED {
+                    return Err(Error::UnsupportedMinimumTimestampForkSpec(time));
                 }
             }
         }
