@@ -15,7 +15,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{github.event.pull_request.head.repo.full_name}}
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -47,23 +47,5 @@ jobs:
           command: test
           args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test_min
         env:
-          MINIMUM_TIMESTAMP_SUPPORTED: 1731495592
+          MINIMUM_TIMESTAMP_SUPPORTED: 110
           MINIMUM_HEIGHT_SUPPORTED: 100
-      - uses: actions-rs/cargo@v1
-        name: unit-test-dev-test-pascal
-        with:
-          command: test
-          args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test_after_pascal
-        env:
-          MINIMUM_TIMESTAMP_SUPPORTED: 1
-          MINIMUM_HEIGHT_SUPPORTED: 1
-          PASCAL_TIMESTAMP: 1
-      - uses: actions-rs/cargo@v1
-        name: unit-test-dev-test-pascal
-        with:
-          command: test
-          args: --release --features=dev --manifest-path light-client/Cargo.toml --lib test::dev_test_before_pascal
-        env:
-          MINIMUM_TIMESTAMP_SUPPORTED: 1
-          MINIMUM_HEIGHT_SUPPORTED: 1
-          PASCAL_TIMESTAMP: 1800000000

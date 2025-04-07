@@ -5,6 +5,7 @@ use crate::misc::{Address, ChainId, Hash, Validators};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 pub mod localnet;
@@ -37,6 +38,7 @@ pub trait Network {
     fn success_update_client_epoch_input(&self) -> UpdateClientEpochInput;
     fn success_update_client_continuous_input(&self) -> Vec<Vec<Vec<u8>>>;
     fn error_update_client_non_neighboring_epoch_input(&self) -> Vec<u8>;
+    fn success_create_client(&self) -> (Vec<u8>, Vec<u8>, u64, u64);
 }
 
 pub struct UpdateClientNonEpochInput {
@@ -44,7 +46,6 @@ pub struct UpdateClientNonEpochInput {
     pub trusted_height: u64,
     pub trusted_current_validators_hash: Hash,
     pub trusted_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub struct UpdateClientEpochInput {
@@ -54,7 +55,6 @@ pub struct UpdateClientEpochInput {
     pub trusted_previous_validators_hash: Hash,
     pub new_current_validators_hash: Hash,
     pub new_previous_validators_hash: Hash,
-    pub expected_storage_root: Hash,
 }
 
 pub fn localnet() -> Box<dyn Network> {
@@ -62,7 +62,36 @@ pub fn localnet() -> Box<dyn Network> {
 }
 
 pub fn decode_header(rlp_header: Vec<u8>) -> ETHHeader {
-    EthHeader { header: rlp_header }.try_into().unwrap()
+    let mut header: ETHHeader = EthHeader { header: rlp_header }.try_into().unwrap();
+    header
+        .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
+        .unwrap();
+    header
 }
 
-// TODO Modify testnet / mainnet after each HF released
+pub fn fork_spec_after_pascal() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(0),
+        additional_header_item_count: 1,
+        epoch_length: 200,
+        max_turn_length: 64,
+    }
+}
+
+pub fn fork_spec_after_lorentz() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(1),
+        additional_header_item_count: 1,
+        epoch_length: 500,
+        max_turn_length: 64,
+    }
+}
+
+pub fn fork_spec_after_maxwell() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(2),
+        additional_header_item_count: 1,
+        epoch_length: 1000,
+        max_turn_length: 64,
+    }
+}

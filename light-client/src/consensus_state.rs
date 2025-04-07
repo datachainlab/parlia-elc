@@ -61,7 +61,7 @@ impl From<ConsensusState> for RawConsensusState {
     fn from(value: ConsensusState) -> Self {
         Self {
             state_root: value.state_root.to_vec(),
-            timestamp: value.timestamp.as_unix_timestamp_secs(),
+            timestamp: (value.timestamp.as_unix_timestamp_nanos() / 1_000_000) as u64,
             current_validators_hash: value.current_validators_hash.into(),
             previous_validators_hash: value.previous_validators_hash.into(),
         }
@@ -123,21 +123,24 @@ mod test {
 
     #[test]
     fn test_success_try_from_any() {
-        let cs = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126c0a2056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b42110de82d5a8061a209c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e22207a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a").to_vec();
+        let cs = hex!("0a2a2f6962632e6c69676874636c69656e74732e7061726c69612e76312e436f6e73656e7375735374617465126d0a20e0cecaaf108b444908180c46807c7891991377cc43669273e779c5c0c5cbd77c10c88db8afd6321a204e013ddc6238ab26c478ce824c78b5938efa2d4e5eb73e9c9a3172ffca99c7ee22203acf3e01a40afb77b433f11eb9a311cbc5326957d5d3e9e9428439d17b76ead0").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ConsensusState = cs.try_into().unwrap();
 
         assert_eq!(
-            hex!("9c59cf0b5717cb6e2bd8620b7f3481605c8abcd45636bdf45c86db06338f0c5e"),
+            hex!("4e013ddc6238ab26c478ce824c78b5938efa2d4e5eb73e9c9a3172ffca99c7ee"),
             cs.current_validators_hash
         );
         assert_eq!(
-            hex!("7a1dede35f5c835fecdc768324928cd0d9d9161e8529e1ba1e60451f3a9d088a"),
+            hex!("3acf3e01a40afb77b433f11eb9a311cbc5326957d5d3e9e9428439d17b76ead0"),
             cs.previous_validators_hash
         );
-        assert_eq!(1695891806, cs.timestamp.as_unix_timestamp_secs());
         assert_eq!(
-            hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
+            1741171853000,
+            cs.timestamp.as_unix_timestamp_nanos() / 1_000_000
+        );
+        assert_eq!(
+            hex!("e0cecaaf108b444908180c46807c7891991377cc43669273e779c5c0c5cbd77c"),
             cs.state_root
         );
     }

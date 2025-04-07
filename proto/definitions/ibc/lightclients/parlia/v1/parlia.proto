@@ -7,6 +7,18 @@ import "gogoproto/gogo.proto";
 import "ibc/core/client/v1/client.proto";
 import "google/protobuf/duration.proto";
 
+message ForkSpec {
+  oneof height_or_timestamp {
+    uint64 height = 1;
+    uint64 timestamp = 2;
+  }
+  // The number of headers prior to Pascal HF is set to 0.
+  // For example, the number of headers before Pascal HF is set to 1 because of the addition of the requestsHash.
+  uint64 additional_header_item_count = 3;
+  uint64 epoch_length = 4;
+  uint64 max_turn_length = 5;
+}
+
 message ClientState {
   uint64 chain_id = 1;
 
@@ -19,6 +31,8 @@ message ClientState {
   google.protobuf.Duration max_clock_drift = 6 [(gogoproto.nullable) = false, (gogoproto.stdduration) = true];
 
   bool frozen = 7;
+
+  repeated ForkSpec fork_specs = 8;
 }
 
 message ETHHeader {
@@ -28,11 +42,10 @@ message ETHHeader {
 message Header {
   repeated ETHHeader headers = 1;
   ibc.core.client.v1.Height trusted_height = 2;
-  bytes account_proof = 3;
-  repeated bytes current_validators = 4;
-  repeated bytes previous_validators = 5;
-  uint32 current_turn_length = 6;
-  uint32 previous_turn_length = 7;
+  repeated bytes current_validators = 3;
+  repeated bytes previous_validators = 4;
+  uint32 current_turn_length = 5;
+  uint32 previous_turn_length = 6;
 }
 
 message ConsensusState {
@@ -46,4 +59,9 @@ message Misbehaviour {
   string client_id = 1;
   Header header_1 = 2;
   Header header_2 = 3;
+}
+
+message ProveState {
+  bytes account_proof = 1;
+  bytes commitment_proof = 2;
 }

@@ -1,21 +1,20 @@
 use alloc::vec::Vec;
-
 use elliptic_curve::sec1::ToEncodedPoint;
 use hex_literal::hex;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-
 use patricia_merkle_trie::keccak::keccak_256;
+use primitive_types::U256;
 use rlp::{Rlp, RlpStream};
 
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
+use crate::fork_spec::{
+    find_target_fork_spec, get_boundary_epochs, BoundaryEpochs, ForkSpec, HeightOrTimestamp,
+};
 use crate::header::epoch::Epoch;
-use crate::header::hardfork::PASCAL_TIMESTAMP;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
-
-use super::BLOCKS_PER_EPOCH;
 
 const DIFFICULTY_INTURN: u64 = 2;
 const DIFFICULTY_NOTURN: u64 = 1;
@@ -38,31 +37,33 @@ const EMPTY_HASH: Hash = hex!("0000000000000000000000000000000000000000000000000
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ETHHeader {
-    pub parent_hash: Vec<u8>,
-    pub uncle_hash: Vec<u8>,
+    parent_hash: Vec<u8>,
+    uncle_hash: Vec<u8>,
     pub coinbase: Vec<u8>,
     pub root: Hash,
-    pub tx_hash: Vec<u8>,
-    pub receipt_hash: Vec<u8>,
-    pub bloom: Vec<u8>,
-    pub difficulty: u64,
+    tx_hash: Vec<u8>,
+    receipt_hash: Vec<u8>,
+    bloom: Vec<u8>,
+    difficulty: u64,
     pub number: BlockNumber,
-    pub gas_limit: u64,
-    pub gas_used: u64,
-    pub timestamp: u64,
+    gas_limit: u64,
+    gas_used: u64,
+    timestamp: u64,
     pub extra_data: Vec<u8>,
-    pub mix_digest: Vec<u8>,
-    pub nonce: Vec<u8>,
-    pub base_fee_per_gas: Option<u64>,
-    pub withdrawals_hash: Option<Vec<u8>>,
-    pub blob_gas_used: Option<u64>,
-    pub excess_blob_gas: Option<u64>,
-    pub parent_beacon_root: Option<Vec<u8>>,
-    pub requests_hash: Option<Vec<u8>>,
+    mix_digest: Vec<u8>,
+    nonce: Vec<u8>,
+    base_fee_per_gas: Option<u64>,
+    withdrawals_hash: Option<Vec<u8>>,
+    blob_gas_used: Option<u64>,
+    excess_blob_gas: Option<u64>,
+    parent_beacon_root: Option<Vec<u8>>,
+    additional_items: Vec<Vec<u8>>,
 
     // calculated by RawETHHeader
     pub hash: Hash,
     pub epoch: Option<Epoch>,
+
+    boundary_epochs: Option<BoundaryEpochs>,
 }
 
 impl ETHHeader {
@@ -135,9 +136,8 @@ impl ETHHeader {
                 }
                 stream.append(parent_beacon_root);
 
-                // https://github.com/bnb-chain/bsc/blob/e2f2111a85fecabb4782099338aca21bf58bde09/core/types/block.go#L776
-                if let Some(value) = &self.requests_hash {
-                    stream.append(value);
+                for item in &self.additional_items {
+                    stream.append_raw(item, 1);
                 }
             }
         }
@@ -159,15 +159,15 @@ impl ETHHeader {
 
         if parent.number != self.number - 1
             || parent.hash != self.parent_hash.as_slice()
-            || parent.timestamp >= self.timestamp
+            || parent.milli_timestamp() >= self.milli_timestamp()
         {
             return Err(Error::UnexpectedHeaderRelation(
                 parent.number,
                 self.number,
                 parent.hash,
                 self.parent_hash.clone(),
-                parent.timestamp,
-                self.timestamp,
+                parent.milli_timestamp(),
+                self.milli_timestamp(),
             ));
         }
 
@@ -290,7 +290,7 @@ impl ETHHeader {
         if self.extra_data.len() <= EXTRA_VANITY + EXTRA_SEAL {
             return Err(Error::UnexpectedVoteLength(self.extra_data.len()));
         }
-        let attestation_bytes = if self.number % BLOCKS_PER_EPOCH != 0 {
+        let attestation_bytes = if !self.is_epoch() {
             &self.extra_data[EXTRA_VANITY..self.extra_data.len() - EXTRA_SEAL]
         } else {
             let num = self.extra_data[EXTRA_VANITY] as usize;
@@ -309,7 +309,65 @@ impl ETHHeader {
     }
 
     pub fn is_epoch(&self) -> bool {
-        self.number % BLOCKS_PER_EPOCH == 0
+        self.epoch.is_some()
+    }
+
+    pub fn current_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        Ok(self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?
+            .current_epoch_block_number(self.number))
+    }
+
+    pub fn previous_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        let boundary = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
+        let current_epoch_block_number = boundary.current_epoch_block_number(self.number);
+        Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
+    }
+
+    pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let fork_spec = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+
+        // Ensure header item count is collect
+        if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
+            return Err(Error::UnexpectedHeaderItemCount(
+                self.number,
+                self.additional_items.len(),
+                fork_spec.additional_header_item_count,
+            ));
+        }
+
+        if let Some(epoch) = &self.epoch {
+            validate_turn_length(epoch.turn_length(), fork_spec.max_turn_length as u8)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn set_boundary_epochs(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let fs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        match fs.height_or_timestamp {
+            HeightOrTimestamp::Height(_) => {
+                self.boundary_epochs = Some(get_boundary_epochs(fs, fork_specs)?);
+                Ok(())
+            }
+            HeightOrTimestamp::Time(_) => {
+                Err(Error::MissingForkHeightInBoundaryCalculation(fs.clone()))
+            }
+        }
+    }
+
+    // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
+    pub fn milli_timestamp(&self) -> u64 {
+        let mut milliseconds: u64 = 0;
+        if self.mix_digest != EMPTY_HASH {
+            milliseconds = U256::from_big_endian(&self.mix_digest).low_u64();
+        }
+        self.timestamp * 1000 + milliseconds
     }
 }
 
@@ -324,7 +382,6 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    validate_turn_length(turn_length)?;
     Ok((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
@@ -334,8 +391,8 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     ))
 }
 
-pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
-    if !(turn_length == 1 || (3..=9).contains(&turn_length)) {
+pub fn validate_turn_length(turn_length: u8, max: u8) -> Result<(), Error> {
+    if !(turn_length == 1 || (3..=max).contains(&turn_length)) {
         return Err(Error::UnexpectedTurnLength(turn_length));
     }
     Ok(())
@@ -371,7 +428,6 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         let blob_gas_used: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let excess_blob_gas: Option<u64> = rlp.try_next_as_val().map(Some).unwrap_or(None);
         let parent_beacon_root: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
-        let requests_hash: Option<Vec<u8>> = rlp.try_next_as_val().map(Some).unwrap_or(None);
 
         // Check that the extra-data contains the vanity, validators and signature
         let extra_size = extra_data.len();
@@ -391,8 +447,8 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
 
         // Ensure that the mix digest is zero as we don't have fork protection currently
-        if mix_digest != EMPTY_HASH {
-            return Err(Error::UnexpectedMixHash(number));
+        if mix_digest.len() != 32 {
+            return Err(Error::UnexpectedMixHash(number, mix_digest));
         }
         // Ensure that the block doesn't contain any uncles which are meaningless in PoA
         if uncle_hash != EMPTY_UNCLE_HASH {
@@ -410,29 +466,16 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch = if number % BLOCKS_PER_EPOCH == 0 {
-            let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
-            Some(Epoch::new(validators.into(), turn_length))
-        } else {
-            None
+        let epoch = match get_validator_bytes_and_turn_length(&extra_data) {
+            Err(_) => None,
+            Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length)),
         };
 
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if PASCAL_TIMESTAMP > 0 {
-            if timestamp >= PASCAL_TIMESTAMP {
-                if requests_hash.is_none() {
-                    return Err(Error::MissingRequestsHash(number));
-                }
-                // Ensure no more header element.
-                if rlp.try_next().is_ok() {
-                    return Err(Error::UnexpectedHeaderRLP(number));
-                }
-            } else if timestamp < PASCAL_TIMESTAMP && requests_hash.is_some() {
-                return Err(Error::UnexpectedRequestsHash(
-                    number,
-                    requests_hash.unwrap(),
-                ));
-            }
+        // Extra items for seal hash
+        let mut additional_items = vec![];
+        while let Ok(value) = rlp.try_next() {
+            let item = value.as_raw();
+            additional_items.push(item.to_vec());
         }
 
         Ok(Self {
@@ -456,9 +499,10 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             withdrawals_hash,
             blob_gas_used,
             parent_beacon_root,
-            requests_hash,
+            additional_items,
             hash,
             epoch,
+            boundary_epochs: None,
         })
     }
 }
@@ -474,11 +518,12 @@ pub(crate) mod test {
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::{decode_header, localnet, Network};
+    use crate::fixture::{localnet, Network};
     use crate::header::epoch::Epoch;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use alloc::boxed::Box;
-    use hex_literal::hex;
+
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
@@ -547,8 +592,9 @@ pub(crate) mod test {
         let raw = to_raw(&header);
         let err = ETHHeader::try_from(raw).unwrap_err();
         match err {
-            Error::UnexpectedMixHash(number) => {
+            Error::UnexpectedMixHash(number, mix_hash) => {
                 assert_eq!(number, header.number);
+                assert_eq!(mix_hash, header.mix_digest);
             }
             err => unreachable!("{:?}", err),
         };
@@ -694,8 +740,8 @@ pub(crate) mod test {
                 assert_eq!(block.number, child_no);
                 assert_eq!(parent.hash, parent_hash);
                 assert_eq!(block.parent_hash, child_parent_hash);
-                assert_eq!(parent.timestamp, parent_ts);
-                assert_eq!(block.timestamp, child_ts);
+                assert_eq!(parent.milli_timestamp(), parent_ts);
+                assert_eq!(block.milli_timestamp(), child_ts);
             }
             err => unreachable!("{:?}", err),
         }
@@ -820,88 +866,137 @@ pub(crate) mod test {
             err => unreachable!("{:?}", err),
         }
     }
-    #[test]
-    fn test_success_bep466_header() {
-        let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
-        let header = decode_header(header);
-        let chain_id = localnet().network();
 
-        let prev_epoch = hex!("f90484a0cdbf04705a1f6ed4989217c1e89f4c0ab22b3122df2f48c09e2fef3d0aa4b5b4a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794b2e42bc54d19116d2348ac83461e2e0915d508ada08b3fad7b45691957d1bf905d2601a14e12d48d1da89205d22b4eb582af803e3da0629579638c8423e2836b6ad04eed7a7dcda123a3f4b6d2ab488121fac9df6c10a03cd1ebc99cd975182c58de47be968c97658cff4c465e20654185f408a851403cb9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028207088402625a008229a884678f47eeb90223d883010503846765746888676f312e32332e35856c696e75780000002f5b9772048fdaaa7e6631e438625ca25c857a3727ea28e565b5ad484c80ff8ed9a2aff68923f36e8975c377abd0c62a8a66ac0d2519b3eb4c14951312006c9e8b3829dc68cab6bcf0a7876ea32e7a748c697d01345145485561305b24958ec28bac0db09ee3e6cfc1769fd72b493a6c44118598abb600bec65e66aafd23acd46e0d1e0bda9d8101dbbdbf369fd9a13701eafb76870cb220843b8c6476824bfa15ad21d1bf47e3df7d8d99b105a24ebca95a84b035e6af22880b9eaf1d6a4a233920a57ecf09f8a6b89d7f5ca3cfe6484fe04db2de85453e0936b441c339a26d10cfa71b50b611e87c256a23edc8b7e55558abe1a7ff94262bacb53d600e657270ee6af9172c5a31c24498a162147dd7e1bfdcef9107f8ae0fb860a70e55ed7260c28c69880ca12370872c2059f0540ca88c1cb7a6ba772ed6e7f62a5e11c31e117ea483a4c6b46cf213681092f5273512ad15e030f52c3485838801a5ae99ece187028adbf6f543b34bd4a48199dc9b58ea47b16d06049a370a65f848820706a0ab18ec6cce429c9918cb4f354ffda5c0119871589de4829c9871ee7eddbce0ed820707a0cdbf04705a1f6ed4989217c1e89f4c0ab22b3122df2f48c09e2fef3d0aa4b5b48099019414f8ca7f80176785458468355225878402b80bbe64de4de083cbd909163b1c8dd0564e07516e6bbd0ec64381847f8f3d94d75992fd04243b538ba9348d01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
-        let prev_epoch = decode_header(prev_epoch);
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_success_verify_fork_rule(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.additional_items = vec![vec![1], vec![2]];
+        header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: 64,
+            }])
+            .unwrap();
 
         header
-            .verify_seal(&prev_epoch.epoch.unwrap(), &chain_id)
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64 + 1,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+            ])
             .unwrap();
-        assert!(&header.requests_hash.is_some());
-        assert_eq!(32, header.requests_hash.unwrap().len());
     }
 
-    #[cfg(feature = "dev")]
-    mod dev_test_after_pascal {
-        use crate::errors::Error;
-        use crate::fixture::{decode_header, localnet};
-        use crate::header::eth_header::ETHHeader;
-        use hex_literal::hex;
-        use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
-
-        #[test]
-        fn test_error_missing_request_hash() {
-            // timestamp = 1721396460
-            let raw_header = localnet().epoch_header_plus_1_rlp();
-            let raw_header = EthHeader { header: raw_header };
-            let result = ETHHeader::try_from(raw_header).unwrap_err();
-            match result {
-                Error::MissingRequestsHash(_) => {}
-                _ => unreachable!(),
-            }
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_item_count(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.additional_items = vec![vec![1]];
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64 - 1,
+                epoch_length: 500,
+                max_turn_length: 64,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
         }
 
-        #[test]
-        fn test_error_invalid_header_rlp_length() {
-            let mut header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
-            // add unnecessary data
-            header.push(0x80);
-            let raw_header = EthHeader { header };
-            let result = ETHHeader::try_from(raw_header).unwrap_err();
-            match result {
-                Error::UnexpectedHeaderRLP(_) => {}
-                _ => unreachable!(),
-            }
-        }
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64 - 1,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
+                },
+            ])
+            .unwrap_err();
 
-        #[test]
-        fn test_success_after_bep466() {
-            // timestamp=1737443367
-            let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
-            decode_header(header);
+        match err {
+            Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
         }
     }
 
-    #[cfg(feature = "dev")]
-    mod dev_test_before_pascal {
-        use crate::errors::Error;
-        use crate::fixture::{decode_header, localnet};
-        use crate::header::eth_header::ETHHeader;
-        use hex_literal::hex;
-        use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
-
-        #[test]
-        fn test_error_request_hash() {
-            // timestamp=1737443367
-            let header = hex!("f90370a04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad1a01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794e04db2de85453e0936b441c339a26d10cfa71b50a0d0a25a7c6b93d5d2e8f7e2075d2886fa62840f31c127b880b7cd503e2d364163a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b90100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000282071b8402625a008084678f4827b90111d883010503846765746888676f312e32332e35856c696e75780000002f5b9772f8ae0fb860959e5c417ecd8a5e5ddabd85485cf2cc4433f26beea076d77bbc6f461e4129881b8772bdae5fdd6ca927b571662ac5750d4abeca4f44a4406ab3254e0d98e6ee92b5b6396122853b45db2d18d24fb79e8397e253ca10a2a03b3b18e5961173b5f848820719a0e5ef3de482ecc3de5aea0efb17457d7edc5b1a39fc97c29cc5780b4665c9ca2082071aa04a99d244666a287d9aaa1a81aa5bba573f156865369023eaa53a4ba8bb303ad180aba9a203cbc9ac6e2eabbc44b15f7c526ec5f9d570a0addc005d5958d8415f760794e65762057ff9956dce68034d30cca6d9cc2ac3eb35f699d47c74931c470a01a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000a0e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855").to_vec();
-            let raw_header = EthHeader { header };
-            let result = ETHHeader::try_from(raw_header).unwrap_err();
-            match result {
-                Error::UnexpectedRequestsHash(_, _) => {}
-                _ => unreachable!(),
-            }
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_turn_length(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        header.additional_items = vec![vec![1]];
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length - 1,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
         }
 
-        #[test]
-        fn test_success_before_bep466() {
-            // timestamp=1721396460
-            let raw_header = localnet().epoch_header_plus_1_rlp();
-            decode_header(raw_header);
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length - 1,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
         }
     }
 }

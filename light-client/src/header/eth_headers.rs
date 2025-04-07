@@ -2,14 +2,12 @@ use alloc::vec::Vec;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader;
 
 use crate::errors::Error;
-use crate::errors::Error::MissingEpochInfoInEpochBlock;
 use crate::header::epoch::EitherEpoch::{Trusted, Untrusted};
 use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch};
 
 use crate::misc::{BlockNumber, ChainId, Validators};
 
 use super::eth_header::ETHHeader;
-use super::BLOCKS_PER_EPOCH;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ETHHeaders {
@@ -34,10 +32,11 @@ impl ETHHeaders {
         previous_epoch: &TrustedEpoch,
     ) -> Result<(), Error> {
         // Ensure the header after the next or next checkpoint must not exist.
-        let epoch = self.target.number / BLOCKS_PER_EPOCH;
-        let checkpoint = epoch * BLOCKS_PER_EPOCH + previous_epoch.checkpoint();
-        let next_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + current_epoch.checkpoint();
-        let n_val = self.verify_header_size(epoch, checkpoint, next_checkpoint, current_epoch)?;
+        let current_epoch_block_number = self.target.current_epoch_block_number()?;
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let next_epoch_info =
+            self.verify_header_size(checkpoint, current_epoch, current_epoch_block_number)?;
 
         // Ensure all the headers are successfully chained.
         self.verify_cascading_fields()?;
@@ -45,8 +44,10 @@ impl ETHHeaders {
         // Ensure valid seals
         let p_val = previous_epoch.validators();
         for h in self.all.iter() {
-            if h.number >= next_checkpoint {
-                h.verify_seal(unwrap_n_val(h.number, &n_val)?, chain_id)?;
+            if next_epoch_info.is_some()
+                && h.number >= next_epoch_info.as_ref().unwrap().next_checkpoint
+            {
+                h.verify_seal(&next_epoch_info.as_ref().unwrap().next_epoch, chain_id)?;
             } else if h.number >= checkpoint {
                 h.verify_seal(current_epoch.epoch(), chain_id)?;
             } else {
@@ -62,8 +63,13 @@ impl ETHHeaders {
         let mut last_voters: Validators = Vec::new();
         for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
-            last_voters = if h.number > next_checkpoint {
-                vote.verify(h.number, unwrap_n_val(h.number, &n_val)?.validators())?
+            last_voters = if next_epoch_info.is_some()
+                && h.number > next_epoch_info.as_ref().unwrap().next_checkpoint
+            {
+                vote.verify(
+                    h.number,
+                    next_epoch_info.as_ref().unwrap().next_epoch.validators(),
+                )?
             } else if h.number > checkpoint {
                 vote.verify(h.number, current_epoch.epoch().validators())?
             } else {
@@ -75,7 +81,7 @@ impl ETHHeaders {
         verify_voters(
             &last_voters,
             grand_child,
-            next_checkpoint,
+            next_epoch_info.map(|e| e.next_checkpoint),
             checkpoint,
             current_epoch,
             previous_epoch,
@@ -140,55 +146,152 @@ impl ETHHeaders {
     /// checkpoint range and ensures that they meet the size requirements for the current and next epochs.
     fn verify_header_size(
         &self,
-        epoch: u64,
-        checkpoint: u64,
-        next_checkpoint: u64,
+        current_checkpoint: u64,
         current_epoch: &EitherEpoch,
-    ) -> Result<Option<&Epoch>, Error> {
-        let hs: Vec<&ETHHeader> = self.all.iter().filter(|h| h.number >= checkpoint).collect();
+        current_epoch_block_number: BlockNumber,
+    ) -> Result<Option<NextEpochInfo>, Error> {
+        let after_checkpoint: Vec<&ETHHeader> = self
+            .all
+            .iter()
+            .filter(|h| h.number >= current_checkpoint)
+            .collect();
+
         match current_epoch {
             // ex) t=200 then  200 <= h < 411 (at least 1 honest c_val(200)' can be in p_val)
             Untrusted(_) => {
                 // Ensure headers are before the next_checkpoint
-                if hs.iter().any(|h| h.number >= next_checkpoint) {
-                    return Err(Error::UnexpectedNextCheckpointHeader(
-                        self.target.number,
-                        next_checkpoint,
-                    ));
+                let next_epoch_info = find_next_epoch(
+                    &after_checkpoint,
+                    current_epoch.checkpoint(),
+                    current_epoch_block_number,
+                )?;
+                if let Some(next_epoch_info) = next_epoch_info.as_ref() {
+                    if after_checkpoint
+                        .iter()
+                        .any(|h| h.number >= next_epoch_info.next_checkpoint)
+                    {
+                        return Err(Error::UnexpectedNextCheckpointHeader(
+                            self.target.number,
+                            next_epoch_info.next_checkpoint,
+                        ));
+                    }
                 }
-                Ok(None)
+                Ok(next_epoch_info)
             }
             // ex) t=201 then 201 <= h < 611 (at least 1 honest n_val(400) can be in c_val(200))
             Trusted(_) => {
                 // Get next_epoch if epoch after checkpoint ex) 400
-                let next_epoch = match hs.iter().find(|h| h.is_epoch()) {
-                    Some(h) => h
-                        .epoch
-                        .as_ref()
-                        .ok_or_else(|| MissingEpochInfoInEpochBlock(h.number))?,
-                    None => return Ok(None),
+                let next_epoch_info = find_next_epoch(
+                    &after_checkpoint,
+                    current_epoch.checkpoint(),
+                    current_epoch_block_number,
+                )?;
+                let next_epoch_info = match next_epoch_info.as_ref() {
+                    None => return Ok(next_epoch_info),
+                    Some(v) => v,
                 };
 
                 // Finish if no headers over next checkpoint were found
-                let hs: Vec<&&ETHHeader> =
-                    hs.iter().filter(|h| h.number >= next_checkpoint).collect();
-                if hs.is_empty() {
-                    return Ok(None);
+                let after_next_checkpoint: Vec<&ETHHeader> = after_checkpoint
+                    .into_iter()
+                    .filter(|h| h.number >= next_epoch_info.next_checkpoint)
+                    .collect();
+                if after_next_checkpoint.is_empty() {
+                    return Ok(Some(next_epoch_info.clone()));
                 }
-
-                let next_next_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + next_epoch.checkpoint();
 
                 // Ensure headers are before the next_next_checkpoint
-                if hs.iter().any(|h| h.number >= next_next_checkpoint) {
-                    return Err(Error::UnexpectedNextNextCheckpointHeader(
-                        self.target.number,
-                        next_next_checkpoint,
-                    ));
+                let next_next_epoch_info = find_next_epoch(
+                    &after_next_checkpoint,
+                    next_epoch_info.next_epoch.checkpoint(),
+                    next_epoch_info.next_epoch_block_number,
+                )?;
+                if let Some(next_next_epoch_info) = next_next_epoch_info {
+                    if after_next_checkpoint
+                        .iter()
+                        .any(|h| h.number >= next_next_epoch_info.next_checkpoint)
+                    {
+                        return Err(Error::UnexpectedNextNextCheckpointHeader(
+                            self.target.number,
+                            next_next_epoch_info.next_checkpoint,
+                        ));
+                    }
                 }
-                Ok(Some(next_epoch))
+                Ok(Some(next_epoch_info.clone()))
             }
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct NextEpochInfo {
+    next_epoch: Epoch,
+    next_checkpoint: BlockNumber,
+    next_epoch_block_number: BlockNumber,
+}
+
+impl NextEpochInfo {
+    fn new(
+        next_epoch: Epoch,
+        next_checkpoint: BlockNumber,
+        next_epoch_block_number: BlockNumber,
+    ) -> Self {
+        NextEpochInfo {
+            next_epoch,
+            next_checkpoint,
+            next_epoch_block_number,
+        }
+    }
+}
+
+/// Finds the next epoch information based on the given headers.
+///
+/// This function iterates through the provided headers to find the next epoch information.
+/// It checks if the current epoch block number matches the header number and retrieves the next epoch details.
+fn find_next_epoch(
+    hs: &[&ETHHeader],
+    height_to_checkpoint: u64,
+    expected_prev_epoch_number: BlockNumber,
+) -> Result<Option<NextEpochInfo>, Error> {
+    for h in hs.iter() {
+        let self_current_epoch_number = h.current_epoch_block_number().map_err(|e| {
+            Error::UnexpectedMissingForkSpecInCurrentEpochCalculation(
+                h.number,
+                alloc::boxed::Box::new(e),
+            )
+        })?;
+        if self_current_epoch_number == h.number {
+            return if let Some(next_epoch) = &h.epoch {
+                let self_previous_epoch_number = h.previous_epoch_block_number().map_err(|e| {
+                    Error::UnexpectedMissingForkSpecInPreviousEpochCalculation(
+                        h.number,
+                        alloc::boxed::Box::new(e),
+                    )
+                })?;
+                if self_previous_epoch_number != expected_prev_epoch_number {
+                    return Err(Error::UnexpectedPreviousEpochInCalculatingNextEpoch(
+                        h.number,
+                        self_previous_epoch_number,
+                        expected_prev_epoch_number,
+                    ));
+                }
+                let next_checkpoint = h.number + height_to_checkpoint;
+                Ok(Some(NextEpochInfo::new(
+                    next_epoch.clone(),
+                    next_checkpoint,
+                    self_current_epoch_number,
+                )))
+            } else {
+                Err(Error::MissingEpochInfo(h.number))
+            };
+        } else if h.is_epoch() {
+            return Err(Error::UnexpectedEpochInfo(
+                h.number,
+                self_current_epoch_number,
+            ));
+        }
+    }
+    Ok(None)
 }
 
 impl TryFrom<Vec<EthHeader>> for ETHHeaders {
@@ -235,25 +338,21 @@ fn verify_finalized(
     Ok(())
 }
 
-fn unwrap_n_val<'a>(n: BlockNumber, n_val: &'a Option<&'a Epoch>) -> Result<&'a Epoch, Error> {
-    n_val.ok_or_else(|| Error::MissingNextValidatorSet(n))
-}
-
 fn verify_voters(
     voters: &Validators,
     h: &ETHHeader,
-    next_checkpoint: BlockNumber,
+    next_checkpoint: Option<BlockNumber>,
     checkpoint: BlockNumber,
     current_epoch: &EitherEpoch,
     previous_epoch: &TrustedEpoch,
 ) -> Result<(), Error> {
-    if h.number > next_checkpoint {
+    if next_checkpoint.is_some() && h.number > next_checkpoint.unwrap() {
         match current_epoch {
             Trusted(e) => e.verify_untrusted_voters(voters)?,
             _ => {
                 return Err(Error::UnexpectedUntrustedValidators(
                     h.number,
-                    next_checkpoint,
+                    next_checkpoint.unwrap(),
                 ))
             }
         }
@@ -269,16 +368,16 @@ fn verify_voters(
 mod test {
     use crate::errors::Error;
 
-    use crate::header::constant::BLOCKS_PER_EPOCH;
     use crate::header::eth_header::{get_validator_bytes_and_turn_length, ETHHeader};
     use crate::header::eth_headers::{verify_voters, ETHHeaders};
 
     use crate::fixture::*;
     use crate::header::epoch::{EitherEpoch, Epoch, TrustedEpoch, UntrustedEpoch};
-    use crate::header::Header;
+
     use crate::misc::Validators;
     use hex_literal::hex;
-    use light_client::types::Any;
+
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use rstest::rstest;
     use std::prelude::rust_2015::{Box, Vec};
     use std::vec;
@@ -445,10 +544,18 @@ mod test {
 
     #[test]
     fn test_success_verify_finalized_including_not_finalized_block() {
-        let header= hex!("0a222f6962632e6c69676874636c69656e74732e7061726c69612e76312e48656164657212ed200ae9080ae608f90463a0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafabaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a09f0bb93d54df1fcbfd84d4173496de9cff0f403319bbbaf15791ccde774b73d8a03cd1ebc99cd975182c58de47be968c97658cff4c465e20654185f408a851403cb9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211308402625a008229a884669fb2e3b90223d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8048fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6ca7876ea32e7a748c697d01345145485561305b24b6c305acd27ad7aff76367fd3a1dfe8da19afba969c8464f37a29e60923c3a85cfacbdef18daa782d5724f13d415f98cb2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a44e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f833309f8ae0fb860834538868d2c79371ead2f10fc7229fd3b3aaf1d7d8607fd7e1d2efba7df1008c105fdab4ad8029f86cfde1e3aa7dd24194fcf07502bb6c281fc3cbc08ad8cb467de57cbfd1bb93fabe72f77ece8f991a2b7a4d7fb301d54547c6cb4b612d06ff84882112ea042dfe9761fb9a677b088a868f237a171d511bea581f643844a1c98267902391882112fa0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafaba80321f35c8454a2691a2efff6894cae6277ea06390978294fe0d10fe03f432fd07440d802ca0858a2d6138230b37d1a9148a3d76fbe8492854e637c9aad7494e3401a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a000000000000000000000000000000000000000000000000000000000000000000ad5060ad206f9034fa09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211318402625a008084669fb2e6b90111d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8f8ae0fb860b6de9ffe941751cd11463bbd4bde69d3bc2b79868f669f9e2c4c327f036e6d558b013469a91670607dd88d63dc50b95d00719e118a17e5b72418b6ae4bef7aebbcdaa44b79f8c0677ac32c71312d84db44e6e9216bd84fb97c7d0701a4a03431f84882112fa0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafaba821130a09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1f80e5619874ecb4463f8d86981d939ddb4d0eaa151c6080c7067788e06699789d0a415e921b8824e8adc7907e5bbccec9373b22c7fe8a48527e9348aa957871b63300a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a000000000000000000000000000000000000000000000000000000000000000000ad5060ad206f9034fa0e3aa9bc64f82ccd7e70ec415d73263d9da9f3bb44b78bed500033379df9be8aaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211328402625a008084669fb2e9b90111d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8f8ae0fb86095a056c77bdeb59da26e665d69e75cc5667cd43df693a55f20f5f248483a3ce10cdd996b29c7fd6ba3f9e31cb4ac089c0b5bc13e77d83f17096d88f280b8d47ffd8b58b66bd760d0ccd4d26e0c2a7bb3ec168a06a815cfbdde9a2e18c32ac74ef848821130a09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1f821131a0e3aa9bc64f82ccd7e70ec415d73263d9da9f3bb44b78bed500033379df9be8aa80c04c6f70fa142c7486f7bed7e29a247f1203d58c7481c9aefef1193e6404112e32486f8d4dc8c7c558ae0b1bf860f6e05d425b7726ba7a4e2dac6e3e3eb83d3d00a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000120310e8201a9506f90312f901f1a094e7dcd05ddcc3923085b451330f3aa5ce5a628d6685506d99cb09b3aef0e11ea065b83aa9b59125f9b090432f556c6ff947b5708eb11ca5ea26342392860be00aa0b116ef7733a93eed23f018027c116e60436a228a9f9173bb9b0c40eb71216da6a064c0a17f12a753c3fc032723866ac267ad8b7e05e7aa2e75bb680175d936617580a01a41c640130c53b3c90b1b5c691ed467218cee97aade5aac9306e72865851e27a004371241b9d6f35e1f361f2109d19a9192a9c0c749b2bd15fcb131a1a6ce5e3ba00577e3e2c4649c5a23cbdabe0bbfed7cdf6e85c136d84d58127cdec86264ad6ea070c0f30031f40c8017dbfc2ef008e6a3aae2e3105a654e0c5439b6104752882ea08f81903ec8515875682785142e1f92bdeaf65fccd5d0cf78b1ff2905a07e5883a03052420ba2d24a04d3f830584d3dbd6907b6d82bab84ddd806d03470e2c9d51ca06fb1a1498c2c8f93944a4f672ff4e982480ad181c835c0d8078159c517c7977aa013a426820f7b7249edc97cc5c002e653ac84b437f3ac12ac940c3d4b09e09827a09fbc54eac488b27315b09a1afa8d12f168e4c4cb5aea2d9a6ab5e7266da2f7e8a077c5e5cd5bd518bc509ee5e71790f1e42e492e23875b097e565cff8e809e7c8aa0a1575ef06513a19d2a28390e83958d2a3ffe166b530255b0fb5559d33409914d80f8b18080a0dc77b6ae50b675036e77b31973c79ec60c28c0d2c57b03ad99c2acfff2f0cd4e80a063a8a6161448a60a47ddbafa00899bed224e9f80072b35a1dbc64a82e85cd9b5a05e0f116451aaa1baab3f3abff2793c8318050eeed6bf62d464d343a11d86eb2880808080808080a0abbb1987d09a71106f586030d1ab913bae0008e2a7dec0d08f2d60cd30fb2ac8a096c706907bfc6472dd88315cb8e21ee6f60a661cd8050065e2ba387023ee96858080f869a020b1e2b1f9852058ee0aaadca3c963f77f6483a1a51c644d79386bcada360583b846f8440180a0e39304f0ec064a98e4b0a96432dfb0a9e4c7fd0f26a6bbcf9c75bff68c51a7a9a0b3d632130dcb5cb583b47ec0623e59ca3703e6e2564f144272b597f3e3511ba822448fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6c2244a7876ea32e7a748c697d01345145485561305b24b6c305acd27ad7aff76367fd3a1dfe8da19afba969c8464f37a29e60923c3a85cfacbdef18daa782d5724f13d415f98c2244b2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a442244e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f83332a448fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6c2a44b2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a442a44d9a13701eafb76870cb220843b8c6476824bfa15b9ebdc1d1a70721d7f9c57622e0a5d1175df1e09672ab1e8909bf9a9433592107024bd8a3ad47fbbdca199ede96c50d22a44e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f833330093808").to_vec();
-        let any: Any = header.try_into().unwrap();
-        let header = Header::try_from(any).unwrap();
-        header.headers.verify_finalized().unwrap();
+        let mut target_1 = localnet().epoch_header_plus_1();
+        target_1.extra_data = vec![];
+        let headers = ETHHeaders {
+            target: localnet().epoch_header(),
+            all: vec![
+                localnet().epoch_header(),
+                target_1,
+                localnet().epoch_header_plus_2(),
+                localnet().epoch_header_plus_3(),
+            ],
+        };
+        headers.verify_finalized().unwrap();
     }
 
     #[test]
@@ -465,7 +572,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -477,7 +584,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -489,7 +596,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -511,7 +618,7 @@ mod test {
         verify_voters(
             &vec![vec![1]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -520,7 +627,7 @@ mod test {
         verify_voters(
             &vec![vec![0]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Trusted(TrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -532,7 +639,7 @@ mod test {
         verify_voters(
             &vec![vec![0]],
             &h,
-            411,
+            Some(411),
             211,
             &EitherEpoch::Untrusted(UntrustedEpoch::new(&c_epoch)),
             &pt_epoch,
@@ -542,15 +649,24 @@ mod test {
 
     #[test]
     fn test_error_verify_finalized_no_finalized_header() {
-        let header= hex!("0a222f6962632e6c69676874636c69656e74732e7061726c69612e76312e48656164657212ed200ae9080ae608f90463a0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafabaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a09f0bb93d54df1fcbfd84d4173496de9cff0f403319bbbaf15791ccde774b73d8a03cd1ebc99cd975182c58de47be968c97658cff4c465e20654185f408a851403cb9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211308402625a008229a884669fb2e3b90223d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8048fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6ca7876ea32e7a748c697d01345145485561305b24b6c305acd27ad7aff76367fd3a1dfe8da19afba969c8464f37a29e60923c3a85cfacbdef18daa782d5724f13d415f98cb2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a44e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f833309f8ae0fb860834538868d2c79371ead2f10fc7229fd3b3aaf1d7d8607fd7e1d2efba7df1008c105fdab4ad8029f86cfde1e3aa7dd24194fcf07502bb6c281fc3cbc08ad8cb467de57cbfd1bb93fabe72f77ece8f991a2b7a4d7fb301d54547c6cb4b612d06ff84882112ea042dfe9761fb9a677b088a868f237a171d511bea581f643844a1c98267902391882112fa0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafaba80321f35c8454a2691a2efff6894cae6277ea06390978294fe0d10fe03f432fd07440d802ca0858a2d6138230b37d1a9148a3d76fbe8492854e637c9aad7494e3401a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a000000000000000000000000000000000000000000000000000000000000000000ad5060ad206f9034fa09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1fa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211318402625a008084669fb2e6b90111d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8f8ae0fb860b6de9ffe941751cd11463bbd4bde69d3bc2b79868f669f9e2c4c327f036e6d558b013469a91670607dd88d63dc50b95d00719e118a17e5b72418b6ae4bef7aebbcdaa44b79f8c0677ac32c71312d84db44e6e9216bd84fb97c7d0701a4a03431f84882112fa0794978ac680964fb5ada43366fa4d33a490c93ec6893304ddee68a59f2cafaba821130a09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1f80e5619874ecb4463f8d86981d939ddb4d0eaa151c6080c7067788e06699789d0a415e921b8824e8adc7907e5bbccec9373b22c7fe8a48527e9348aa957871b63300a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a000000000000000000000000000000000000000000000000000000000000000000ad5060ad206f9034fa0e3aa9bc64f82ccd7e70ec415d73263d9da9f3bb44b78bed500033379df9be8aaa01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d4934794d9a13701eafb76870cb220843b8c6476824bfa15a0558eacf75665a00d1eef186ffc4f79985db5e5fcb1aa24892df5d600ae869313a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421b9010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028211328402625a008084669fb2e9b90111d98301040c846765746889676f312e32312e3132856c696e75780000d24ec9e8f8ae0fb86095a056c77bdeb59da26e665d69e75cc5667cd43df693a55f20f5f248483a3ce10cdd996b29c7fd6ba3f9e31cb4ac089c0b5bc13e77d83f17096d88f280b8d47ffd8b58b66bd760d0ccd4d26e0c2a7bb3ec168a06a815cfbdde9a2e18c32ac74ef848821130a09696424e13500cdc742b049c6459c0bc4cb357eab5d9fb48a2e79787c8897a1f821131a0e3aa9bc64f82ccd7e70ec415d73263d9da9f3bb44b78bed500033379df9be8aa80c04c6f70fa142c7486f7bed7e29a247f1203d58c7481c9aefef1193e6404112e32486f8d4dc8c7c558ae0b1bf860f6e05d425b7726ba7a4e2dac6e3e3eb83d3d00a0000000000000000000000000000000000000000000000000000000000000000088000000000000000080a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000120310e8201a9506f90312f901f1a094e7dcd05ddcc3923085b451330f3aa5ce5a628d6685506d99cb09b3aef0e11ea065b83aa9b59125f9b090432f556c6ff947b5708eb11ca5ea26342392860be00aa0b116ef7733a93eed23f018027c116e60436a228a9f9173bb9b0c40eb71216da6a064c0a17f12a753c3fc032723866ac267ad8b7e05e7aa2e75bb680175d936617580a01a41c640130c53b3c90b1b5c691ed467218cee97aade5aac9306e72865851e27a004371241b9d6f35e1f361f2109d19a9192a9c0c749b2bd15fcb131a1a6ce5e3ba00577e3e2c4649c5a23cbdabe0bbfed7cdf6e85c136d84d58127cdec86264ad6ea070c0f30031f40c8017dbfc2ef008e6a3aae2e3105a654e0c5439b6104752882ea08f81903ec8515875682785142e1f92bdeaf65fccd5d0cf78b1ff2905a07e5883a03052420ba2d24a04d3f830584d3dbd6907b6d82bab84ddd806d03470e2c9d51ca06fb1a1498c2c8f93944a4f672ff4e982480ad181c835c0d8078159c517c7977aa013a426820f7b7249edc97cc5c002e653ac84b437f3ac12ac940c3d4b09e09827a09fbc54eac488b27315b09a1afa8d12f168e4c4cb5aea2d9a6ab5e7266da2f7e8a077c5e5cd5bd518bc509ee5e71790f1e42e492e23875b097e565cff8e809e7c8aa0a1575ef06513a19d2a28390e83958d2a3ffe166b530255b0fb5559d33409914d80f8b18080a0dc77b6ae50b675036e77b31973c79ec60c28c0d2c57b03ad99c2acfff2f0cd4e80a063a8a6161448a60a47ddbafa00899bed224e9f80072b35a1dbc64a82e85cd9b5a05e0f116451aaa1baab3f3abff2793c8318050eeed6bf62d464d343a11d86eb2880808080808080a0abbb1987d09a71106f586030d1ab913bae0008e2a7dec0d08f2d60cd30fb2ac8a096c706907bfc6472dd88315cb8e21ee6f60a661cd8050065e2ba387023ee96858080f869a020b1e2b1f9852058ee0aaadca3c963f77f6483a1a51c644d79386bcada360583b846f8440180a0e39304f0ec064a98e4b0a96432dfb0a9e4c7fd0f26a6bbcf9c75bff68c51a7a9a0b3d632130dcb5cb583b47ec0623e59ca3703e6e2564f144272b597f3e3511ba822448fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6c2244a7876ea32e7a748c697d01345145485561305b24b6c305acd27ad7aff76367fd3a1dfe8da19afba969c8464f37a29e60923c3a85cfacbdef18daa782d5724f13d415f98c2244b2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a442244e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f83332a448fdaaa7e6631e438625ca25c857a3727ea28e565b876532dd999985816f1df35a5d6359177f1d49bfb3c20e25d6760197246ad0b6b8efb77ad316a0f31360c3733cabd6c2a44b2e42bc54d19116d2348ac83461e2e0915d508ad976963272de9af796035a7c68771d03c92709aa174ce1e8723cb6d7d1f6d960790e83c59e1f9867721e6302520a30a442a44d9a13701eafb76870cb220843b8c6476824bfa15b9ebdc1d1a70721d7f9c57622e0a5d1175df1e09672ab1e8909bf9a9433592107024bd8a3ad47fbbdca199ede96c50d22a44e04db2de85453e0936b441c339a26d10cfa71b50b359d8b4d1e5fd24f5a99712ed2e5a8f7180621828a1ae567b86ff60792ff27f2fd62d410aa8b9b858316495867f833330093808").to_vec();
-        let any: Any = header.try_into().unwrap();
-        let mut header = Header::try_from(any).unwrap();
-        header.headers.all[1].extra_data = vec![];
-        let result = header.headers.verify_finalized();
+        let mut target_1 = localnet().epoch_header_plus_1();
+        target_1.extra_data = vec![];
+        let mut target_2 = localnet().epoch_header();
+        target_2.extra_data = vec![];
+        let headers = ETHHeaders {
+            target: localnet().epoch_header(),
+            all: vec![
+                localnet().epoch_header(),
+                target_1,
+                target_2,
+                localnet().epoch_header_plus_3(),
+            ],
+        };
+        let result = headers.verify_finalized();
         match result.unwrap_err() {
             Error::UnexpectedVoteRelation(e1, e2, err) => {
-                assert_eq!(e1, header.headers.target.number, "block error");
-                assert_eq!(e2, header.headers.all.len(), "header size");
+                assert_eq!(e1, headers.target.number, "block error");
+                assert_eq!(e2, headers.all.len(), "header size");
                 assert!(format!("{:?}", &err.unwrap()).contains("UnexpectedVoteLength"));
             }
             e => unreachable!("{:?}", e),
@@ -637,8 +753,9 @@ mod test {
                  c_val: &EitherEpoch,
                  p_val: &TrustedEpoch,
                  include_limit: bool| {
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_epoch_checkpoint = (epoch + 1) * BLOCKS_PER_EPOCH + c_val.checkpoint();
+            let next_epoch_checkpoint = headers.target.current_epoch_block_number().unwrap()
+                + fork_spec_after_lorentz().epoch_length
+                + c_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -647,6 +764,15 @@ mod test {
                 }
                 let mut next = last.clone();
                 next.number = last.number + 1;
+
+                // dummy validator set
+                if next.number % fork_spec_after_lorentz().epoch_length == 0 {
+                    next.extra_data = hp.epoch_header().extra_data;
+                    let (v, t) = get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
+                    next.epoch = Some(Epoch::new(v.into(), t));
+                } else {
+                    next.epoch = None
+                }
                 headers.all.push(next);
             }
             let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();
@@ -691,8 +817,10 @@ mod test {
                  n_val_header: ETHHeader,
                  include_limit: bool| {
             let n_val = n_val_header.epoch.clone().unwrap();
-            let epoch = headers.target.number / BLOCKS_PER_EPOCH;
-            let next_next_epoch_checkpoint = (epoch + 2) * BLOCKS_PER_EPOCH + n_val.checkpoint();
+            let next_next_epoch_checkpoint = headers.target.current_epoch_block_number().unwrap()
+                + fork_spec_after_lorentz().epoch_length
+                + fork_spec_after_lorentz().epoch_length
+                + n_val.checkpoint();
             loop {
                 let last = headers.all.last().unwrap();
                 let drift = u64::from(!include_limit);
@@ -701,13 +829,15 @@ mod test {
                 }
                 let mut next = last.clone();
                 next.number = last.number + 1;
-                if next.is_epoch() {
-                    // set n_val
+                if next.number % fork_spec_after_lorentz().epoch_length == 0 {
+                    // set validator set
                     next.extra_data = n_val_header.extra_data.clone();
-                    let (validators, turn_length) =
-                        get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
-                    next.epoch = Some(Epoch::new(validators.into(), turn_length));
+                    let (v, t) = get_validator_bytes_and_turn_length(&next.extra_data).unwrap();
+                    next.epoch = Some(Epoch::new(v.into(), t));
+                } else {
+                    next.epoch = None
                 }
+
                 headers.all.push(next);
             }
             let result = headers.verify(&hp.network(), c_val, p_val).unwrap_err();
@@ -746,6 +876,131 @@ mod test {
         let headers = hp.headers_across_checkpoint();
         f(headers.clone(), &c_val, &p_val, n_val_header.clone(), true);
         f(headers, &c_val, &p_val, n_val_header, false);
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_missing_epoch_info(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // No epoch info in next epoch
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            header.epoch = None;
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::MissingEpochInfo(e1) => {
+                assert_eq!(e1, current_epoch_block_number + 500);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_unexpected_prev_epoch(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // Set invalid fork spec
+        let invalid_prev_fork_spec = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(1499),
+            epoch_length: 10,
+            additional_header_item_count: 1,
+            max_turn_length: 64,
+        };
+
+        let invalid_current_fork_spec = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(1500),
+            epoch_length: 500,
+            additional_header_item_count: 1,
+            max_turn_length: 64,
+        };
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            if header.number == 1500 {
+                header.epoch = hp.epoch_header().epoch;
+                header
+                    .set_boundary_epochs(&[
+                        invalid_prev_fork_spec.clone(),
+                        invalid_current_fork_spec.clone(),
+                    ])
+                    .unwrap();
+            } else {
+                header.epoch = None;
+            }
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedPreviousEpochInCalculatingNextEpoch(e1, e2, e3) => {
+                assert_eq!(e1, 1500);
+                assert_eq!(e2, 1500 - invalid_prev_fork_spec.epoch_length);
+                assert_eq!(e3, 1500 - invalid_current_fork_spec.epoch_length);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_header_size_invalid_number(#[case] hp: Box<dyn Network>) {
+        let previous_epoch = hp.previous_epoch_header().epoch.unwrap();
+        let mut headers = hp.headers_after_checkpoint();
+
+        // Epoch info in non epoch
+        for _i in 0..1000 {
+            let mut header = headers.all.last().unwrap().clone();
+            header.number += 1;
+            header.epoch = hp.epoch_header().epoch;
+            headers.all.push(header);
+        }
+
+        let epoch = &hp.epoch_header().epoch.unwrap();
+        let epoch = TrustedEpoch::new(epoch);
+        let epoch = EitherEpoch::Trusted(epoch);
+
+        let current_epoch_block_number = headers.target.current_epoch_block_number().unwrap();
+        let checkpoint = current_epoch_block_number + previous_epoch.checkpoint();
+
+        let err = headers
+            .verify_header_size(checkpoint, &epoch, current_epoch_block_number)
+            .unwrap_err();
+        match err {
+            Error::UnexpectedEpochInfo(e1, e2) => {
+                assert_eq!(
+                    e1,
+                    hp.headers_after_checkpoint().all.last().unwrap().number + 1
+                );
+                assert_eq!(e2, current_epoch_block_number);
+            }
+            _ => unreachable!("err {:?}", err),
+        }
     }
 
     impl From<Vec<ETHHeader>> for ETHHeaders {

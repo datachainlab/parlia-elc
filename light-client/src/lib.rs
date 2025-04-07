@@ -13,6 +13,7 @@ pub mod consensus_state;
 pub mod errors;
 #[cfg(test)]
 mod fixture;
+mod fork_spec;
 pub mod header;
 pub mod message;
 pub mod misbehaviour;
