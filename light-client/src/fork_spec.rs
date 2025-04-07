@@ -21,6 +21,13 @@ pub struct ForkSpec {
 }
 
 impl ForkSpec {
+    /// Boundary epochs are block heights that indicate the epochs before and after the HF.
+    ///
+    /// Calculates the boundary epochs based on the current and previous fork specifications.
+    /// This function determines the boundary epochs by comparing the current fork specification
+    /// with the previous fork specification. It calculates the previous last epoch, the current
+    /// first epoch, and any intermediate epochs between them.
+    ///
     /// first = previous last epoch
     /// last = current first epoch
     ///
