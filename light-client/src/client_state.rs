@@ -10,7 +10,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
+use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
@@ -33,6 +33,9 @@ pub struct ClientState {
     /// State
     pub latest_height: Height,
     pub frozen: bool,
+
+    /// fork specs
+    pub fork_specs: Vec<ForkSpec>,
 }
 
 impl ClientState {
@@ -41,6 +44,7 @@ impl ClientState {
     pub fn canonicalize(mut self) -> Self {
         self.latest_height = new_height(self.chain_id.version(), 0);
         self.frozen = false;
+        self.fork_specs = vec![];
         self
     }
 
@@ -53,12 +57,25 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        header: Header,
+        mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &header)?;
-
+        self.check_header(now, trusted_consensus_state, &mut header)?;
         let mut new_client_state = self.clone();
+
+        // Update fork specs if timestamp
+        for fs in &mut new_client_state.fork_specs.iter_mut() {
+            if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp {
+                // second must be forks spec timestamp
+                if header.eth_header().all.len() >= 2 {
+                    let h = &header.eth_header().all[1];
+                    if ts <= h.milli_timestamp() {
+                        fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
+                    }
+                }
+            }
+        }
+
         let header_height = header.height();
         if new_client_state.latest_height < header_height {
             new_client_state.latest_height = header_height;
@@ -79,26 +96,21 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: &Misbehaviour,
+        misbehaviour: &mut Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
-        // Ensure header has supported timestamp
-        let ts = header.timestamp()?;
-
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if ts.as_unix_timestamp_secs() < MINIMUM_TIMESTAMP_SUPPORTED {
-            return Err(Error::UnsupportedMinimumTimestamp(ts));
-        }
-        #[allow(clippy::absurd_extreme_comparisons)]
-        if header.height().revision_height() < MINIMUM_HEIGHT_SUPPORTED {
-            return Err(Error::UnsupportedMinimumHeight(header.height()));
-        }
+    fn check_header(
+        &self,
+        now: Time,
+        cs: &ConsensusState,
+        header: &mut Header,
+    ) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
+        let ts = header.timestamp()?;
         validate_within_trusting_period(
             now,
             self.trusting_period,
@@ -115,6 +127,9 @@ impl ClientState {
                 header_height.revision_number(),
             ));
         }
+
+        // Ensure satisfying fork specs
+        header.assign_fork_spec(&self.fork_specs)?;
 
         // Ensure header is valid
         header.verify(&self.chain_id, cs)
@@ -196,6 +211,12 @@ impl TryFrom<RawClientState> for ClientState {
 
         let frozen = value.frozen;
 
+        let mut fork_specs = Vec::with_capacity(value.fork_specs.len());
+        for fs in value.fork_specs {
+            let fork_spec = ForkSpec::try_from(fs)?;
+            fork_specs.push(fork_spec)
+        }
+
         Ok(Self {
             chain_id,
             ibc_store_address,
@@ -204,12 +225,14 @@ impl TryFrom<RawClientState> for ClientState {
             trusting_period,
             max_clock_drift,
             frozen,
+            fork_specs,
         })
     }
 }
 
 impl From<ClientState> for RawClientState {
     fn from(value: ClientState) -> Self {
+        let fork_specs = value.fork_specs.into_iter().map(|fs| fs.into()).collect();
         Self {
             chain_id: value.chain_id.id(),
             ibc_store_address: value.ibc_store_address.to_vec(),
@@ -221,6 +244,7 @@ impl From<ClientState> for RawClientState {
             trusting_period: Some(value.trusting_period.into()),
             max_clock_drift: Some(value.max_clock_drift.into()),
             frozen: value.frozen.to_owned(),
+            fork_specs,
         }
     }
 }
@@ -285,13 +309,24 @@ mod test {
     use crate::header::eth_header::ETHHeader;
     use crate::header::eth_headers::ETHHeaders;
 
+    use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use crate::header::Header;
     use crate::misc::{new_timestamp, ChainId};
     use alloc::boxed::Box;
+    use parlia_ibc_proto::ibc::lightclients::parlia::v1::ForkSpec as RawForkSpec;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::Header as RawHeader;
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::{
         ClientState as RawClientState, EthHeader,
     };
+
+    fn after_pascal() -> ForkSpec {
+        ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1, // requestsHash
+            epoch_length: 200,
+            max_turn_length: 9,
+        }
+    }
 
     #[rstest]
     #[case::localnet(localnet())]
@@ -304,13 +339,14 @@ mod test {
             max_clock_drift: Default::default(),
             latest_height: Default::default(),
             frozen: false,
+            fork_specs: vec![after_pascal()],
         };
 
         // fail: check_header
         let h = &hp.epoch_header();
         let cons_state = ConsensusState {
             state_root: [0u8; 32],
-            timestamp: new_timestamp(h.timestamp).unwrap(),
+            timestamp: new_timestamp(h.milli_timestamp()).unwrap(),
             current_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
             previous_validators_hash: hp.previous_epoch_header().epoch.unwrap().hash(),
         };
@@ -326,7 +362,7 @@ mod test {
             hp.previous_epoch_header().epoch.unwrap(),
             hp.epoch_header().epoch.unwrap(),
         );
-        let now = new_timestamp(h.timestamp + 1).unwrap();
+        let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
         let err = cs
             .check_header_and_update_state(now, &cons_state, header.clone())
             .unwrap_err();
@@ -370,6 +406,7 @@ mod test {
             max_clock_drift: Default::default(),
             latest_height: Default::default(),
             frozen: false,
+            fork_specs: vec![after_pascal()],
         };
         let mut cons_state = ConsensusState {
             state_root: [0u8; 32],
@@ -380,10 +417,10 @@ mod test {
 
         // fail: validate_trusting_period
         let h = hp.epoch_header();
-        let now = new_timestamp(h.timestamp - 1).unwrap();
-        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let now = new_timestamp(h.milli_timestamp() - 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::HeaderFromFuture(_, _, _) => {}
             err => unreachable!("{:?}", err),
@@ -391,10 +428,10 @@ mod test {
 
         // fail: revision check
         let h = hp.epoch_header();
-        let now = new_timestamp(h.timestamp + 1).unwrap();
-        cons_state.timestamp = new_timestamp(h.timestamp).unwrap();
-        let header = header_fn(1, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
+        cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
+        let mut header = header_fn(1, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedHeaderRevision(n1, n2) => {
                 assert_eq!(cs.chain_id.version(), n1);
@@ -405,12 +442,12 @@ mod test {
 
         // fail: verify_validator_set
         let h = hp.epoch_header();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _, _) => {
                 assert_eq!(h1.revision_height(), h.number - 1);
-                assert_eq!(h2.revision_height(), h.number);
+                assert_eq!(h2, h.number);
             }
             err => unreachable!("{:?}", err),
         }
@@ -418,8 +455,8 @@ mod test {
         // fail: header.verify
         let h = hp.epoch_header();
         cons_state.current_validators_hash = Epoch::new(vec![h.coinbase.clone()].into(), 1).hash();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedCoinbase(number) => {
                 assert_eq!(number, h.number);
@@ -430,22 +467,22 @@ mod test {
 
     #[test]
     fn test_success_try_from_any() {
-        let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e745374617465124d08381214151f3951fa218cac426edfe078fa9e5c6dcea5001a200000000000000000000000000000000000000000000000000000000000000000220510af9da90f2a040880a305320410c0843d").to_vec();
+        let cs = hex!("0a272f6962632e6c69676874636c69656e74732e7061726c69612e76312e436c69656e7453746174651253088f4e1214aa43d337145e8930d01cb4e60abf6595c692921e1a201ee222554989dda120e26ecacf756fe1235cd8d726706b57517715dde4f0c900220410dffb012a040880a305320410c0843d420410001815").to_vec();
         let cs: Any = cs.try_into().unwrap();
         let cs: ClientState = cs.try_into().unwrap();
 
         assert_eq!(0, cs.latest_height.revision_number());
-        assert_eq!(32132783, cs.latest_height.revision_height());
-        assert_eq!(56, cs.chain_id.id());
+        assert_eq!(32223, cs.latest_height.revision_height());
+        assert_eq!(9999, cs.chain_id.id());
         assert_eq!(0, cs.chain_id.version());
         assert_eq!(86400, cs.trusting_period.as_secs());
         assert_eq!(1, cs.max_clock_drift.as_millis());
         assert_eq!(
-            hex!("151f3951FA218cac426edFe078fA9e5C6dceA500"),
+            hex!("aa43d337145E8930d01cb4E60Abf6595C692921E"),
             cs.ibc_store_address
         );
         assert_eq!(
-            hex!("0000000000000000000000000000000000000000000000000000000000000000"),
+            hex!("1ee222554989dda120e26ecacf756fe1235cd8d726706b57517715dde4f0c900"),
             cs.ibc_commitments_slot
         );
     }
@@ -460,6 +497,7 @@ mod test {
             trusting_period: None,
             max_clock_drift: None,
             frozen: false,
+            fork_specs: vec![RawForkSpec::from(after_pascal())],
         };
         let err = ClientState::try_from(cs.clone()).unwrap_err();
         match err {
@@ -662,69 +700,6 @@ mod test {
             }
         } else {
             panic!("expected error");
-        }
-    }
-    #[cfg(feature = "dev")]
-    mod dev_test_min {
-        use crate::client_state::ClientState;
-        use crate::consensus_state::ConsensusState;
-        use crate::errors::Error;
-        use crate::fixture::localnet;
-        use crate::header::eth_headers::ETHHeaders;
-        use crate::header::hardfork::{MINIMUM_HEIGHT_SUPPORTED, MINIMUM_TIMESTAMP_SUPPORTED};
-        use crate::header::Header;
-        use crate::misc::new_timestamp;
-        use parlia_ibc_proto::ibc::core::client::v1::Height;
-
-        #[test]
-        fn test_supported_timestamp() {
-            let header = Header::new(
-                ETHHeaders {
-                    target: localnet().previous_epoch_header(),
-                    all: vec![],
-                },
-                Height::default(),
-                localnet().previous_epoch_header().epoch.unwrap(),
-                localnet().epoch_header().epoch.unwrap(),
-            );
-            let cs = ClientState::default();
-            let cons_state = ConsensusState::default();
-            let err = cs
-                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
-                .unwrap_err();
-            match err {
-                Error::UnsupportedMinimumTimestamp(e1) => {
-                    assert_eq!(e1, header.timestamp().unwrap());
-                }
-                err => unreachable!("{:?}", err),
-            }
-        }
-
-        #[test]
-        fn test_supported_height() {
-            let mut header = Header::new(
-                ETHHeaders {
-                    target: localnet().previous_epoch_header(),
-                    all: vec![],
-                },
-                Height::default(),
-                localnet().previous_epoch_header().epoch.unwrap(),
-                localnet().epoch_header().epoch.unwrap(),
-            );
-            header.eth_header_mut().target.timestamp = MINIMUM_TIMESTAMP_SUPPORTED;
-            header.eth_header_mut().target.number = MINIMUM_HEIGHT_SUPPORTED - 1;
-
-            let cs = ClientState::default();
-            let cons_state = ConsensusState::default();
-            let err = cs
-                .check_header(new_timestamp(0).unwrap(), &cons_state, &header)
-                .unwrap_err();
-            match err {
-                Error::UnsupportedMinimumHeight(e1) => {
-                    assert_eq!(e1, header.height());
-                }
-                err => unreachable!("{:?}", err),
-            }
         }
     }
 }

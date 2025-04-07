@@ -90,11 +90,11 @@ pub fn new_height(revision_number: u64, height: BlockNumber) -> Height {
     Height::new(revision_number, height)
 }
 
-pub fn new_timestamp(second: u64) -> Result<Time, Error> {
-    let second = second as u128;
-    let nanos = second
-        .checked_mul(1_000_000_000)
-        .ok_or_else(|| Error::TimestampOverflowError(second))?;
+pub fn new_timestamp(msec: u64) -> Result<Time, Error> {
+    let msec = msec as u128;
+    let nanos = msec
+        .checked_mul(1_000_000)
+        .ok_or_else(|| Error::TimestampOverflowError(msec))?;
     Time::from_unix_timestamp_nanos(nanos).map_err(Error::TimeError)
 }
 
