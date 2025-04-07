@@ -10,7 +10,7 @@ use parlia_ibc_proto::ibc::lightclients::parlia::v1::ClientState as RawClientSta
 
 use crate::consensus_state::ConsensusState;
 use crate::errors::Error;
-use crate::fork_spec::ForkSpec;
+use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
 use crate::header::Header;
 use crate::misbehaviour::Misbehaviour;
 use crate::misc::{new_height, Address, ChainId, Hash};
@@ -44,6 +44,7 @@ impl ClientState {
     pub fn canonicalize(mut self) -> Self {
         self.latest_height = new_height(self.chain_id.version(), 0);
         self.frozen = false;
+        self.fork_specs = vec![];
         self
     }
 
@@ -56,12 +57,25 @@ impl ClientState {
         &self,
         now: Time,
         trusted_consensus_state: &ConsensusState,
-        header: Header,
+        mut header: Header,
     ) -> Result<(ClientState, ConsensusState), Error> {
         // Ensure header is valid
-        self.check_header(now, trusted_consensus_state, &header)?;
-
+        self.check_header(now, trusted_consensus_state, &mut header)?;
         let mut new_client_state = self.clone();
+
+        // Update fork specs if timestamp
+        for fs in &mut new_client_state.fork_specs.iter_mut() {
+            if let HeightOrTimestamp::Time(ts) = fs.height_or_timestamp {
+                // second must be forks spec timestamp
+                if header.eth_header().all.len() >= 2 {
+                    let h = &header.eth_header().all[1];
+                    if ts <= h.milli_timestamp() {
+                        fs.height_or_timestamp = HeightOrTimestamp::Height(h.number)
+                    }
+                }
+            }
+        }
+
         let header_height = header.height();
         if new_client_state.latest_height < header_height {
             new_client_state.latest_height = header_height;
@@ -82,14 +96,19 @@ impl ClientState {
         now: Time,
         h1_trusted_cs: &ConsensusState,
         h2_trusted_cs: &ConsensusState,
-        misbehaviour: &Misbehaviour,
+        misbehaviour: &mut Misbehaviour,
     ) -> Result<ClientState, Error> {
-        self.check_header(now, h1_trusted_cs, &misbehaviour.header_1)?;
-        self.check_header(now, h2_trusted_cs, &misbehaviour.header_2)?;
+        self.check_header(now, h1_trusted_cs, &mut misbehaviour.header_1)?;
+        self.check_header(now, h2_trusted_cs, &mut misbehaviour.header_2)?;
         Ok(self.clone().freeze())
     }
 
-    fn check_header(&self, now: Time, cs: &ConsensusState, header: &Header) -> Result<(), Error> {
+    fn check_header(
+        &self,
+        now: Time,
+        cs: &ConsensusState,
+        header: &mut Header,
+    ) -> Result<(), Error> {
         // Ensure last consensus state is within the trusting period
         let ts = header.timestamp()?;
         validate_within_trusting_period(
@@ -110,7 +129,7 @@ impl ClientState {
         }
 
         // Ensure satisfying fork specs
-        header.verify_fork_rule(&self.fork_specs)?;
+        header.assign_fork_spec(&self.fork_specs)?;
 
         // Ensure header is valid
         header.verify(&self.chain_id, cs)
@@ -304,6 +323,8 @@ mod test {
         ForkSpec {
             height_or_timestamp: HeightOrTimestamp::Height(0),
             additional_header_item_count: 1, // requestsHash
+            epoch_length: 200,
+            max_turn_length: 9,
         }
     }
 
@@ -398,8 +419,8 @@ mod test {
         let h = hp.epoch_header();
         let now = new_timestamp(h.milli_timestamp() - 1).unwrap();
         cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::HeaderFromFuture(_, _, _) => {}
             err => unreachable!("{:?}", err),
@@ -409,8 +430,8 @@ mod test {
         let h = hp.epoch_header();
         let now = new_timestamp(h.milli_timestamp() + 1).unwrap();
         cons_state.timestamp = new_timestamp(h.milli_timestamp()).unwrap();
-        let header = header_fn(1, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(1, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedHeaderRevision(n1, n2) => {
                 assert_eq!(cs.chain_id.version(), n1);
@@ -421,12 +442,12 @@ mod test {
 
         // fail: verify_validator_set
         let h = hp.epoch_header();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
-            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _) => {
+            Error::UnexpectedUntrustedValidatorsHashInEpoch(h1, h2, _, _, _) => {
                 assert_eq!(h1.revision_height(), h.number - 1);
-                assert_eq!(h2.revision_height(), h.number);
+                assert_eq!(h2, h.number);
             }
             err => unreachable!("{:?}", err),
         }
@@ -434,8 +455,8 @@ mod test {
         // fail: header.verify
         let h = hp.epoch_header();
         cons_state.current_validators_hash = Epoch::new(vec![h.coinbase.clone()].into(), 1).hash();
-        let header = header_fn(0, &h, hp.epoch_header_rlp());
-        let err = cs.check_header(now, &cons_state, &header).unwrap_err();
+        let mut header = header_fn(0, &h, hp.epoch_header_rlp());
+        let err = cs.check_header(now, &cons_state, &mut header).unwrap_err();
         match err {
             Error::UnexpectedCoinbase(number) => {
                 assert_eq!(number, h.number);

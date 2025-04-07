@@ -9,8 +9,9 @@ use rlp::{Rlp, RlpStream};
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
 
 use crate::errors::Error;
-use crate::fork_spec::{find_target_fork_spec, ForkSpec};
-use crate::header::constant::BLOCKS_PER_EPOCH;
+use crate::fork_spec::{
+    find_target_fork_spec, get_boundary_epochs, BoundaryEpochs, ForkSpec, HeightOrTimestamp,
+};
 use crate::header::epoch::Epoch;
 use crate::header::vote_attestation::VoteAttestation;
 use crate::misc::{Address, BlockNumber, ChainId, Hash, RlpIterator, Validators};
@@ -61,6 +62,8 @@ pub struct ETHHeader {
     // calculated by RawETHHeader
     pub hash: Hash,
     pub epoch: Option<Epoch>,
+
+    boundary_epochs: Option<BoundaryEpochs>,
 }
 
 impl ETHHeader {
@@ -306,30 +309,30 @@ impl ETHHeader {
     }
 
     pub fn is_epoch(&self) -> bool {
-        is_epoch(self.number)
+        self.epoch.is_some()
     }
 
-    pub fn current_epoch_block_number(&self) -> BlockNumber {
-        current_epoch_block_number(self.number)
+    pub fn current_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        Ok(self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?
+            .current_epoch_block_number(self.number))
     }
 
-    pub fn previous_epoch_block_number(&self) -> BlockNumber {
-        let current_epoch = self.current_epoch_block_number();
-        previous_epoch_block_number_from(current_epoch)
-    }
-
-    pub fn next_epoch_block_number(&self) -> BlockNumber {
-        let current_epoch = self.current_epoch_block_number();
-        next_epoch_block_number_from(current_epoch)
-    }
-
-    pub fn next_next_epoch_block_number(&self) -> BlockNumber {
-        let next_epoch = self.next_epoch_block_number();
-        next_epoch_block_number_from(next_epoch)
+    pub fn previous_epoch_block_number(&self) -> Result<BlockNumber, Error> {
+        let boundary = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
+        let current_epoch_block_number = boundary.current_epoch_block_number(self.number);
+        Ok(boundary.previous_epoch_block_number(current_epoch_block_number))
     }
 
     pub fn verify_fork_rule(&self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
         let fork_spec = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+
+        // Ensure header item count is collect
         if fork_spec.additional_header_item_count != self.additional_items.len() as u64 {
             return Err(Error::UnexpectedHeaderItemCount(
                 self.number,
@@ -337,7 +340,25 @@ impl ETHHeader {
                 fork_spec.additional_header_item_count,
             ));
         }
+
+        if let Some(epoch) = &self.epoch {
+            validate_turn_length(epoch.turn_length(), fork_spec.max_turn_length as u8)?;
+        }
+
         Ok(())
+    }
+
+    pub fn set_boundary_epochs(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+        let fs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        match fs.height_or_timestamp {
+            HeightOrTimestamp::Height(_) => {
+                self.boundary_epochs = Some(get_boundary_epochs(fs, fork_specs)?);
+                Ok(())
+            }
+            HeightOrTimestamp::Time(_) => {
+                Err(Error::MissingForkHeightInBoundaryCalculation(fs.clone()))
+            }
+        }
     }
 
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
@@ -348,22 +369,6 @@ impl ETHHeader {
         }
         self.timestamp * 1000 + milliseconds
     }
-}
-
-fn is_epoch(number: BlockNumber) -> bool {
-    number % BLOCKS_PER_EPOCH == 0
-}
-
-pub fn current_epoch_block_number(number: BlockNumber) -> BlockNumber {
-    number - (number % BLOCKS_PER_EPOCH)
-}
-
-fn previous_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
-    base_epoch_block_number - BLOCKS_PER_EPOCH
-}
-
-fn next_epoch_block_number_from(base_epoch_block_number: BlockNumber) -> BlockNumber {
-    base_epoch_block_number + BLOCKS_PER_EPOCH
 }
 
 pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validators, u8), Error> {
@@ -377,7 +382,6 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     let start = EXTRA_VANITY + VALIDATOR_NUM_SIZE;
     let end = start + num * VALIDATOR_BYTES_LENGTH;
     let turn_length = extra_data[end];
-    validate_turn_length(turn_length)?;
     Ok((
         extra_data[start..end]
             .chunks(VALIDATOR_BYTES_LENGTH)
@@ -387,8 +391,8 @@ pub fn get_validator_bytes_and_turn_length(extra_data: &[u8]) -> Result<(Validat
     ))
 }
 
-pub fn validate_turn_length(turn_length: u8) -> Result<(), Error> {
-    if !(turn_length == 1 || (3..=64).contains(&turn_length)) {
+pub fn validate_turn_length(turn_length: u8, max: u8) -> Result<(), Error> {
+    if !(turn_length == 1 || (3..=max).contains(&turn_length)) {
         return Err(Error::UnexpectedTurnLength(turn_length));
     }
     Ok(())
@@ -462,11 +466,9 @@ impl TryFrom<RawETHHeader> for ETHHeader {
         }
         let hash: Hash = keccak_256(value.header.as_slice());
 
-        let epoch = if is_epoch(number) {
-            let (validators, turn_length) = get_validator_bytes_and_turn_length(&extra_data)?;
-            Some(Epoch::new(validators.into(), turn_length))
-        } else {
-            None
+        let epoch = match get_validator_bytes_and_turn_length(&extra_data) {
+            Err(_) => None,
+            Ok((validators, turn_length)) => Some(Epoch::new(validators.into(), turn_length)),
         };
 
         // Extra items for seal hash
@@ -500,6 +502,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             additional_items,
             hash,
             epoch,
+            boundary_epochs: None,
         })
     }
 }
@@ -873,6 +876,8 @@ pub(crate) mod test {
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: 64,
             }])
             .unwrap();
 
@@ -881,14 +886,20 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
             ])
             .unwrap();
@@ -896,13 +907,15 @@ pub(crate) mod test {
 
     #[rstest]
     #[case::localnet(localnet())]
-    fn test_error_verify_fork_rule(#[case] hp: Box<dyn Network>) {
+    fn test_error_verify_fork_rule_item_count(#[case] hp: Box<dyn Network>) {
         let mut header = hp.epoch_header();
         header.additional_items = vec![vec![1]];
         let err = header
             .verify_fork_rule(&[ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(header.number),
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
+                epoch_length: 500,
+                max_turn_length: 64,
             }])
             .unwrap_err();
         match err {
@@ -915,20 +928,74 @@ pub(crate) mod test {
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: 64,
                 },
             ])
             .unwrap_err();
 
         match err {
             Error::UnexpectedHeaderItemCount(_, _, _) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_turn_length(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        header.additional_items = vec![vec![1]];
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length - 1,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length - 1,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedTurnLength(_) => {}
             _ => unreachable!("invalid error {:?}", err),
         }
     }

@@ -19,19 +19,11 @@ NOTE: This project is currently under heavy development. Features may change or 
 Environment variables can be used to change settings.
 Each configuration must be determined at build time, not at run time.
 
-### Blocks per epoch
-You can change the blocks per epoch for localnet.
-This is available in dev feature only.
-
-```sh
-BSC_BLOCKS_PER_EPOCH=20 cargo build --features=dev
-```
-
 ### Build Parameters
 
 Parameters can be specified to check for acceptable headers at build time.
 
-| Name | Description                                                                                                                 | 
-| --- |-----------------------------------------------------------------------------------------------------------------------------| 
-| `MINIMUM_TIMESTAMP_SUPPORTED` | Timestamp of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value. | 
-| `MINIMUM_HEIGHT_SUPPORTED` | Height of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value.    | 
+| Name | Description                                                                                                                  | 
+| --- |------------------------------------------------------------------------------------------------------------------------------| 
+| `MINIMUM_TIMESTAMP_SUPPORTED` | Timestamp(millisecond) of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value. |
+| `MINIMUM_HEIGHT_SUPPORTED` | Height of the lowest header this light client will accept. All the ForkSpec must be greater than or equal to this value.                 | 
