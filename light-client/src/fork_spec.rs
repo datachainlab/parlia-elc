@@ -746,4 +746,24 @@ mod test {
         assert_eq!(v.current_fork_spec, specs[0]);
         assert_eq!(v.previous_fork_spec, specs[0]);
     }
+
+    #[test]
+    fn test_belc3() {
+        let f1 = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1,
+            epoch_length: 900,
+            max_turn_length: 64,
+        };
+        let f2 = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(2500),
+            additional_header_item_count: 1,
+            epoch_length: 5000,
+            max_turn_length: 64,
+        };
+        let be = f2.boundary_epochs(&f1).unwrap();
+        assert_eq!(be.prev_last, 1800);
+        assert_eq!(be.intermediates, [2700, 3600, 4500]);
+        assert_eq!(be.current_first, 5000);
+    }
 }
