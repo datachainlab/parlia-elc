@@ -1369,6 +1369,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
                 }];
                 (client_state, cons_state)
             }));
@@ -1382,6 +1383,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
                 }];
                 (client_state, cons_state)
             }));
@@ -1396,6 +1398,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
                 }];
                 (client_state, cons_state)
             }))

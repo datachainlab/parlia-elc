@@ -345,6 +345,18 @@ impl ETHHeader {
             validate_turn_length(epoch.turn_length(), fork_spec.max_turn_length as u8)?;
         }
 
+        if fork_spec.enable_header_msec {
+            let msec = self.get_milli_timestamp_value();
+            if msec >= 1000 {
+                return Err(Error::UnexpectedMilliSecondValue(self.number, msec));
+            }
+        } else if self.mix_digest != EMPTY_HASH {
+            return Err(Error::UnexpectedNotEmptyMixHash(
+                self.number,
+                self.mix_digest.clone(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -363,11 +375,16 @@ impl ETHHeader {
 
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
     pub fn milli_timestamp(&self) -> u64 {
-        let mut milliseconds: u64 = 0;
-        if self.mix_digest != EMPTY_HASH {
-            milliseconds = U256::from_big_endian(&self.mix_digest).low_u64();
-        }
+        let milliseconds: u64 = self.get_milli_timestamp_value();
         self.timestamp * 1000 + milliseconds
+    }
+
+    fn get_milli_timestamp_value(&self) -> u64 {
+        if self.mix_digest != EMPTY_HASH {
+            U256::from_big_endian(&self.mix_digest).low_u64()
+        } else {
+            0
+        }
     }
 }
 
@@ -511,7 +528,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_header::{
-        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
+        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EMPTY_HASH, EXTRA_SEAL, EXTRA_VANITY,
         PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
     };
 
@@ -523,8 +540,8 @@ pub(crate) mod test {
 
     use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use alloc::boxed::Box;
-
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+    use primitive_types::U256;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
         let mut stream = RlpStream::new();
@@ -878,6 +895,7 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64,
                 epoch_length: 500,
                 max_turn_length: 64,
+                enable_header_msec: true,
             }])
             .unwrap();
 
@@ -888,18 +906,21 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
             ])
             .unwrap();
@@ -916,6 +937,7 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
                 epoch_length: 500,
                 max_turn_length: 64,
+                enable_header_msec: true,
             }])
             .unwrap_err();
         match err {
@@ -930,18 +952,21 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
                 },
             ])
             .unwrap_err();
@@ -964,6 +989,7 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64,
                 epoch_length: 500,
                 max_turn_length: turn_length - 1,
+                enable_header_msec: true,
             }])
             .unwrap_err();
         match err {
@@ -978,24 +1004,148 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length - 1,
+                    enable_header_msec: true,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length,
+                    enable_header_msec: true,
                 },
             ])
             .unwrap_err();
 
         match err {
             Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_mix_digest_enable_msec(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        let msec: u64 = 1000;
+        header.additional_items = vec![vec![1]];
+        header.mix_digest = EMPTY_HASH.to_vec();
+        U256::from(msec).to_big_endian(&mut header.mix_digest);
+
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length,
+                enable_header_msec: true,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, msec);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, msec);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_mix_digest_disable_msec(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        let msec: u64 = 1000;
+        header.additional_items = vec![vec![1]];
+        header.mix_digest = EMPTY_HASH.to_vec();
+        U256::from(msec).to_big_endian(&mut header.mix_digest);
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length,
+                enable_header_msec: false,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedNotEmptyMixHash(e1, _) => {
+                assert_eq!(e1, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedNotEmptyMixHash(e1, _) => {
+                assert_eq!(e1, header.number);
+            }
             _ => unreachable!("invalid error {:?}", err),
         }
     }
