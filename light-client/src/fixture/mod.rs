@@ -75,6 +75,7 @@ pub fn fork_spec_after_pascal() -> ForkSpec {
         additional_header_item_count: 1,
         epoch_length: 200,
         max_turn_length: 64,
+        gas_limit_bound_divider: 256,
     }
 }
 
@@ -84,6 +85,7 @@ pub fn fork_spec_after_lorentz() -> ForkSpec {
         additional_header_item_count: 1,
         epoch_length: 500,
         max_turn_length: 64,
+        gas_limit_bound_divider: 1024,
     }
 }
 
@@ -93,5 +95,6 @@ pub fn fork_spec_after_maxwell() -> ForkSpec {
         additional_header_item_count: 1,
         epoch_length: 1000,
         max_turn_length: 64,
+        gas_limit_bound_divider: 1024,
     }
 }

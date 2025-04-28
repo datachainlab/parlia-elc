@@ -9,6 +9,8 @@ pub struct ForkSpec {
     pub epoch_length: u64,
     #[prost(uint64, tag = "5")]
     pub max_turn_length: u64,
+    #[prost(uint64, tag = "6")]
+    pub gas_limit_bound_divider: u64,
     #[prost(oneof = "fork_spec::HeightOrTimestamp", tags = "1, 2")]
     pub height_or_timestamp: ::core::option::Option<fork_spec::HeightOrTimestamp>,
 }

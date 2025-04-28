@@ -325,6 +325,7 @@ mod test {
             additional_header_item_count: 1, // requestsHash
             epoch_length: 200,
             max_turn_length: 9,
+            gas_limit_bound_divider: 256,
         }
     }
 

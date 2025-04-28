@@ -97,7 +97,7 @@ impl Header {
             }
         }
 
-        // Set boundary epoch to verify header size.
+        // Set boundary epoch.
         for header in &mut self.headers.all {
             header.set_boundary_epochs(&fork_specs)?
         }

@@ -82,6 +82,7 @@ pub enum Error {
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
+    UnexpectedGasLimitDivider(BlockNumber),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber, Hash, Vec<u8>, u64, u64),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
@@ -505,6 +506,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedEpochInfo(e1, e2) => {
                 write!(f, "UnexpectedEpochInfo : {} {}", e1, e2)
+            }
+            Error::UnexpectedGasLimitDivider(e1) => {
+                write!(f, "UnexpectedGasLimitDivider : {}", e1)
             }
         }
     }
