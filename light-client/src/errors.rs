@@ -73,6 +73,8 @@ pub enum Error {
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
     UnexpectedMixHash(BlockNumber, Vec<u8>),
+    UnexpectedNotEmptyMixHash(BlockNumber, Vec<u8>),
+    UnexpectedMilliSecondValue(BlockNumber, u64),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
     UnexpectedNonce(BlockNumber),
@@ -509,6 +511,12 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedEpochInfo(e1, e2) => {
                 write!(f, "UnexpectedEpochInfo : {} {}", e1, e2)
+            }
+            Error::UnexpectedNotEmptyMixHash(e1, e2) => {
+                write!(f, "UnexpectedNotEmptyMixHash : {} {:?}", e1, e2)
+            }
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                write!(f, "UnexpectedMilliSecondValue : {} {}", e1, e2)
             }
             Error::UnexpectedGasLimitDivider(e1) => {
                 write!(f, "UnexpectedGasLimitDivider : {}", e1)

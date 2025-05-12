@@ -28,6 +28,8 @@ pub struct ForkSpec {
     pub epoch_length: u64,
     /// Max turn length
     pub max_turn_length: u64,
+    /// true: header has msec in mix_digest
+    pub enable_header_msec: bool,
     /// Gas Limit bound diriver
     pub gas_limit_bound_divider: u64,
 }
@@ -203,6 +205,7 @@ impl TryFrom<RawForkSpec> for ForkSpec {
             additional_header_item_count: value.additional_header_item_count,
             epoch_length: value.epoch_length,
             max_turn_length: value.max_turn_length,
+            enable_header_msec: value.enable_header_msec,
             gas_limit_bound_divider: value.gas_limit_bound_divider,
         })
     }
@@ -220,6 +223,7 @@ impl From<ForkSpec> for RawForkSpec {
             additional_header_item_count: value.additional_header_item_count,
             epoch_length: value.epoch_length,
             max_turn_length: value.max_turn_length,
+            enable_header_msec: value.enable_header_msec,
             gas_limit_bound_divider: value.gas_limit_bound_divider,
         }
     }
@@ -312,6 +316,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -319,6 +324,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: true,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -340,6 +346,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -347,6 +354,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -368,6 +376,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -375,6 +384,7 @@ mod test {
                 additional_header_item_count: 20,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -397,6 +407,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -404,6 +415,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -425,6 +437,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -432,6 +445,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -453,6 +467,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -460,6 +475,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -481,6 +497,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -488,6 +505,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -502,6 +520,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -509,6 +528,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -523,6 +543,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -530,6 +551,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -548,6 +570,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -555,6 +578,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -576,6 +600,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -583,6 +608,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -601,6 +627,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -608,6 +635,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -628,6 +656,7 @@ mod test {
             additional_header_item_count: 1,
             epoch_length: 500,
             max_turn_length: 64,
+            enable_header_msec: true,
             gas_limit_bound_divider: 256,
         };
         match current
@@ -648,6 +677,7 @@ mod test {
             additional_header_item_count: 1,
             epoch_length: 0,
             max_turn_length: 64,
+            enable_header_msec: false,
             gas_limit_bound_divider: 256,
         };
         match current
@@ -669,6 +699,7 @@ mod test {
             additional_header_item_count: 1,
             epoch_length: 0,
             max_turn_length: 64,
+            enable_header_msec: false,
             gas_limit_bound_divider: 256,
         };
         match fork_spec_after_pascal()
@@ -794,6 +825,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -801,6 +833,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
@@ -821,6 +854,7 @@ mod test {
                 additional_header_item_count: 1,
                 epoch_length: 200,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
             ForkSpec {
@@ -828,6 +862,7 @@ mod test {
                 additional_header_item_count: 2,
                 epoch_length: 500,
                 max_turn_length: 9,
+                enable_header_msec: false,
                 gas_limit_bound_divider: 256,
             },
         ];
