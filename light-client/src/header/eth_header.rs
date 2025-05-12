@@ -423,7 +423,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
     type Error = Error;
 
     /// This includes part of header verification.
-    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L324
+    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/5735d8a56540e8f2fb26d5585de0fa3959bb17b4/consensus/parlia/parlia.go#L562
     fn try_from(value: RawETHHeader) -> Result<Self, Self::Error> {
         let mut rlp = RlpIterator::new(Rlp::new(value.header.as_slice()));
         let parent_hash: Vec<u8> = rlp.try_next_as_val()?;
