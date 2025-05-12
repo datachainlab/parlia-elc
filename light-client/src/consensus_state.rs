@@ -18,6 +18,7 @@ pub struct ConsensusState {
     /// the storage root of the IBC contract
     pub state_root: Hash,
     /// timestamp from execution payload
+    /// After Lorentz HF, the unit is millisecond. Before that, it was seconds.
     pub timestamp: Time,
     pub current_validators_hash: Hash,
     pub previous_validators_hash: Hash,

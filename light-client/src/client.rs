@@ -858,6 +858,9 @@ mod test {
         mock_consensus_state.insert(Height::new(0, input.trusted_height), trusted_cs.clone());
 
         // Set fork spec boundary timestamp is all[1]
+        // This indicates that target is the HEADER immediately before the HF occurs.
+        // By setting the height of the HF to ClientState here, the next update_client will be able to validate headers after the HF.
+        // In order to validate the header after HF, it is necessary to set the height at which HF occurs in ClientState in advance.
         let mut boundary_fs = fork_spec_after_lorentz();
         boundary_fs.height_or_timestamp =
             HeightOrTimestamp::Time(header.eth_header().all[1].milli_timestamp());
@@ -1369,6 +1372,8 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }));
@@ -1382,6 +1387,8 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }));
@@ -1396,6 +1403,8 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }))

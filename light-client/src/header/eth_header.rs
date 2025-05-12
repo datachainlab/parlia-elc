@@ -28,8 +28,6 @@ const VALIDATOR_NUM_SIZE: usize = 1;
 
 const TURN_LENGTH_SIZE: usize = 1;
 
-const PARAMS_GAS_LIMIT_BOUND_DIVISOR: u64 = 256;
-
 const EMPTY_UNCLE_HASH: Hash =
     hex!("1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347");
 const EMPTY_NONCE: [u8; 8] = hex!("0000000000000000");
@@ -177,7 +175,16 @@ impl ETHHeader {
         } else {
             self.gas_limit - parent.gas_limit
         };
-        let limit = parent.gas_limit / PARAMS_GAS_LIMIT_BOUND_DIVISOR;
+        let gas_limit_divider = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?
+            .current_fork_spec()
+            .gas_limit_bound_divider;
+        if gas_limit_divider == 0 {
+            return Err(Error::UnexpectedGasLimitDivider(self.number));
+        }
+        let limit = parent.gas_limit / gas_limit_divider;
         if diff >= limit {
             return Err(Error::UnexpectedGasDiff(self.number, diff, limit));
         }
@@ -345,6 +352,18 @@ impl ETHHeader {
             validate_turn_length(epoch.turn_length(), fork_spec.max_turn_length as u8)?;
         }
 
+        if fork_spec.enable_header_msec {
+            let msec = self.get_milli_timestamp_value();
+            if msec >= 1000 {
+                return Err(Error::UnexpectedMilliSecondValue(self.number, msec));
+            }
+        } else if self.mix_digest != EMPTY_HASH {
+            return Err(Error::UnexpectedNotEmptyMixHash(
+                self.number,
+                self.mix_digest.clone(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -361,13 +380,39 @@ impl ETHHeader {
         }
     }
 
+    pub fn verify_epoch_info(&self) -> Result<(), Error> {
+        let be = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
+        if self.number == be.current_epoch_block_number(self.number) {
+            if !self.is_epoch() {
+                return Err(Error::MustBeEpoch(
+                    self.number,
+                    be.current_fork_spec().clone(),
+                ));
+            }
+        } else if self.is_epoch() {
+            return Err(Error::MustNotBeEpoch(
+                self.number,
+                be.current_fork_spec().clone(),
+            ));
+        }
+        Ok(())
+    }
+
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
     pub fn milli_timestamp(&self) -> u64 {
-        let mut milliseconds: u64 = 0;
-        if self.mix_digest != EMPTY_HASH {
-            milliseconds = U256::from_big_endian(&self.mix_digest).low_u64();
-        }
+        let milliseconds: u64 = self.get_milli_timestamp_value();
         self.timestamp * 1000 + milliseconds
+    }
+
+    fn get_milli_timestamp_value(&self) -> u64 {
+        if self.mix_digest != EMPTY_HASH {
+            U256::from_big_endian(&self.mix_digest).low_u64()
+        } else {
+            0
+        }
     }
 }
 
@@ -402,7 +447,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
     type Error = Error;
 
     /// This includes part of header verification.
-    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L324
+    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/5735d8a56540e8f2fb26d5585de0fa3959bb17b4/consensus/parlia/parlia.go#L562
     fn try_from(value: RawETHHeader) -> Result<Self, Self::Error> {
         let mut rlp = RlpIterator::new(Rlp::new(value.header.as_slice()));
         let parent_hash: Vec<u8> = rlp.try_next_as_val()?;
@@ -511,20 +556,20 @@ impl TryFrom<RawETHHeader> for ETHHeader {
 pub(crate) mod test {
     use crate::errors::Error;
     use crate::header::eth_header::{
-        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EXTRA_SEAL, EXTRA_VANITY,
-        PARAMS_GAS_LIMIT_BOUND_DIVISOR, VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
+        ETHHeader, DIFFICULTY_INTURN, DIFFICULTY_NOTURN, EMPTY_HASH, EXTRA_SEAL, EXTRA_VANITY,
+        VALIDATOR_BYTES_LENGTH_BEFORE_LUBAN,
     };
 
     use rlp::RlpStream;
     use rstest::*;
 
-    use crate::fixture::{localnet, Network};
+    use crate::fixture::{fork_spec_after_lorentz, fork_spec_after_pascal, localnet, Network};
     use crate::header::epoch::Epoch;
 
     use crate::fork_spec::{ForkSpec, HeightOrTimestamp};
     use alloc::boxed::Box;
-
     use parlia_ibc_proto::ibc::lightclients::parlia::v1::EthHeader as RawETHHeader;
+    use primitive_types::U256;
 
     fn to_raw(header: &ETHHeader) -> RawETHHeader {
         let mut stream = RlpStream::new();
@@ -754,8 +799,31 @@ pub(crate) mod test {
         match result.unwrap_err() {
             Error::UnexpectedGasDiff(number, diff, limit) => {
                 assert_eq!(block.number, number);
-                assert_eq!(parent.gas_limit / PARAMS_GAS_LIMIT_BOUND_DIVISOR, limit);
+                assert_eq!(
+                    parent.gas_limit
+                        / block
+                            .boundary_epochs
+                            .unwrap()
+                            .current_fork_spec()
+                            .gas_limit_bound_divider,
+                    limit
+                );
                 assert_eq!(parent.gas_limit - block.gas_limit, diff);
+            }
+            err => unreachable!("{:?}", err),
+        }
+
+        let mut current = fork_spec_after_lorentz();
+        current.gas_limit_bound_divider = 0;
+        block.boundary_epochs = Some(
+            current
+                .boundary_epochs(&[fork_spec_after_pascal()])
+                .unwrap(),
+        );
+        let result = block.verify_cascading_fields(&parent);
+        match result.unwrap_err() {
+            Error::UnexpectedGasLimitDivider(number) => {
+                assert_eq!(block.number, number);
             }
             err => unreachable!("{:?}", err),
         }
@@ -878,6 +946,8 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64,
                 epoch_length: 500,
                 max_turn_length: 64,
+                enable_header_msec: true,
+                gas_limit_bound_divider: 1024,
             }])
             .unwrap();
 
@@ -888,18 +958,24 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64 + 1,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
             ])
             .unwrap();
@@ -916,6 +992,8 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64 - 1,
                 epoch_length: 500,
                 max_turn_length: 64,
+                enable_header_msec: true,
+                gas_limit_bound_divider: 1024,
             }])
             .unwrap_err();
         match err {
@@ -930,18 +1008,24 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64 - 1,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: 64,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
             ])
             .unwrap_err();
@@ -964,6 +1048,8 @@ pub(crate) mod test {
                 additional_header_item_count: header.additional_items.len() as u64,
                 epoch_length: 500,
                 max_turn_length: turn_length - 1,
+                enable_header_msec: true,
+                gas_limit_bound_divider: 1024,
             }])
             .unwrap_err();
         match err {
@@ -978,24 +1064,184 @@ pub(crate) mod test {
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length - 1,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
                     additional_header_item_count: header.additional_items.len() as u64,
                     epoch_length: 500,
                     max_turn_length: turn_length,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
                 },
             ])
             .unwrap_err();
 
         match err {
             Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_epoch_info(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.epoch = None;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let mut header = hp.epoch_header();
+        header.epoch = Some(Epoch::new(vec![].into(), 1));
+        header.number += 1;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustNotBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_mix_digest_enable_msec(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        let msec: u64 = 1000;
+        header.additional_items = vec![vec![1]];
+        header.mix_digest = EMPTY_HASH.to_vec();
+        U256::from(msec).to_big_endian(&mut header.mix_digest);
+
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length,
+                enable_header_msec: true,
+                gas_limit_bound_divider: 1024,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, msec);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 1024,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 1024,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                assert_eq!(e1, header.number);
+                assert_eq!(e2, msec);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_fork_rule_mix_digest_disable_msec(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        let turn_length = header.epoch.as_ref().unwrap().turn_length() as u64;
+        let msec: u64 = 1000;
+        header.additional_items = vec![vec![1]];
+        header.mix_digest = EMPTY_HASH.to_vec();
+        U256::from(msec).to_big_endian(&mut header.mix_digest);
+        let err = header
+            .verify_fork_rule(&[ForkSpec {
+                height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                additional_header_item_count: header.additional_items.len() as u64,
+                epoch_length: 500,
+                max_turn_length: turn_length,
+                enable_header_msec: false,
+                gas_limit_bound_divider: 1024,
+            }])
+            .unwrap_err();
+        match err {
+            Error::UnexpectedNotEmptyMixHash(e1, _) => {
+                assert_eq!(e1, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let err = header
+            .verify_fork_rule(&[
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number - 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: false,
+                    gas_limit_bound_divider: 1024,
+                },
+                ForkSpec {
+                    height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
+                    additional_header_item_count: header.additional_items.len() as u64,
+                    epoch_length: 500,
+                    max_turn_length: turn_length,
+                    enable_header_msec: true,
+                    gas_limit_bound_divider: 1024,
+                },
+            ])
+            .unwrap_err();
+
+        match err {
+            Error::UnexpectedNotEmptyMixHash(e1, _) => {
+                assert_eq!(e1, header.number);
+            }
             _ => unreachable!("invalid error {:?}", err),
         }
     }

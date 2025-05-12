@@ -73,6 +73,8 @@ pub enum Error {
     MissingVanityInExtraData(BlockNumber, usize, usize),
     MissingSignatureInExtraData(BlockNumber, usize, usize),
     UnexpectedMixHash(BlockNumber, Vec<u8>),
+    UnexpectedNotEmptyMixHash(BlockNumber, Vec<u8>),
+    UnexpectedMilliSecondValue(BlockNumber, u64),
     UnexpectedUncleHash(BlockNumber),
     UnexpectedDifficulty(BlockNumber, u64),
     UnexpectedNonce(BlockNumber),
@@ -82,6 +84,7 @@ pub enum Error {
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
+    UnexpectedGasLimitDivider(BlockNumber),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber, Hash, Vec<u8>, u64, u64),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
@@ -142,6 +145,9 @@ pub enum Error {
     UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
     EmptyPreviousForkSpecs,
+    UnexpectedEpochLength(u64, u64),
+    MustBeEpoch(BlockNumber, ForkSpec),
+    MustNotBeEpoch(BlockNumber, ForkSpec),
 
     // Misbehaviour
     MissingHeader1,
@@ -509,6 +515,24 @@ impl core::fmt::Display for Error {
             }
             Error::EmptyPreviousForkSpecs => {
                 write!(f, "EmptyPreviousForkSpecs")
+            }
+            Error::UnexpectedNotEmptyMixHash(e1, e2) => {
+                write!(f, "UnexpectedNotEmptyMixHash : {} {:?}", e1, e2)
+            }
+            Error::UnexpectedMilliSecondValue(e1, e2) => {
+                write!(f, "UnexpectedMilliSecondValue : {} {}", e1, e2)
+            }
+            Error::UnexpectedGasLimitDivider(e1) => {
+                write!(f, "UnexpectedGasLimitDivider : {}", e1)
+            }
+            Error::UnexpectedEpochLength(e1, e2) => {
+                write!(f, "UnexpectedEpochLength : {} {}", e1, e2)
+            }
+            Error::MustBeEpoch(e1, e2) => {
+                write!(f, "MustBeEpoch : {} {:?}", e1, e2)
+            }
+            Error::MustNotBeEpoch(e1, e2) => {
+                write!(f, "MustNotBeEpoch : {} {:?}", e1, e2)
             }
         }
     }

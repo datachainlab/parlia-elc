@@ -922,6 +922,8 @@ mod test {
             epoch_length: 10,
             additional_header_item_count: 1,
             max_turn_length: 64,
+            enable_header_msec: true,
+            gas_limit_bound_divider: 256,
         };
 
         let invalid_current_fork_spec = ForkSpec {
@@ -929,6 +931,8 @@ mod test {
             epoch_length: 500,
             additional_header_item_count: 1,
             max_turn_length: 64,
+            enable_header_msec: true,
+            gas_limit_bound_divider: 1024,
         };
         for _i in 0..1000 {
             let mut header = headers.all.last().unwrap().clone();

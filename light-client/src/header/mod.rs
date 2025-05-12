@@ -82,6 +82,8 @@ impl Header {
         }
         // Ensure HF height is required for target without seeking next headers
         self.headers.target.set_boundary_epochs(&fork_specs)?;
+        // Verify epoch is really epoch
+        self.headers.target.verify_epoch_info()?;
 
         // Try to set HF height
         if !fork_specs.is_empty() {
@@ -97,9 +99,11 @@ impl Header {
             }
         }
 
-        // Set boundary epoch to verify header size.
         for header in &mut self.headers.all {
-            header.set_boundary_epochs(&fork_specs)?
+            // Set boundary epoch to verify header size.
+            header.set_boundary_epochs(&fork_specs)?;
+            // Verify epoch is really epoch
+            header.verify_epoch_info()?;
         }
 
         self.fork_specs = fork_specs;
