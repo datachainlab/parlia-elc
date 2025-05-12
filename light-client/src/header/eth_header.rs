@@ -815,7 +815,11 @@ pub(crate) mod test {
 
         let mut current = fork_spec_after_lorentz();
         current.gas_limit_bound_divider = 0;
-        block.boundary_epochs = Some(current.boundary_epochs(&fork_spec_after_pascal()).unwrap());
+        block.boundary_epochs = Some(
+            current
+                .boundary_epochs(&[fork_spec_after_pascal()])
+                .unwrap(),
+        );
         let result = block.verify_cascading_fields(&parent);
         match result.unwrap_err() {
             Error::UnexpectedGasLimitDivider(number) => {

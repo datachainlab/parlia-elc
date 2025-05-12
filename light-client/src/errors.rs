@@ -144,6 +144,7 @@ pub enum Error {
     UnexpectedMissingForkSpecInCurrentEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
+    EmptyPreviousForkSpecs,
     UnexpectedEpochLength(u64, u64),
     MustBeEpoch(BlockNumber, ForkSpec),
     MustNotBeEpoch(BlockNumber, ForkSpec),
@@ -511,6 +512,9 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedEpochInfo(e1, e2) => {
                 write!(f, "UnexpectedEpochInfo : {} {}", e1, e2)
+            }
+            Error::EmptyPreviousForkSpecs => {
+                write!(f, "EmptyPreviousForkSpecs")
             }
             Error::UnexpectedNotEmptyMixHash(e1, e2) => {
                 write!(f, "UnexpectedNotEmptyMixHash : {} {:?}", e1, e2)

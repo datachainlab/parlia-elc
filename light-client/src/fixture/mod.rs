@@ -93,9 +93,31 @@ pub fn fork_spec_after_lorentz() -> ForkSpec {
 
 pub fn fork_spec_after_maxwell() -> ForkSpec {
     ForkSpec {
-        height_or_timestamp: HeightOrTimestamp::Height(2),
+        height_or_timestamp: HeightOrTimestamp::Height(1),
         additional_header_item_count: 1,
         epoch_length: 1000,
+        max_turn_length: 64,
+        enable_header_msec: true,
+        gas_limit_bound_divider: 1024,
+    }
+}
+
+pub fn fork_spec_after_post_maxwell_1() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(1),
+        additional_header_item_count: 1,
+        epoch_length: 1000,
+        max_turn_length: 64,
+        enable_header_msec: true,
+        gas_limit_bound_divider: 1024,
+    }
+}
+
+pub fn fork_spec_after_post_maxwell_2() -> ForkSpec {
+    ForkSpec {
+        height_or_timestamp: HeightOrTimestamp::Height(1),
+        additional_header_item_count: 1,
+        epoch_length: 2000,
         max_turn_length: 64,
         enable_header_msec: true,
         gas_limit_bound_divider: 1024,

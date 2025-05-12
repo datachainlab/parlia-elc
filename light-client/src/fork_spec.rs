@@ -3,8 +3,6 @@ use crate::misc::BlockNumber;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::fork_spec::HeightOrTimestamp as RawHeightOrTimestamp;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ForkSpec as RawForkSpec;
 
-const DEFAULT_EPOCH_LENGTH: u64 = 200;
-
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum HeightOrTimestamp {
     Height(u64),
@@ -71,7 +69,10 @@ impl ForkSpec {
     /// previous_last = 2000
     /// intermediates = []
     /// current_first = 2000
-    pub fn boundary_epochs(&self, prev_fork_spec: &ForkSpec) -> Result<BoundaryEpochs, Error> {
+    pub fn boundary_epochs(&self, prev_fork_specs: &[ForkSpec]) -> Result<BoundaryEpochs, Error> {
+        let prev_fork_spec = prev_fork_specs
+            .first()
+            .ok_or(Error::EmptyPreviousForkSpecs)?;
         if let HeightOrTimestamp::Height(height) = self.height_or_timestamp {
             if self.epoch_length == 0 || prev_fork_spec.epoch_length == 0 {
                 return Err(Error::UnexpectedEpochLength(
@@ -88,18 +89,26 @@ impl ForkSpec {
             };
             let mut intermediates = vec![];
 
-            // starts 0, 200, 400...epoch_length
+            // Only for localnet.
+            // intermediates are [200, 400, 500, ...]
+            // The decrease in epoch length probably does not occur and is therefore not supported.
             if previous_last == 0 {
-                let additive: u64 = if prev_fork_spec.epoch_length > DEFAULT_EPOCH_LENGTH {
-                    DEFAULT_EPOCH_LENGTH
-                } else {
-                    prev_fork_spec.epoch_length
-                };
-                let mut mid = previous_last + additive;
-                while mid < prev_fork_spec.epoch_length {
-                    intermediates.push(mid);
-                    mid += additive;
-                }
+                let mut epoch_length_list: alloc::vec::Vec<u64> = prev_fork_specs
+                    .iter()
+                    .rev()
+                    .map(|spec| spec.epoch_length)
+                    .collect();
+                // ex) [200, 500, 500, 1000, 1000, 2000...] -> [200, 500, 1000, 2000...]
+                epoch_length_list.dedup();
+
+                epoch_length_list.windows(2).for_each(|pair| {
+                    let (start, end) = (pair[0], pair[1]);
+                    let mut value = start;
+                    while value < end {
+                        intermediates.push(value);
+                        value += start;
+                    }
+                });
             }
             let mut mid = previous_last + prev_fork_spec.epoch_length;
             while mid < current_first {
@@ -257,9 +266,9 @@ pub fn get_boundary_epochs(
     for (i, spec) in fork_specs.iter().enumerate() {
         if spec == current_spec {
             if i == 0 {
-                return spec.boundary_epochs(spec);
+                return spec.boundary_epochs(fork_specs);
             }
-            return spec.boundary_epochs(&fork_specs[i - 1]);
+            return spec.boundary_epochs(&fork_specs[i - 1..]);
         }
     }
     Err(Error::MissingPreviousForkSpec(current_spec.clone()))
@@ -303,6 +312,7 @@ mod test {
     use crate::errors::Error;
     use crate::fixture::{
         fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
+        fork_spec_after_post_maxwell_1, fork_spec_after_post_maxwell_2,
     };
     use crate::fork_spec::{
         find_target_fork_spec, get_boundary_epochs, verify_sorted_asc, ForkSpec, HeightOrTimestamp,
@@ -660,7 +670,7 @@ mod test {
             gas_limit_bound_divider: 256,
         };
         match current
-            .boundary_epochs(&fork_spec_after_pascal())
+            .boundary_epochs(&[fork_spec_after_pascal()])
             .unwrap_err()
         {
             Error::MissingForkHeightInBoundaryCalculation(e1) => {
@@ -681,7 +691,7 @@ mod test {
             gas_limit_bound_divider: 256,
         };
         match current
-            .boundary_epochs(&fork_spec_after_pascal())
+            .boundary_epochs(&[fork_spec_after_pascal()])
             .unwrap_err()
         {
             Error::UnexpectedEpochLength(e1, e2) => {
@@ -703,7 +713,7 @@ mod test {
             gas_limit_bound_divider: 256,
         };
         match fork_spec_after_pascal()
-            .boundary_epochs(&previous)
+            .boundary_epochs(&[previous.clone()])
             .unwrap_err()
         {
             Error::UnexpectedEpochLength(e1, e2) => {
@@ -716,46 +726,230 @@ mod test {
 
     #[test]
     fn test_success_boundary_epochs() {
+        // Lorentz HF
         let mut f1 = fork_spec_after_lorentz().clone();
         f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
-        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        let be = f1.boundary_epochs(&[fork_spec_after_pascal()]).unwrap();
         assert_eq!(be.previous_last, 1400);
         assert_eq!(be.intermediates, vec![1600, 1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1600);
-        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        let be = f1.boundary_epochs(&[fork_spec_after_pascal()]).unwrap();
         assert_eq!(be.previous_last, 1600);
         assert_eq!(be.intermediates, vec![1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1601);
-        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        let be = f1.boundary_epochs(&[fork_spec_after_pascal()]).unwrap();
         assert_eq!(be.previous_last, 1600);
         assert_eq!(be.intermediates, vec![1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1800);
-        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        let be = f1.boundary_epochs(&[fork_spec_after_pascal()]).unwrap();
         assert_eq!(be.previous_last, 1800);
         assert_eq!(be.intermediates, vec![]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
-        let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
+        let be = f1.boundary_epochs(&[fork_spec_after_pascal()]).unwrap();
         assert_eq!(be.previous_last, 2000);
         assert_eq!(be.intermediates, vec![]);
         assert_eq!(be.current_first, 2000);
+
+        // Maxwell HF
+        let mut f1 = fork_spec_after_maxwell().clone();
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
+        let be = f1
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
+            .unwrap();
+        assert_eq!(be.previous_last, 1500);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
+        let be = f1
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2001);
+        let be = f1
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![2500]);
+        assert_eq!(be.current_first, 3000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2500);
+        let be = f1
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
+            .unwrap();
+        assert_eq!(be.previous_last, 2500);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 3000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(3000);
+        let be = f1
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
+            .unwrap();
+        assert_eq!(be.previous_last, 3000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 3000);
+
+        // Post maxwell 1 HF
+        let mut f1 = fork_spec_after_post_maxwell_1().clone();
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 1000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2001);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 3000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2500);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 3000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(3000);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 3000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 3000);
+
+        // Post maxwell 2 HF
+        let mut f1 = fork_spec_after_post_maxwell_2().clone();
+        f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 1000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 2000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(2001);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 2000);
+        assert_eq!(be.intermediates, vec![3000]);
+        assert_eq!(be.current_first, 4000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(3000);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 3000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 4000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(4000);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 4000);
+        assert_eq!(be.intermediates, vec![]);
+        assert_eq!(be.current_first, 4000);
+
+        f1.height_or_timestamp = HeightOrTimestamp::Height(4001);
+        let be = f1
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 4000);
+        assert_eq!(be.intermediates, vec![5000]);
+        assert_eq!(be.current_first, 6000);
     }
 
     #[test]
     fn test_success_boundary_epochs_lorentz_pascal() {
         let be = fork_spec_after_lorentz()
-            .boundary_epochs(&fork_spec_after_pascal())
+            .boundary_epochs(&[fork_spec_after_pascal()])
             .unwrap();
         assert_eq!(be.previous_last, 0);
-        assert_eq!(be.intermediates[0], 200);
-        assert_eq!(be.intermediates[1], 400);
+        assert_eq!(be.intermediates, vec![200, 400]);
         assert_eq!(be.current_first, 500);
         assert_eq!(be.current_epoch_block_number(199), 0);
         assert_eq!(be.current_epoch_block_number(200), 200);
@@ -782,12 +976,10 @@ mod test {
     #[test]
     fn test_success_boundary_epochs_maxwell_lorentz() {
         let be = fork_spec_after_maxwell()
-            .boundary_epochs(&fork_spec_after_lorentz())
+            .boundary_epochs(&[fork_spec_after_lorentz(), fork_spec_after_pascal()])
             .unwrap();
         assert_eq!(be.previous_last, 0);
-        assert_eq!(be.intermediates[0], 200);
-        assert_eq!(be.intermediates[1], 400);
-        assert_eq!(be.intermediates[2], 500);
+        assert_eq!(be.intermediates, vec![200, 400, 500]);
         assert_eq!(be.current_first, 1000);
         assert_eq!(be.current_epoch_block_number(199), 0);
         assert_eq!(be.current_epoch_block_number(200), 200);
@@ -815,6 +1007,88 @@ mod test {
         assert_eq!(be.previous_epoch_block_number(1000), 500);
         assert_eq!(be.previous_epoch_block_number(2000), 1000);
         assert_eq!(be.previous_epoch_block_number(3000), 2000);
+    }
+
+    #[test]
+    fn test_success_boundary_epochs_after_maxwell_1() {
+        let be = fork_spec_after_post_maxwell_1()
+            .boundary_epochs(&[
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 0);
+        assert_eq!(be.intermediates, vec![200, 400, 500]);
+        // Same as maxwell
+        assert_eq!(be.current_first, 1000);
+        assert_eq!(be.current_epoch_block_number(199), 0);
+        assert_eq!(be.current_epoch_block_number(200), 200);
+        assert_eq!(be.current_epoch_block_number(399), 200);
+        assert_eq!(be.current_epoch_block_number(400), 400);
+        assert_eq!(be.current_epoch_block_number(499), 400);
+        assert_eq!(be.current_epoch_block_number(500), 500);
+        assert_eq!(be.current_epoch_block_number(501), 500);
+        assert_eq!(be.current_epoch_block_number(999), 500);
+        assert_eq!(be.current_epoch_block_number(1000), 1000);
+        assert_eq!(be.current_epoch_block_number(1001), 1000);
+        assert_eq!(be.current_epoch_block_number(1499), 1000);
+        assert_eq!(be.current_epoch_block_number(1500), 1000);
+        assert_eq!(be.current_epoch_block_number(1501), 1000);
+        assert_eq!(be.current_epoch_block_number(1999), 1000);
+        assert_eq!(be.current_epoch_block_number(2000), 2000);
+        assert_eq!(be.current_epoch_block_number(2001), 2000);
+        assert_eq!(be.current_epoch_block_number(2999), 2000);
+        assert_eq!(be.current_epoch_block_number(3000), 3000);
+
+        assert_eq!(be.previous_epoch_block_number(0), 0);
+        assert_eq!(be.previous_epoch_block_number(200), 0);
+        assert_eq!(be.previous_epoch_block_number(400), 200);
+        assert_eq!(be.previous_epoch_block_number(500), 400);
+        assert_eq!(be.previous_epoch_block_number(1000), 500);
+        assert_eq!(be.previous_epoch_block_number(2000), 1000);
+        assert_eq!(be.previous_epoch_block_number(3000), 2000);
+    }
+
+    #[test]
+    fn test_success_boundary_epochs_after_maxwell_2() {
+        let be = fork_spec_after_post_maxwell_2()
+            .boundary_epochs(&[
+                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_maxwell(),
+                fork_spec_after_lorentz(),
+                fork_spec_after_pascal(),
+            ])
+            .unwrap();
+        assert_eq!(be.previous_last, 0);
+        assert_eq!(be.intermediates, vec![200, 400, 500, 1000]);
+        assert_eq!(be.current_first, 2000);
+        assert_eq!(be.current_epoch_block_number(199), 0);
+        assert_eq!(be.current_epoch_block_number(200), 200);
+        assert_eq!(be.current_epoch_block_number(399), 200);
+        assert_eq!(be.current_epoch_block_number(400), 400);
+        assert_eq!(be.current_epoch_block_number(499), 400);
+        assert_eq!(be.current_epoch_block_number(500), 500);
+        assert_eq!(be.current_epoch_block_number(501), 500);
+        assert_eq!(be.current_epoch_block_number(999), 500);
+        assert_eq!(be.current_epoch_block_number(1000), 1000);
+        assert_eq!(be.current_epoch_block_number(1001), 1000);
+        assert_eq!(be.current_epoch_block_number(1499), 1000);
+        assert_eq!(be.current_epoch_block_number(1500), 1000);
+        assert_eq!(be.current_epoch_block_number(1501), 1000);
+        assert_eq!(be.current_epoch_block_number(1999), 1000);
+        assert_eq!(be.current_epoch_block_number(2000), 2000);
+        assert_eq!(be.current_epoch_block_number(2001), 2000);
+        assert_eq!(be.current_epoch_block_number(2999), 2000);
+        assert_eq!(be.current_epoch_block_number(3000), 2000);
+
+        assert_eq!(be.previous_epoch_block_number(0), 0);
+        assert_eq!(be.previous_epoch_block_number(200), 0);
+        assert_eq!(be.previous_epoch_block_number(400), 200);
+        assert_eq!(be.previous_epoch_block_number(500), 400);
+        assert_eq!(be.previous_epoch_block_number(1000), 500);
+        assert_eq!(be.previous_epoch_block_number(2000), 1000);
+        assert_eq!(be.previous_epoch_block_number(3000), 1000);
     }
 
     #[test]
