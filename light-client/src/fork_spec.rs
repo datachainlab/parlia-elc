@@ -648,6 +648,7 @@ mod test {
             additional_header_item_count: 1,
             epoch_length: 0,
             max_turn_length: 64,
+            gas_limit_bound_divider: 256,
         };
         match current
             .boundary_epochs(&fork_spec_after_pascal())
@@ -668,6 +669,7 @@ mod test {
             additional_header_item_count: 1,
             epoch_length: 0,
             max_turn_length: 64,
+            gas_limit_bound_divider: 256,
         };
         match fork_spec_after_pascal()
             .boundary_epochs(&previous)
