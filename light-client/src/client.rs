@@ -1372,6 +1372,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }));
@@ -1385,6 +1386,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }));
@@ -1399,6 +1401,7 @@ mod test {
                     additional_header_item_count: 0,
                     epoch_length: 200,
                     max_turn_length: 9,
+                    gas_limit_bound_divider: 256,
                 }];
                 (client_state, cons_state)
             }))
