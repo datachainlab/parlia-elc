@@ -326,6 +326,7 @@ mod test {
             epoch_length: 200,
             max_turn_length: 9,
             enable_header_msec: false,
+            gas_limit_bound_divider: 256,
         }
     }
 

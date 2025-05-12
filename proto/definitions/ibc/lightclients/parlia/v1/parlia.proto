@@ -12,12 +12,10 @@ message ForkSpec {
     uint64 height = 1;
     uint64 timestamp = 2;
   }
-  // The number of headers prior to Pascal HF is set to 0.
-  // For example, the number of headers before Pascal HF is set to 1 because of the addition of the requestsHash.
   uint64 additional_header_item_count = 3;
   uint64 epoch_length = 4;
   uint64 max_turn_length = 5;
-
+  uint64 gas_limit_bound_divider = 6;
   bool enable_header_msec = 7;
 }
 

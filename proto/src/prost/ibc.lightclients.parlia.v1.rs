@@ -1,14 +1,14 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ForkSpec {
-    /// The number of headers prior to Pascal HF is set to 0.
-    /// For example, the number of headers before Pascal HF is set to 1 because of the addition of the requestsHash.
     #[prost(uint64, tag = "3")]
     pub additional_header_item_count: u64,
     #[prost(uint64, tag = "4")]
     pub epoch_length: u64,
     #[prost(uint64, tag = "5")]
     pub max_turn_length: u64,
+    #[prost(uint64, tag = "6")]
+    pub gas_limit_bound_divider: u64,
     #[prost(bool, tag = "7")]
     pub enable_header_msec: bool,
     #[prost(oneof = "fork_spec::HeightOrTimestamp", tags = "1, 2")]

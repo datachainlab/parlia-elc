@@ -84,6 +84,7 @@ pub enum Error {
     MissingSignerInValidator(BlockNumber, Address),
     UnexpectedGasDiff(BlockNumber, u64, u64),
     UnexpectedGasUsed(BlockNumber, u64, u64),
+    UnexpectedGasLimitDivider(BlockNumber),
     UnexpectedHeaderRelation(BlockNumber, BlockNumber, Hash, Vec<u8>, u64, u64),
     ProofRLPError(rlp::DecoderError),
     InvalidProofFormatError(Vec<u8>),
@@ -143,6 +144,9 @@ pub enum Error {
     UnexpectedMissingForkSpecInCurrentEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
+    UnexpectedEpochLength(u64, u64),
+    MustBeEpoch(BlockNumber, ForkSpec),
+    MustNotBeEpoch(BlockNumber, ForkSpec),
 
     // Misbehaviour
     MissingHeader1,
@@ -513,6 +517,18 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedMilliSecondValue(e1, e2) => {
                 write!(f, "UnexpectedMilliSecondValue : {} {}", e1, e2)
+            }
+            Error::UnexpectedGasLimitDivider(e1) => {
+                write!(f, "UnexpectedGasLimitDivider : {}", e1)
+            }
+            Error::UnexpectedEpochLength(e1, e2) => {
+                write!(f, "UnexpectedEpochLength : {} {}", e1, e2)
+            }
+            Error::MustBeEpoch(e1, e2) => {
+                write!(f, "MustBeEpoch : {} {:?}", e1, e2)
+            }
+            Error::MustNotBeEpoch(e1, e2) => {
+                write!(f, "MustNotBeEpoch : {} {:?}", e1, e2)
             }
         }
     }

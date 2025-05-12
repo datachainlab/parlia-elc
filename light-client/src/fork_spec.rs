@@ -3,16 +3,26 @@ use crate::misc::BlockNumber;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::fork_spec::HeightOrTimestamp as RawHeightOrTimestamp;
 use parlia_ibc_proto::ibc::lightclients::parlia::v1::ForkSpec as RawForkSpec;
 
+const DEFAULT_EPOCH_LENGTH: u64 = 200;
+
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum HeightOrTimestamp {
     Height(u64),
     Time(u64),
 }
 
+/// ForkSpec defines different parameters for each HF.
+/// The ForkSpec of the supporting HF must be registered at CreateClient
+/// This is a data structure that does not exist in the BSC node and is designed uniquely for the light client.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ForkSpec {
+    /// The timestamp or height at which the HF will occur.
+    /// If you set the timestamp, you need to use the value described in bsc's ChainConfig.
+    /// https://github.com/bnb-chain/bsc/blob/5735d8a56540e8f2fb26d5585de0fa3959bb17b4/params/config.go#L192C3-L192C14
     pub height_or_timestamp: HeightOrTimestamp,
     /// Items count after parent_beacon_root
+    /// The number of headers prior to Pascal HF is set to 0.
+    /// For example, the number of headers after Pascal HF is set to 1 because of the addition of the requestsHash.
     pub additional_header_item_count: u64,
     /// Block count in epoch
     pub epoch_length: u64,
@@ -20,6 +30,8 @@ pub struct ForkSpec {
     pub max_turn_length: u64,
     /// true: header has msec in mix_digest
     pub enable_header_msec: bool,
+    /// Gas Limit bound diriver
+    pub gas_limit_bound_divider: u64,
 }
 
 impl ForkSpec {
@@ -30,55 +42,66 @@ impl ForkSpec {
     /// with the previous fork specification. It calculates the previous last epoch, the current
     /// first epoch, and any intermediate epochs between them.
     ///
-    /// first = previous last epoch
-    /// last = current first epoch
+    /// previous_last: refers to the previous epoch of the height
+    /// current_first refers to the first epoch of the height divisible by the current fork epoch length.
+    /// intermediates: refers to the epochs between the previous last and current first.
     ///
     /// eg) height = 1501
-    /// first = 1400
-    /// mid = [1600, 1800]
-    /// last = 2000
+    /// previous_last = 1400
+    /// intermediates = [1600, 1800]
+    /// current_first = 2000
     ///
     /// in Lorentz HF
     /// eg) height = 1600
-    /// first = 1600
-    /// mid = [1800]
-    /// last = 2000
+    /// previous_last = 1600
+    /// intermediates = [1800]
+    /// current_first = 2000
     ///
     /// eg) height = 1601
-    /// first = 1600
-    /// mid = [1800]
-    /// last = 2000
+    /// previous_last = 1600
+    /// intermediates = [1800]
+    /// current_first = 2000
     ///
     /// eg) height = 1800
-    /// first = 1800
-    /// mid = []
-    /// last = 2000
+    /// previous_last = 1800
+    /// intermediates = []
+    /// current_first = 2000
     ///
     /// eg) height = 2000
-    /// first = 2000
-    /// mid = []
-    /// last = 2000
+    /// previous_last = 2000
+    /// intermediates = []
+    /// current_first = 2000
     pub fn boundary_epochs(&self, prev_fork_spec: &ForkSpec) -> Result<BoundaryEpochs, Error> {
         if let HeightOrTimestamp::Height(height) = self.height_or_timestamp {
-            let prev_last = height - (height % prev_fork_spec.epoch_length);
-            let current_first = (height..).find(|&h| h % self.epoch_length == 0).unwrap();
+            if self.epoch_length == 0 || prev_fork_spec.epoch_length == 0 {
+                return Err(Error::UnexpectedEpochLength(
+                    self.epoch_length,
+                    prev_fork_spec.epoch_length,
+                ));
+            }
+            let previous_last = height - (height % prev_fork_spec.epoch_length);
+
+            let current_first = if height % self.epoch_length == 0 {
+                height
+            } else {
+                height + (self.epoch_length - height % self.epoch_length)
+            };
             let mut intermediates = vec![];
 
             // starts 0, 200, 400...epoch_length
-            if prev_last == 0 {
-                const DEFAULT_EPOCH_LENGTH: u64 = 200;
+            if previous_last == 0 {
                 let additive: u64 = if prev_fork_spec.epoch_length > DEFAULT_EPOCH_LENGTH {
                     DEFAULT_EPOCH_LENGTH
                 } else {
                     prev_fork_spec.epoch_length
                 };
-                let mut mid = prev_last + additive;
+                let mut mid = previous_last + additive;
                 while mid < prev_fork_spec.epoch_length {
                     intermediates.push(mid);
                     mid += additive;
                 }
             }
-            let mut mid = prev_last + prev_fork_spec.epoch_length;
+            let mut mid = previous_last + prev_fork_spec.epoch_length;
             while mid < current_first {
                 intermediates.push(mid);
                 mid += prev_fork_spec.epoch_length;
@@ -86,8 +109,8 @@ impl ForkSpec {
             return Ok(BoundaryEpochs {
                 previous_fork_spec: prev_fork_spec.clone(),
                 current_fork_spec: self.clone(),
+                previous_last,
                 current_first,
-                prev_last,
                 intermediates,
             });
         }
@@ -99,7 +122,7 @@ impl ForkSpec {
 pub struct BoundaryEpochs {
     previous_fork_spec: ForkSpec,
     current_fork_spec: ForkSpec,
-    prev_last: BlockNumber,
+    previous_last: BlockNumber,
     current_first: BlockNumber,
     intermediates: alloc::vec::Vec<BlockNumber>,
 }
@@ -139,26 +162,24 @@ impl BoundaryEpochs {
         if current_epoch_block_number == 0 {
             return 0;
         }
-        // first or under
-        if current_epoch_block_number <= self.prev_last {
+        // Before HF
+        if current_epoch_block_number <= self.previous_last {
             return current_epoch_block_number - self.previous_fork_spec.epoch_length;
         }
 
-        // Hit mids eppchs
         for (i, mid) in self.intermediates.iter().enumerate() {
             if current_epoch_block_number == *mid {
                 if i == 0 {
-                    return self.prev_last;
+                    return self.previous_last;
                 } else {
                     return self.intermediates[i - 1];
                 }
             }
         }
 
-        // is just current HF first
         if current_epoch_block_number == self.current_first {
             if self.intermediates.is_empty() {
-                return self.prev_last;
+                return self.previous_last;
             }
             return *self.intermediates.last().unwrap();
         }
@@ -185,6 +206,7 @@ impl TryFrom<RawForkSpec> for ForkSpec {
             epoch_length: value.epoch_length,
             max_turn_length: value.max_turn_length,
             enable_header_msec: value.enable_header_msec,
+            gas_limit_bound_divider: value.gas_limit_bound_divider,
         })
     }
 }
@@ -202,6 +224,7 @@ impl From<ForkSpec> for RawForkSpec {
             epoch_length: value.epoch_length,
             max_turn_length: value.max_turn_length,
             enable_header_msec: value.enable_header_msec,
+            gas_limit_bound_divider: value.gas_limit_bound_divider,
         }
     }
 }
@@ -231,7 +254,6 @@ pub fn get_boundary_epochs(
     current_spec: &ForkSpec,
     fork_specs: &[ForkSpec],
 ) -> Result<BoundaryEpochs, Error> {
-    // find from last to first
     for (i, spec) in fork_specs.iter().enumerate() {
         if spec == current_spec {
             if i == 0 {
@@ -295,6 +317,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -302,6 +325,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: true,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = find_target_fork_spec(specs, 10, 0).unwrap();
@@ -323,6 +347,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
@@ -330,6 +355,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 10).unwrap();
@@ -351,6 +377,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -358,6 +385,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         // After value is primary
@@ -380,6 +408,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -387,6 +416,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 0).unwrap_err();
@@ -408,6 +438,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
@@ -415,6 +446,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 9).unwrap_err();
@@ -436,6 +468,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -443,6 +476,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 9).unwrap_err();
@@ -464,6 +498,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(11),
@@ -471,6 +506,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -485,6 +521,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(11),
@@ -492,6 +529,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -506,6 +544,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -513,6 +552,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -531,6 +571,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -538,6 +579,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -559,6 +601,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -566,6 +609,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -584,6 +628,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -591,6 +636,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -611,6 +657,7 @@ mod test {
             epoch_length: 500,
             max_turn_length: 64,
             enable_header_msec: true,
+            gas_limit_bound_divider: 256,
         };
         match current
             .boundary_epochs(&fork_spec_after_pascal())
@@ -624,35 +671,79 @@ mod test {
     }
 
     #[test]
+    fn test_error_boundary_epochs_current_epoch_length_zero() {
+        let current = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1,
+            epoch_length: 0,
+            max_turn_length: 64,
+            enable_header_msec: false,
+            gas_limit_bound_divider: 256,
+        };
+        match current
+            .boundary_epochs(&fork_spec_after_pascal())
+            .unwrap_err()
+        {
+            Error::UnexpectedEpochLength(e1, e2) => {
+                assert_eq!(current.epoch_length, e1);
+                assert_ne!(current.epoch_length, e2);
+            }
+            _ => unreachable!("unexpected error"),
+        }
+    }
+
+    #[test]
+    fn test_error_boundary_epochs_previous_epoch_length_zero() {
+        let previous = ForkSpec {
+            height_or_timestamp: HeightOrTimestamp::Height(0),
+            additional_header_item_count: 1,
+            epoch_length: 0,
+            max_turn_length: 64,
+            enable_header_msec: false,
+            gas_limit_bound_divider: 256,
+        };
+        match fork_spec_after_pascal()
+            .boundary_epochs(&previous)
+            .unwrap_err()
+        {
+            Error::UnexpectedEpochLength(e1, e2) => {
+                assert_ne!(previous.epoch_length, e1);
+                assert_eq!(previous.epoch_length, e2);
+            }
+            _ => unreachable!("unexpected error"),
+        }
+    }
+
+    #[test]
     fn test_success_boundary_epochs() {
         let mut f1 = fork_spec_after_lorentz().clone();
         f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
         let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
-        assert_eq!(be.prev_last, 1400);
+        assert_eq!(be.previous_last, 1400);
         assert_eq!(be.intermediates, vec![1600, 1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1600);
         let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
-        assert_eq!(be.prev_last, 1600);
+        assert_eq!(be.previous_last, 1600);
         assert_eq!(be.intermediates, vec![1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1601);
         let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
-        assert_eq!(be.prev_last, 1600);
+        assert_eq!(be.previous_last, 1600);
         assert_eq!(be.intermediates, vec![1800]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(1800);
         let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
-        assert_eq!(be.prev_last, 1800);
+        assert_eq!(be.previous_last, 1800);
         assert_eq!(be.intermediates, vec![]);
         assert_eq!(be.current_first, 2000);
 
         f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
         let be = f1.boundary_epochs(&fork_spec_after_pascal()).unwrap();
-        assert_eq!(be.prev_last, 2000);
+        assert_eq!(be.previous_last, 2000);
         assert_eq!(be.intermediates, vec![]);
         assert_eq!(be.current_first, 2000);
     }
@@ -662,7 +753,7 @@ mod test {
         let be = fork_spec_after_lorentz()
             .boundary_epochs(&fork_spec_after_pascal())
             .unwrap();
-        assert_eq!(be.prev_last, 0);
+        assert_eq!(be.previous_last, 0);
         assert_eq!(be.intermediates[0], 200);
         assert_eq!(be.intermediates[1], 400);
         assert_eq!(be.current_first, 500);
@@ -693,7 +784,7 @@ mod test {
         let be = fork_spec_after_maxwell()
             .boundary_epochs(&fork_spec_after_lorentz())
             .unwrap();
-        assert_eq!(be.prev_last, 0);
+        assert_eq!(be.previous_last, 0);
         assert_eq!(be.intermediates[0], 200);
         assert_eq!(be.intermediates[1], 400);
         assert_eq!(be.intermediates[2], 500);
@@ -735,6 +826,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -742,6 +834,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = get_boundary_epochs(&fork_spec_after_pascal(), specs).unwrap_err();
@@ -762,6 +855,7 @@ mod test {
                 epoch_length: 200,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -769,6 +863,7 @@ mod test {
                 epoch_length: 500,
                 max_turn_length: 9,
                 enable_header_msec: false,
+                gas_limit_bound_divider: 256,
             },
         ];
         let v = get_boundary_epochs(&specs[1], specs).unwrap();
