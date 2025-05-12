@@ -11,10 +11,18 @@ pub enum HeightOrTimestamp {
     Time(u64),
 }
 
+/// ForkSpec defines different parameters for each HF.
+/// The ForkSpec of the supporting HF must be registered at CreateClient
+/// This is a data structure that does not exist in the BSC node and is designed uniquely for the light client.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ForkSpec {
+    /// The timestamp or height at which the HF will occur.
+    /// If you set the timestamp, you need to use the value described in bsc's ChainConfig.
+    /// https://github.com/bnb-chain/bsc/blob/5735d8a56540e8f2fb26d5585de0fa3959bb17b4/params/config.go#L192C3-L192C14
     pub height_or_timestamp: HeightOrTimestamp,
     /// Items count after parent_beacon_root
+    /// The number of headers prior to Pascal HF is set to 0.
+    /// For example, the number of headers after Pascal HF is set to 1 because of the addition of the requestsHash.
     pub additional_header_item_count: u64,
     /// Block count in epoch
     pub epoch_length: u64,
@@ -29,6 +37,10 @@ impl ForkSpec {
     /// This function determines the boundary epochs by comparing the current fork specification
     /// with the previous fork specification. It calculates the previous last epoch, the current
     /// first epoch, and any intermediate epochs between them.
+    ///
+    /// previous_last: refers to the previous epoch of the height
+    /// current_first refers to the first epoch of the height divisible by the current fork epoch length.
+    /// intermediates: refers to the epochs between the previous last and current first.
     ///
     /// eg) height = 1501
     /// previous_last = 1400
@@ -146,12 +158,11 @@ impl BoundaryEpochs {
         if current_epoch_block_number == 0 {
             return 0;
         }
-        // first or under
+        // Before HF
         if current_epoch_block_number <= self.previous_last {
             return current_epoch_block_number - self.previous_fork_spec.epoch_length;
         }
 
-        // Hit mids eppchs
         for (i, mid) in self.intermediates.iter().enumerate() {
             if current_epoch_block_number == *mid {
                 if i == 0 {
@@ -162,7 +173,6 @@ impl BoundaryEpochs {
             }
         }
 
-        // is just current HF first
         if current_epoch_block_number == self.current_first {
             if self.intermediates.is_empty() {
                 return self.previous_last;
@@ -236,7 +246,6 @@ pub fn get_boundary_epochs(
     current_spec: &ForkSpec,
     fork_specs: &[ForkSpec],
 ) -> Result<BoundaryEpochs, Error> {
-    // find from last to first
     for (i, spec) in fork_specs.iter().enumerate() {
         if spec == current_spec {
             if i == 0 {

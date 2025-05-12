@@ -142,6 +142,8 @@ pub enum Error {
     UnexpectedMissingForkSpecInPreviousEpochCalculation(BlockNumber, alloc::boxed::Box<Error>),
     UnexpectedPreviousEpochInCalculatingNextEpoch(BlockNumber, BlockNumber, BlockNumber),
     UnexpectedEpochLength(u64, u64),
+    MustBeEpoch(BlockNumber, ForkSpec),
+    MustNotBeEpoch(BlockNumber, ForkSpec),
 
     // Misbehaviour
     MissingHeader1,
@@ -509,6 +511,12 @@ impl core::fmt::Display for Error {
             }
             Error::UnexpectedEpochLength(e1, e2) => {
                 write!(f, "UnexpectedEpochLength : {} {}", e1, e2)
+            }
+            Error::MustBeEpoch(e1, e2) => {
+                write!(f, "MustBeEpoch : {} {:?}", e1, e2)
+            }
+            Error::MustNotBeEpoch(e1, e2) => {
+                write!(f, "MustNotBeEpoch : {} {:?}", e1, e2)
             }
         }
     }
