@@ -361,6 +361,27 @@ impl ETHHeader {
         }
     }
 
+    pub fn verify_epoch_info(&self) -> Result<(), Error> {
+        let be = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
+        if self.number == be.current_epoch_block_number(self.number) {
+            if !self.is_epoch() {
+                return Err(Error::MustBeEpoch(
+                    self.number,
+                    be.current_fork_spec().clone(),
+                ));
+            }
+        } else if self.is_epoch() {
+            return Err(Error::MustNotBeEpoch(
+                self.number,
+                be.current_fork_spec().clone(),
+            ));
+        }
+        Ok(())
+    }
+
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
     pub fn milli_timestamp(&self) -> u64 {
         let mut milliseconds: u64 = 0;
@@ -996,6 +1017,31 @@ pub(crate) mod test {
 
         match err {
             Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_epoch_info(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.epoch = None;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let mut header = hp.epoch_header();
+        header.epoch = Some(Epoch::new(vec![].into(), 1));
+        header.number += 1;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustNotBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
             _ => unreachable!("invalid error {:?}", err),
         }
     }
