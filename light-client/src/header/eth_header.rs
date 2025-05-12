@@ -368,6 +368,27 @@ impl ETHHeader {
         }
     }
 
+    pub fn verify_epoch_info(&self) -> Result<(), Error> {
+        let be = self
+            .boundary_epochs
+            .as_ref()
+            .ok_or(Error::MissingBoundaryEpochs(self.number))?;
+        if self.number == be.current_epoch_block_number(self.number) {
+            if !self.is_epoch() {
+                return Err(Error::MustBeEpoch(
+                    self.number,
+                    be.current_fork_spec().clone(),
+                ));
+            }
+        } else if self.is_epoch() {
+            return Err(Error::MustNotBeEpoch(
+                self.number,
+                be.current_fork_spec().clone(),
+            ));
+        }
+        Ok(())
+    }
+
     // https://github.com/bnb-chain/BEPs/blob/master/BEPs/BEP-520.md#411-millisecond-representation-in-block-header
     pub fn milli_timestamp(&self) -> u64 {
         let mut milliseconds: u64 = 0;
@@ -409,7 +430,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
     type Error = Error;
 
     /// This includes part of header verification.
-    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/b4773e8b5080f37e1c65c083b543f60c895abb70/consensus/parlia/parlia.go#L324
+    /// - verifyHeader: https://github.com/bnb-chain/bsc/blob/5735d8a56540e8f2fb26d5585de0fa3959bb17b4/consensus/parlia/parlia.go#L562
     fn try_from(value: RawETHHeader) -> Result<Self, Self::Error> {
         let mut rlp = RlpIterator::new(Rlp::new(value.header.as_slice()));
         let parent_hash: Vec<u8> = rlp.try_next_as_val()?;
@@ -1034,6 +1055,31 @@ pub(crate) mod test {
 
         match err {
             Error::UnexpectedTurnLength(_) => {}
+            _ => unreachable!("invalid error {:?}", err),
+        }
+    }
+
+    #[rstest]
+    #[case::localnet(localnet())]
+    fn test_error_verify_epoch_info(#[case] hp: Box<dyn Network>) {
+        let mut header = hp.epoch_header();
+        header.epoch = None;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
+            _ => unreachable!("invalid error {:?}", err),
+        }
+
+        let mut header = hp.epoch_header();
+        header.epoch = Some(Epoch::new(vec![].into(), 1));
+        header.number += 1;
+        let err = header.verify_epoch_info().unwrap_err();
+        match err {
+            Error::MustNotBeEpoch(number, _fs) => {
+                assert_eq!(number, header.number);
+            }
             _ => unreachable!("invalid error {:?}", err),
         }
     }
