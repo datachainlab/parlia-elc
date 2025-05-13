@@ -7,7 +7,7 @@
 NOTE: This project is currently under heavy development. Features may change or break.
 
 ## Supported Versions
-- [lcp v0.2.12](https://github.com/datachainlab/lcp/releases/tag/v0.2.12)
+- [lcp v0.2.14](https://github.com/datachainlab/lcp/releases/tag/v0.2.14)
 - [BSC v1.5.5](https://github.com/bnb-chain/bsc/releases/tag/v1.5.5)
 
 ## Documents
