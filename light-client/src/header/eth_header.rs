@@ -239,12 +239,6 @@ impl ETHHeader {
                     offset,
                 ));
             }
-        } else if self.difficulty != DIFFICULTY_NOTURN {
-            return Err(Error::UnexpectedDifficultyNoTurn(
-                self.number,
-                self.difficulty,
-                offset,
-            ));
         }
         Ok(())
     }
