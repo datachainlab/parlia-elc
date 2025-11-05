@@ -56,12 +56,12 @@ impl ETHHeaders {
         }
 
         // Ensure target is finalized
-        let (child, grand_child) = self.verify_finalized()?;
+        let (child, descendant) = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
         let mut last_voters: Validators = Vec::new();
-        for h in &[child, grand_child] {
+        for h in &[child, descendant] {
             let vote = h.get_vote_attestation()?;
             last_voters = if next_epoch_info.is_some()
                 && h.number > next_epoch_info.as_ref().unwrap().next_checkpoint
@@ -80,7 +80,7 @@ impl ETHHeaders {
         // Ensure voters for grand child are valid
         verify_voters(
             &last_voters,
-            grand_child,
+            descendant,
             next_epoch_info.map(|e| e.next_checkpoint),
             checkpoint,
             current_epoch,
@@ -119,17 +119,27 @@ impl ETHHeaders {
         let headers = &self.all[..self.all.len() - 2];
         for (i, header) in headers.iter().enumerate() {
             let child = &self.all[i + 1];
-            let grand_child = &self.all[i + 2];
-            match verify_finalized(header, child, grand_child) {
-                Err(e) => last_error = Some(e),
-                Ok(()) => {
-                    if i + 2 != self.all.len() - 1 {
-                        return Err(Error::UnexpectedTooManyHeadersToFinalize(
-                            self.target.number,
-                            self.all.len(),
-                        ));
+            // seek descendant that has vote indicates
+            for j in 0..(header.k_ancestor_generation_depth as usize) {
+                let descendant_index = i + 2 + j;
+                let descendant = match self.all.get(descendant_index) {
+                    Some(v) => v,
+                    None => break,
+                };
+                match verify_finalized(header, child, descendant) {
+                    Err(e) => {
+                        last_error = Some(e);
+                        continue;
                     }
-                    return Ok((child, grand_child));
+                    Ok(()) => {
+                        if descendant_index != self.all.len() - 1 {
+                            return Err(Error::UnexpectedTooManyHeadersToFinalize(
+                                self.target.number,
+                                self.all.len(),
+                            ));
+                        }
+                        return Ok((child, descendant));
+                    }
                 }
             }
         }
@@ -321,18 +331,18 @@ impl TryFrom<Vec<EthHeader>> for ETHHeaders {
 fn verify_finalized(
     header: &ETHHeader,
     child: &ETHHeader,
-    grand_child: &ETHHeader,
+    descendant: &ETHHeader,
 ) -> Result<(), Error> {
     child.verify_target_attestation(header)?;
-    let grand_child_vote = grand_child.verify_vote_attestation(child)?;
-    if grand_child_vote.data.source_number != header.number
-        || grand_child_vote.data.source_hash != header.hash
+    let descendant_vote = descendant.verify_vote_attestation(child)?;
+    if descendant_vote.data.source_number != header.number
+        || descendant_vote.data.source_hash != header.hash
     {
         return Err(Error::UnexpectedSourceInGrandChild(
             header.number,
-            grand_child_vote.data.source_number,
+            descendant_vote.data.source_number,
             header.hash,
-            grand_child_vote.data.source_hash,
+            descendant_vote.data.source_hash,
         ));
     }
     Ok(())
@@ -924,6 +934,7 @@ mod test {
             max_turn_length: 64,
             enable_header_msec: true,
             gas_limit_bound_divider: 256,
+            k_ancestor_generation_depth: 1,
         };
 
         let invalid_current_fork_spec = ForkSpec {
@@ -933,6 +944,7 @@ mod test {
             max_turn_length: 64,
             enable_header_msec: true,
             gas_limit_bound_divider: 1024,
+            k_ancestor_generation_depth: 1,
         };
         for _i in 0..1000 {
             let mut header = headers.all.last().unwrap().clone();
@@ -940,7 +952,7 @@ mod test {
             if header.number == 1500 {
                 header.epoch = hp.epoch_header().epoch;
                 header
-                    .set_boundary_epochs(&[
+                    .assign_fork_spec(&[
                         invalid_prev_fork_spec.clone(),
                         invalid_current_fork_spec.clone(),
                     ])

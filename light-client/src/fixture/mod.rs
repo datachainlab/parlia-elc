@@ -64,7 +64,7 @@ pub fn localnet() -> Box<dyn Network> {
 pub fn decode_header(rlp_header: Vec<u8>) -> ETHHeader {
     let mut header: ETHHeader = EthHeader { header: rlp_header }.try_into().unwrap();
     header
-        .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
+        .assign_fork_spec(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
         .unwrap();
     header
 }
@@ -77,6 +77,7 @@ pub fn fork_spec_after_pascal() -> ForkSpec {
         max_turn_length: 64,
         enable_header_msec: false,
         gas_limit_bound_divider: 256,
+        k_ancestor_generation_depth: 1,
     }
 }
 
@@ -88,6 +89,7 @@ pub fn fork_spec_after_lorentz() -> ForkSpec {
         max_turn_length: 64,
         enable_header_msec: true,
         gas_limit_bound_divider: 1024,
+        k_ancestor_generation_depth: 1,
     }
 }
 
@@ -99,6 +101,7 @@ pub fn fork_spec_after_maxwell() -> ForkSpec {
         max_turn_length: 64,
         enable_header_msec: true,
         gas_limit_bound_divider: 1024,
+        k_ancestor_generation_depth: 1,
     }
 }
 
@@ -110,6 +113,7 @@ pub fn fork_spec_after_post_maxwell_1() -> ForkSpec {
         max_turn_length: 64,
         enable_header_msec: true,
         gas_limit_bound_divider: 1024,
+        k_ancestor_generation_depth: 1,
     }
 }
 
@@ -121,5 +125,6 @@ pub fn fork_spec_after_post_maxwell_2() -> ForkSpec {
         max_turn_length: 64,
         enable_header_msec: true,
         gas_limit_bound_divider: 1024,
+        k_ancestor_generation_depth: 1,
     }
 }

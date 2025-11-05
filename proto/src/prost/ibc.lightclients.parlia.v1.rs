@@ -11,6 +11,8 @@ pub struct ForkSpec {
     pub gas_limit_bound_divider: u64,
     #[prost(bool, tag = "7")]
     pub enable_header_msec: bool,
+    #[prost(uint32, tag = "8")]
+    pub k_ancestor_generation_depth: u32,
     #[prost(oneof = "fork_spec::HeightOrTimestamp", tags = "1, 2")]
     pub height_or_timestamp: ::core::option::Option<fork_spec::HeightOrTimestamp>,
 }

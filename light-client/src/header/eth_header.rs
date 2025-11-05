@@ -62,6 +62,7 @@ pub struct ETHHeader {
     pub epoch: Option<Epoch>,
 
     boundary_epochs: Option<BoundaryEpochs>,
+    pub k_ancestor_generation_depth: u32,
 }
 
 impl ETHHeader {
@@ -367,8 +368,9 @@ impl ETHHeader {
         Ok(())
     }
 
-    pub fn set_boundary_epochs(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
+    pub fn assign_fork_spec(&mut self, fork_specs: &[ForkSpec]) -> Result<(), Error> {
         let fs = find_target_fork_spec(fork_specs, self.number, self.milli_timestamp())?;
+        self.k_ancestor_generation_depth = fs.k_ancestor_generation_depth;
         match fs.height_or_timestamp {
             HeightOrTimestamp::Height(_) => {
                 self.boundary_epochs = Some(get_boundary_epochs(fs, fork_specs)?);
@@ -548,6 +550,7 @@ impl TryFrom<RawETHHeader> for ETHHeader {
             hash,
             epoch,
             boundary_epochs: None,
+            k_ancestor_generation_depth: 1,
         })
     }
 }
@@ -948,6 +951,7 @@ pub(crate) mod test {
                 max_turn_length: 64,
                 enable_header_msec: true,
                 gas_limit_bound_divider: 1024,
+                k_ancestor_generation_depth: 1,
             }])
             .unwrap();
 
@@ -960,6 +964,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
@@ -968,6 +973,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
@@ -976,6 +982,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
             ])
             .unwrap();
@@ -994,6 +1001,7 @@ pub(crate) mod test {
                 max_turn_length: 64,
                 enable_header_msec: true,
                 gas_limit_bound_divider: 1024,
+                k_ancestor_generation_depth: 1,
             }])
             .unwrap_err();
         match err {
@@ -1010,6 +1018,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
@@ -1018,6 +1027,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
@@ -1026,6 +1036,7 @@ pub(crate) mod test {
                     max_turn_length: 64,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
             ])
             .unwrap_err();
@@ -1050,6 +1061,7 @@ pub(crate) mod test {
                 max_turn_length: turn_length - 1,
                 enable_header_msec: true,
                 gas_limit_bound_divider: 1024,
+                k_ancestor_generation_depth: 1,
             }])
             .unwrap_err();
         match err {
@@ -1066,6 +1078,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
@@ -1074,6 +1087,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length - 1,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
@@ -1082,6 +1096,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
             ])
             .unwrap_err();
@@ -1135,6 +1150,7 @@ pub(crate) mod test {
                 max_turn_length: turn_length,
                 enable_header_msec: true,
                 gas_limit_bound_divider: 1024,
+                k_ancestor_generation_depth: 1,
             }])
             .unwrap_err();
         match err {
@@ -1154,6 +1170,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
@@ -1162,6 +1179,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
@@ -1170,6 +1188,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
             ])
             .unwrap_err();
@@ -1200,6 +1219,7 @@ pub(crate) mod test {
                 max_turn_length: turn_length,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 1024,
+                k_ancestor_generation_depth: 1,
             }])
             .unwrap_err();
         match err {
@@ -1218,6 +1238,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number),
@@ -1226,6 +1247,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
                 ForkSpec {
                     height_or_timestamp: HeightOrTimestamp::Height(header.number + 1),
@@ -1234,6 +1256,7 @@ pub(crate) mod test {
                     max_turn_length: turn_length,
                     enable_header_msec: true,
                     gas_limit_bound_divider: 1024,
+                    k_ancestor_generation_depth: 1,
                 },
             ])
             .unwrap_err();

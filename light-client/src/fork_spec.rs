@@ -28,8 +28,10 @@ pub struct ForkSpec {
     pub max_turn_length: u64,
     /// true: header has msec in mix_digest
     pub enable_header_msec: bool,
-    /// Gas Limit bound diriver
+    /// Gas Limit bound divider
     pub gas_limit_bound_divider: u64,
+    /// https://github.com/bnb-chain/bsc/blob/d7e572d4c874ea2bf9c3adc009f02aeddfe45008/consensus/parlia/parlia.go#L89
+    pub k_ancestor_generation_depth: u32,
 }
 
 impl ForkSpec {
@@ -216,6 +218,7 @@ impl TryFrom<RawForkSpec> for ForkSpec {
             max_turn_length: value.max_turn_length,
             enable_header_msec: value.enable_header_msec,
             gas_limit_bound_divider: value.gas_limit_bound_divider,
+            k_ancestor_generation_depth: value.k_ancestor_generation_depth,
         })
     }
 }
@@ -234,6 +237,7 @@ impl From<ForkSpec> for RawForkSpec {
             max_turn_length: value.max_turn_length,
             enable_header_msec: value.enable_header_msec,
             gas_limit_bound_divider: value.gas_limit_bound_divider,
+            k_ancestor_generation_depth: value.k_ancestor_generation_depth,
         }
     }
 }
@@ -328,6 +332,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -336,6 +341,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: true,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = find_target_fork_spec(specs, 10, 0).unwrap();
@@ -358,6 +364,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
@@ -366,6 +373,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 10).unwrap();
@@ -388,6 +396,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -396,6 +405,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         // After value is primary
@@ -419,6 +429,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -427,6 +438,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 0).unwrap_err();
@@ -449,6 +461,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(20),
@@ -457,6 +470,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = find_target_fork_spec(specs, 0, 9).unwrap_err();
@@ -479,6 +493,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -487,6 +502,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = find_target_fork_spec(specs, 9, 9).unwrap_err();
@@ -509,6 +525,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(11),
@@ -517,6 +534,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -532,6 +550,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(11),
@@ -540,6 +559,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         verify_sorted_asc(specs).unwrap();
@@ -555,6 +575,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -563,6 +584,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -582,6 +604,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(10),
@@ -590,6 +613,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -612,6 +636,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -620,6 +645,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -639,6 +665,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Time(10),
@@ -647,6 +674,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = verify_sorted_asc(specs).unwrap_err();
@@ -668,6 +696,7 @@ mod test {
             max_turn_length: 64,
             enable_header_msec: true,
             gas_limit_bound_divider: 256,
+            k_ancestor_generation_depth: 1,
         };
         match current
             .boundary_epochs(&[fork_spec_after_pascal()])
@@ -689,6 +718,7 @@ mod test {
             max_turn_length: 64,
             enable_header_msec: false,
             gas_limit_bound_divider: 256,
+            k_ancestor_generation_depth: 1,
         };
         match current
             .boundary_epochs(&[fork_spec_after_pascal()])
@@ -711,6 +741,7 @@ mod test {
             max_turn_length: 64,
             enable_header_msec: false,
             gas_limit_bound_divider: 256,
+            k_ancestor_generation_depth: 1,
         };
         match fork_spec_after_pascal()
             .boundary_epochs(&[previous.clone()])
@@ -1101,6 +1132,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -1109,6 +1141,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = get_boundary_epochs(&fork_spec_after_pascal(), specs).unwrap_err();
@@ -1130,6 +1163,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
             ForkSpec {
                 height_or_timestamp: HeightOrTimestamp::Height(20),
@@ -1138,6 +1172,7 @@ mod test {
                 max_turn_length: 9,
                 enable_header_msec: false,
                 gas_limit_bound_divider: 256,
+                k_ancestor_generation_depth: 1,
             },
         ];
         let v = get_boundary_epochs(&specs[1], specs).unwrap();
