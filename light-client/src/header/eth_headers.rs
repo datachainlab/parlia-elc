@@ -116,29 +116,46 @@ impl ETHHeaders {
             ));
         }
         let mut last_error: Option<Error> = None;
-        let headers = &self.all[..self.all.len() - 2];
-        for (i, header) in headers.iter().enumerate() {
-            let child = &self.all[i + 1];
-            // seek descendant that has vote indicates
-            for j in 0..(header.k_ancestor_generation_depth as usize) {
-                let descendant_index = i + 2 + j;
-                let descendant = match self.all.get(descendant_index) {
-                    Some(v) => v,
-                    None => break,
-                };
-                match verify_finalized(header, child, descendant) {
-                    Err(e) => {
-                        last_error = Some(e);
-                        continue;
+        for i in 0..self.all.len() - 2 {
+            let finalized = &self.all[i];
+
+            // child: descendant whose vote.TargetNumber == finalizedBlock.Number
+            for j in (i+1)..self.all.len() - 1 {
+                let child = &self.all[j];
+                if let Err(err) = child.verify_target_attestation(finalized) {
+                    last_error = Some(err);
+                    continue;
+                }
+
+                // grandChild: descendant whose vote.TargetNumber == mid.Number and vote.SourceNumber == finalizedBlock.Number
+                for k in 0..(finalized.k_ancestor_generation_depth as usize) {
+                    let grand_child_index= j + k + 1;
+                    if grand_child_index >= self.all.len() {
+                        // No valid grand child found
+                        break
                     }
-                    Ok(()) => {
-                        if descendant_index != self.all.len() - 1 {
-                            return Err(Error::UnexpectedTooManyHeadersToFinalize(
-                                self.target.number,
-                                self.all.len(),
-                            ));
+                    let grand_child= &self.all[grand_child_index];
+                    match grand_child.verify_vote_attestation(child) {
+                        Ok(grand_child_vote ) => {
+                            // Ensure vote.SourceNumber == finalizedBlock.Number
+                            if grand_child_vote.data.source_number != finalized.number
+                                || grand_child_vote.data.source_hash != finalized.hash {
+                               continue
+                            }
+
+                            // Ensure no surplus headers
+                            if grand_child_index != self.all.len() - 1 {
+                                return Err(Error::UnexpectedTooManyHeadersToFinalize(
+                                    self.target.number,
+                                    self.all.len(),
+                                ));
+                            }
+                            return Ok((child, grand_child));
+                        },
+                        Err(e) => {
+                            last_error = Some(e);
+                            continue;
                         }
-                        return Ok((child, descendant));
                     }
                 }
             }
@@ -331,18 +348,18 @@ impl TryFrom<Vec<EthHeader>> for ETHHeaders {
 fn verify_finalized(
     header: &ETHHeader,
     child: &ETHHeader,
-    descendant: &ETHHeader,
+    grand_child: &ETHHeader,
 ) -> Result<(), Error> {
     child.verify_target_attestation(header)?;
-    let descendant_vote = descendant.verify_vote_attestation(child)?;
-    if descendant_vote.data.source_number != header.number
-        || descendant_vote.data.source_hash != header.hash
+    let grand_child_vote = grand_child.verify_vote_attestation(child)?;
+    if grand_child_vote.data.source_number != header.number
+        || grand_child_vote.data.source_hash != header.hash
     {
         return Err(Error::UnexpectedSourceInGrandChild(
             header.number,
-            descendant_vote.data.source_number,
+            grand_child_vote.data.source_number,
             header.hash,
-            descendant_vote.data.source_hash,
+            grand_child_vote.data.source_hash,
         ));
     }
     Ok(())
