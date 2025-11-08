@@ -316,7 +316,7 @@ mod test {
     use crate::errors::Error;
     use crate::fixture::{
         fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
-        fork_spec_after_post_maxwell_1, fork_spec_after_post_maxwell_2,
+        fork_spec_after_fermi, fork_spec_after_post_fermi,
     };
     use crate::fork_spec::{
         find_target_fork_spec, get_boundary_epochs, verify_sorted_asc, ForkSpec, HeightOrTimestamp,
@@ -832,7 +832,7 @@ mod test {
         assert_eq!(be.current_first, 3000);
 
         // Post maxwell 1 HF
-        let mut f1 = fork_spec_after_post_maxwell_1().clone();
+        let mut f1 = fork_spec_after_fermi().clone();
         f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
         let be = f1
             .boundary_epochs(&[
@@ -894,11 +894,11 @@ mod test {
         assert_eq!(be.current_first, 3000);
 
         // Post maxwell 2 HF
-        let mut f1 = fork_spec_after_post_maxwell_2().clone();
+        let mut f1 = fork_spec_after_post_fermi().clone();
         f1.height_or_timestamp = HeightOrTimestamp::Height(1501);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -911,7 +911,7 @@ mod test {
         f1.height_or_timestamp = HeightOrTimestamp::Height(2000);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -924,7 +924,7 @@ mod test {
         f1.height_or_timestamp = HeightOrTimestamp::Height(2001);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -937,7 +937,7 @@ mod test {
         f1.height_or_timestamp = HeightOrTimestamp::Height(3000);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -950,7 +950,7 @@ mod test {
         f1.height_or_timestamp = HeightOrTimestamp::Height(4000);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -963,7 +963,7 @@ mod test {
         f1.height_or_timestamp = HeightOrTimestamp::Height(4001);
         let be = f1
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
@@ -1042,7 +1042,7 @@ mod test {
 
     #[test]
     fn test_success_boundary_epochs_after_maxwell_1() {
-        let be = fork_spec_after_post_maxwell_1()
+        let be = fork_spec_after_fermi()
             .boundary_epochs(&[
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
@@ -1083,9 +1083,9 @@ mod test {
 
     #[test]
     fn test_success_boundary_epochs_after_maxwell_2() {
-        let be = fork_spec_after_post_maxwell_2()
+        let be = fork_spec_after_post_fermi()
             .boundary_epochs(&[
-                fork_spec_after_post_maxwell_1(),
+                fork_spec_after_fermi(),
                 fork_spec_after_maxwell(),
                 fork_spec_after_lorentz(),
                 fork_spec_after_pascal(),
