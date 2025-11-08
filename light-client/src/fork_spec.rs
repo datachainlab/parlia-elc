@@ -315,8 +315,8 @@ pub fn verify_sorted_asc(fork_specs: &[ForkSpec]) -> Result<(), Error> {
 mod test {
     use crate::errors::Error;
     use crate::fixture::{
-        fork_spec_after_lorentz, fork_spec_after_maxwell, fork_spec_after_pascal,
-        fork_spec_after_fermi, fork_spec_after_post_fermi,
+        fork_spec_after_fermi, fork_spec_after_lorentz, fork_spec_after_maxwell,
+        fork_spec_after_pascal, fork_spec_after_post_fermi,
     };
     use crate::fork_spec::{
         find_target_fork_spec, get_boundary_epochs, verify_sorted_asc, ForkSpec, HeightOrTimestamp,
