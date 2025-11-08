@@ -106,8 +106,13 @@ impl ETHHeaders {
 
     /// Verifies that the headers are finalized.
     ///
-    /// Only one set of three consecutive valid headers must exist.
-    /// This means that if [x, x+1, x+2] is valid then x+3 must not exist.
+    /// Allowed pattern:
+    /// 302 -> target -> 301 -> target -> 300
+    /// 302 -> source ------------------> 300
+    /// 302 -> target -> 300 -> target -> 298
+    /// 302 -> source ------------------> 298
+    ///
+    /// No extra headers after a valid grand child are acceptable.
     fn verify_finalized(&self) -> Result<(&ETHHeader, &ETHHeader), Error> {
         if self.all.len() < 3 {
             return Err(Error::InvalidVerifyingHeaderLength(
@@ -119,44 +124,39 @@ impl ETHHeaders {
         for i in 0..self.all.len() - 2 {
             let finalized = &self.all[i];
 
-            // child: descendant whose vote.TargetNumber == finalizedBlock.Number
-            for j in (i+1)..self.all.len() - 1 {
+            // child: descendant whose vote.TargetNumber == finalized.Number
+            for j in (i + 1)..self.all.len() - 1 {
                 let child = &self.all[j];
+
+                // Ensure the relation between child and finalized is collect
                 if let Err(err) = child.verify_target_attestation(finalized) {
                     last_error = Some(err);
                     continue;
                 }
 
-                // grandChild: descendant whose vote.TargetNumber == mid.Number and vote.SourceNumber == finalizedBlock.Number
-                for k in 0..(finalized.k_ancestor_generation_depth as usize) {
-                    let grand_child_index= j + k + 1;
-                    if grand_child_index >= self.all.len() {
-                        // No valid grand child found
-                        break
-                    }
-                    let grand_child= &self.all[grand_child_index];
-                    match grand_child.verify_vote_attestation(child) {
-                        Ok(grand_child_vote ) => {
-                            // Ensure vote.SourceNumber == finalizedBlock.Number
-                            if grand_child_vote.data.source_number != finalized.number
-                                || grand_child_vote.data.source_hash != finalized.hash {
-                               continue
-                            }
+                // grandChild: descendant whose vote.TargetNumber == child.Number and vote.SourceNumber == child.TargetNumber
+                for k in (j + 1)..self.all.len() {
+                    let grand_child = &self.all[k];
 
-                            // Ensure no surplus headers
-                            if grand_child_index != self.all.len() - 1 {
-                                return Err(Error::UnexpectedTooManyHeadersToFinalize(
-                                    self.target.number,
-                                    self.all.len(),
-                                ));
-                            }
-                            return Ok((child, grand_child));
-                        },
-                        Err(e) => {
-                            last_error = Some(e);
-                            continue;
-                        }
+                    // Ensure distance is less than or equal to k_ancestor_generation_depth
+                    if (k - j) > grand_child.k_ancestor_generation_depth as usize {
+                        break;
                     }
+
+                    // Ensure the relation between grand child and child is collect
+                    if let Err(err) = grand_child.verify_vote_attestation(child) {
+                        last_error = Some(err);
+                        continue;
+                    }
+
+                    // Ensure no extra headers
+                    if k != self.all.len() - 1 {
+                        return Err(Error::UnexpectedTooManyHeadersToFinalize(
+                            self.target.number,
+                            self.all.len(),
+                        ));
+                    }
+                    return Ok((child, grand_child));
                 }
             }
         }
