@@ -56,12 +56,12 @@ impl ETHHeaders {
         }
 
         // Ensure target is finalized
-        let (child, descendant) = self.verify_finalized()?;
+        let (child, grand_child) = self.verify_finalized()?;
 
         // Ensure BLS signature is collect
         // At the just checkpoint BLS signature uses previous validator set.
         let mut last_voters: Validators = Vec::new();
-        for h in &[child, descendant] {
+        for h in &[child, grand_child] {
             let vote = h.get_vote_attestation()?;
             last_voters = if next_epoch_info.is_some()
                 && h.number > next_epoch_info.as_ref().unwrap().next_checkpoint
@@ -80,7 +80,7 @@ impl ETHHeaders {
         // Ensure voters for grand child are valid
         verify_voters(
             &last_voters,
-            descendant,
+            grand_child,
             next_epoch_info.map(|e| e.next_checkpoint),
             checkpoint,
             current_epoch,
