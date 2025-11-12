@@ -1374,6 +1374,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }));
@@ -1389,6 +1390,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }));
@@ -1405,6 +1407,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }))
