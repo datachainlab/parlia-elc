@@ -17,10 +17,13 @@ jobs:
       - name: Install components
         run: |
           rustup component add rustfmt clippy
+          cargo install cargo-machete --version 0.8.0
       - name: Check format
         run: cargo fmt --all -- --check
       - name: Check clippy
         run: cargo clippy --locked -- -D warnings
+      - name: Check deps
+        run: cargo machete
       - name: unit-test
         run: cargo test --release --features=std --manifest-path light-client/Cargo.toml
       - name: unit-test-dev-test-min

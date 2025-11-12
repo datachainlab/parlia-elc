@@ -173,7 +173,7 @@ fn verify_epoch<'a>(
         let epoch_info = target
             .epoch
             .as_ref()
-            .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(target.number))?;
+            .ok_or(Error::MissingEpochInfoInEpochBlock(target.number))?;
         if epoch_info.hash() != current_epoch.hash() {
             return Err(Error::UnexpectedCurrentValidatorsHashInEpoch(
                 trusted_height,

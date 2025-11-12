@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "parlia-elc"
-version = "0.2.9"
+version = "0.4.0"
 dependencies = [
  "elliptic-curve",
  "hex-literal",
@@ -1028,13 +1028,12 @@ dependencies = [
  "serde",
  "store",
  "time",
- "tiny-keccak",
  "trie-db",
 ]
 
 [[package]]
 name = "parlia-ibc-proto"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "ibc-proto",
  "prost",

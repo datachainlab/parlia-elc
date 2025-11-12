@@ -77,7 +77,7 @@ impl ETHHeader {
         }
         let signature = &self.extra_data[self.extra_data.len() - EXTRA_SEAL..];
         let rid = RecoveryId::from_byte(signature[EXTRA_SEAL - 1])
-            .ok_or_else(|| Error::UnexpectedRecoveryId(self.number))?;
+            .ok_or(Error::UnexpectedRecoveryId(self.number))?;
         let seal_hash = self.seal_hash(chain_id)?;
         let signature = Signature::try_from(&signature[..EXTRA_SEAL - 1])
             .map_err(|e| Error::UnexpectedSignature(self.number, e))?;
@@ -171,11 +171,7 @@ impl ETHHeader {
         }
 
         //Verify that the gas limit remains within allowed bounds
-        let diff = if parent.gas_limit > self.gas_limit {
-            parent.gas_limit - self.gas_limit
-        } else {
-            self.gas_limit - parent.gas_limit
-        };
+        let diff = parent.gas_limit.abs_diff(self.gas_limit);
         let gas_limit_divider = self
             .boundary_epochs
             .as_ref()
