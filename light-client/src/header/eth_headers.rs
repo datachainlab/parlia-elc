@@ -106,11 +106,15 @@ impl ETHHeaders {
 
     /// Verifies that the headers are finalized.
     ///
-    /// Allowed pattern:
-    /// 302 -> target -> 301 -> target -> 300
-    /// 302 -> source ------------------> 300
-    /// 302 -> target -> 300 -> target -> 298
-    /// 302 -> source ------------------> 298
+    /// ex)
+    /// 72486611 -> target 72486610 -> target 72486608
+    /// 72486611 --------------------> source 72486608
+    ///
+    /// 72486610 -> target 72486608 -> target 72486607
+    /// 72486610 --------------------> source 72486607
+    ///
+    /// 72476712 -> target 72476710 -> target 72476708
+    /// 72476712 --------------------> source 72476708
     ///
     /// No extra headers after a valid grand child are acceptable.
     fn verify_finalized(&self) -> Result<(&ETHHeader, &ETHHeader), Error> {
