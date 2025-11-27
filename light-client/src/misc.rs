@@ -94,7 +94,7 @@ pub fn new_timestamp(msec: u64) -> Result<Time, Error> {
     let msec = msec as u128;
     let nanos = msec
         .checked_mul(1_000_000)
-        .ok_or_else(|| Error::TimestampOverflowError(msec))?;
+        .ok_or(Error::TimestampOverflowError(msec))?;
     Time::from_unix_timestamp_nanos(nanos).map_err(Error::TimeError)
 }
 
@@ -107,7 +107,7 @@ pub fn ceil_div(x: usize, y: usize) -> usize {
     if y == 0 {
         return 0;
     }
-    (x + y - 1) / y
+    x.div_ceil(y)
 }
 
 #[cfg(test)]

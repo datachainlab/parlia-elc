@@ -17,6 +17,7 @@ message ForkSpec {
   uint64 max_turn_length = 5;
   uint64 gas_limit_bound_divider = 6;
   bool enable_header_msec = 7;
+  uint32 k_ancestor_generation_depth = 8;
 }
 
 message ClientState {

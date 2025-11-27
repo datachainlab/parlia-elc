@@ -81,7 +81,7 @@ impl Header {
             header.verify_fork_rule(&fork_specs)?;
         }
         // Ensure HF height is required for target without seeking next headers
-        self.headers.target.set_boundary_epochs(&fork_specs)?;
+        self.headers.target.assign_fork_spec(&fork_specs)?;
         // Verify epoch is really epoch
         self.headers.target.verify_epoch_info()?;
 
@@ -101,7 +101,7 @@ impl Header {
 
         for header in &mut self.headers.all {
             // Set boundary epoch to verify header size.
-            header.set_boundary_epochs(&fork_specs)?;
+            header.assign_fork_spec(&fork_specs)?;
             // Verify epoch is really epoch
             header.verify_epoch_info()?;
         }
@@ -173,7 +173,7 @@ fn verify_epoch<'a>(
         let epoch_info = target
             .epoch
             .as_ref()
-            .ok_or_else(|| Error::MissingEpochInfoInEpochBlock(target.number))?;
+            .ok_or(Error::MissingEpochInfoInEpochBlock(target.number))?;
         if epoch_info.hash() != current_epoch.hash() {
             return Err(Error::UnexpectedCurrentValidatorsHashInEpoch(
                 trusted_height,
@@ -457,7 +457,7 @@ pub(crate) mod test {
         result
             .headers
             .target
-            .set_boundary_epochs(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
+            .assign_fork_spec(&[fork_spec_after_pascal(), fork_spec_after_lorentz()])
             .unwrap();
         assert_eq!(result.headers.target, *h);
         assert_eq!(

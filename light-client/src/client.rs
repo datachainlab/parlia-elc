@@ -793,7 +793,7 @@ mod test {
                             header.timestamp().unwrap(),
                             trusted_cs.timestamp,
                         );
-                        assert_eq!(format!("{}", actual), format!("{}", expected));
+                        assert_eq!(format!("{actual}"), format!("{}", expected));
                     }
                     _ => unreachable!("invalid commitment context {:?}", data.context),
                 }
@@ -1113,7 +1113,7 @@ mod test {
             true,
         )
         .unwrap_err();
-        let expected = format!("{:?}", err).contains("ClientFrozen: xx-parlia-0");
+        let expected = format!("{err:?}").contains("ClientFrozen: xx-parlia-0");
         assert!(expected, "{}", err);
     }
 
@@ -1309,7 +1309,7 @@ mod test {
     }
 
     fn assert_err(err: light_client::Error, contains: &str) {
-        assert!(format!("{:?}", err).contains(contains), "{}", err);
+        assert!(format!("{err:?}").contains(contains), "{}", err);
     }
 
     #[cfg(feature = "dev")]
@@ -1374,6 +1374,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }));
@@ -1389,6 +1390,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }));
@@ -1405,6 +1407,7 @@ mod test {
                     max_turn_length: 9,
                     enable_header_msec: false,
                     gas_limit_bound_divider: 256,
+                    k_ancestor_generation_depth: 1,
                 }];
                 (client_state, cons_state)
             }))
