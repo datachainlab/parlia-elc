@@ -58,7 +58,7 @@ impl ETHHeaders {
         // Ensure target is finalized
         let (child, grand_child) = self.verify_finalized()?;
 
-        // Ensure BLS signature is collect
+        // Ensure BLS signature is correct
         // At the just checkpoint BLS signature uses previous validator set.
         let mut last_voters: Validators = Vec::new();
         for h in &[child, grand_child] {
@@ -132,7 +132,7 @@ impl ETHHeaders {
             for j in (i + 1)..self.all.len() - 1 {
                 let child = &self.all[j];
 
-                // Ensure the relation between child and finalized is collect
+                // Ensure the relation between child and finalized is correct
                 if let Err(err) = child.verify_target_attestation(finalized) {
                     last_error = Some(err);
                     continue;
@@ -147,7 +147,7 @@ impl ETHHeaders {
                         break;
                     }
 
-                    // Ensure the relation between grand child and child is collect
+                    // Ensure the relation between grand child and child is correct
                     if let Err(err) = grand_child.verify_vote_attestation(child) {
                         last_error = Some(err);
                         continue;
