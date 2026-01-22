@@ -246,16 +246,15 @@ impl ETHHeader {
         Ok(())
     }
 
-    /// Verifies the target attestation of the current `ETHHeader` against its parent header.
+    /// Verifies the target attestation of the current `ETHHeader` against a given parent header.
     ///
     /// This function checks the target vote attestation of the current header to ensure that
-    /// the target block is the direct parent of the current block.
-    ///
+    /// the target block matches the provided parent header (by both number and hash).
+    /// The parent does not need to be the direct predecessor; the Fermi hard fork allows skipped blocks.
     pub fn verify_target_attestation(&self, parent: &ETHHeader) -> Result<VoteAttestation, Error> {
         let target_vote_attestation = self.get_vote_attestation()?;
         let target_data = &target_vote_attestation.data;
 
-        // The target block should be direct parent.
         if target_data.target_number != parent.number || target_data.target_hash != parent.hash {
             return Err(Error::UnexpectedTargetVoteAttestationRelation(
                 target_data.target_number,
